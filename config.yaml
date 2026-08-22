@@ -1,0 +1,13 @@
+creators:
+  # Schema-qualified names such as public.creators are supported.
+  table: creators
+  columns:
+    creator_id: id
+    creator_name: display_name
+    username: tiktok_username
+    status: account_status
+    agency: agency_name
+    manager: manager_name
+    country: country
+    joined_at: joined_at
+    last_active_at: last_active_at
