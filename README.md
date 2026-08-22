@@ -19,13 +19,14 @@ The GitHub deployment package contains no creator records, local database, TikTo
 
    ```toml
    DATABASE_URL = "your Supabase Session pooler connection string"
+   VIEWER_PASSWORD = "a strong password every approved viewer must enter"
    ADMIN_PASSWORD = "a password only dashboard admins know"
    ```
 
 4. If the Supabase connection string begins with `postgresql://`, leave it as-is; the app selects the correct driver automatically.
 5. Deploy the app and invite approved viewers. Do not make a creator-data dashboard public.
 
-Never put either secret in GitHub. In Supabase, use the **Session pooler** connection string shown under **Connect**. Replace the password placeholder with the database password you created. If that password contains characters such as `@`, `:`, `/`, `#`, or `%`, URL-encode it or reset it to a strong password without URL-reserved characters.
+Never put any secret in GitHub. `VIEWER_PASSWORD` protects all dashboard data; `ADMIN_PASSWORD` separately protects data updates. Use different strong passwords. In Supabase, use the **Session pooler** connection string shown under **Connect**. Replace the password placeholder with the database password you created. If that password contains characters such as `@`, `:`, `/`, `#`, or `%`, URL-encode it or reset it to a strong password without URL-reserved characters.
 
 ## First data update
 

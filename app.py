@@ -1,4 +1,5 @@
 import io
+import hmac
 import os
 import re
 
@@ -26,6 +27,32 @@ def secret_value(name: str, default=""):
         return st.secrets.get(name, value)
     except Exception:
         return value
+
+
+def require_viewer_access():
+    viewer_password = secret_value("VIEWER_PASSWORD")
+    if not viewer_password:
+        st.error("This dashboard is locked because VIEWER_PASSWORD has not been configured.")
+        st.info("The owner must add VIEWER_PASSWORD in Streamlit Secrets before the dashboard can be viewed.")
+        st.stop()
+
+    if st.session_state.get("viewer_authenticated"):
+        with st.sidebar:
+            if st.button("Sign out", use_container_width=True):
+                st.session_state["viewer_authenticated"] = False
+                st.rerun()
+        return
+
+    st.title("TikTok LIVE Creator Dashboard")
+    st.write("Enter the private viewing password to open the dashboard.")
+    entered_password = st.text_input("Viewing password", type="password")
+    if st.button("Open dashboard", type="primary"):
+        if hmac.compare_digest(entered_password, viewer_password):
+            st.session_state["viewer_authenticated"] = True
+            st.rerun()
+        else:
+            st.error("The viewing password is not correct.")
+    st.stop()
 
 
 @st.cache_resource
@@ -235,6 +262,8 @@ def replace_goal_data(creators_frame, managers_frame, source_file):
             {"updated_at": pd.Timestamp.now(tz="UTC").isoformat(), "source_file": source_file, "creator_rows": int(len(creators_frame))},
         )
 
+
+require_viewer_access()
 
 st.title("TikTok LIVE Creator Dashboard")
 st.caption("Manager performance, Goal management creators, and creator roster • Backstage snapshot")
