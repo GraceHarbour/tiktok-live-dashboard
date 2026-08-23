@@ -1,0 +1,28 @@
+name: Refresh Backstage data
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: backstage-data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: python backstage_sync.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TIKTOK_STORAGE_STATE_B64: ${{ secrets.TIKTOK_STORAGE_STATE_B64 }}
+          BACKSTAGE_CREATOR_DATA_URL: ${{ secrets.BACKSTAGE_CREATOR_DATA_URL }}
