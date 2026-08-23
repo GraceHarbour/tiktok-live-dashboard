@@ -8,3 +8,4 @@ __pycache__/
 data/
 logs/
 .streamlit/secrets.toml
+tiktok-storage-state.json

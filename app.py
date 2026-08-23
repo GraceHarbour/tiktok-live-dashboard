@@ -5,6 +5,7 @@ import re
 
 import pandas as pd
 import plotly.express as px
+import requests
 import streamlit as st
 import yaml
 from dotenv import load_dotenv
@@ -81,6 +82,7 @@ def ensure_schema():
         "CREATE TABLE IF NOT EXISTS goal_creators (creator_id TEXT PRIMARY KEY, username TEXT, manager TEXT, manager_name TEXT, group_name TEXT, diamonds INTEGER, valid_live_days INTEGER, valid_live_hours REAL, estimated_bonus REAL, tier_status TEXT, rank_up_progress TEXT, activeness_level INTEGER, live_now INTEGER)",
         "CREATE TABLE IF NOT EXISTS goal_managers (manager TEXT PRIMARY KEY, manager_name TEXT, role TEXT, group_name TEXT, diamonds INTEGER, diamond_goal INTEGER, new_creators INTEGER, new_creator_goal INTEGER, managed_creators INTEGER)",
         "CREATE TABLE IF NOT EXISTS data_updates (updated_at TEXT, source_file TEXT, creator_rows INTEGER)",
+        "CREATE TABLE IF NOT EXISTS collector_runs (started_at TEXT, finished_at TEXT, status TEXT, detail TEXT, creator_rows INTEGER)",
     ]
     with get_engine().begin() as connection:
         for statement in statements:
@@ -123,6 +125,31 @@ def load_goal_creators():
 def load_latest_update():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT * FROM data_updates ORDER BY updated_at DESC LIMIT 1"), connection)
+
+
+@st.cache_data(ttl=60)
+def load_latest_collector_run():
+    with get_engine().connect() as connection:
+        return pd.read_sql(text("SELECT * FROM collector_runs ORDER BY started_at DESC LIMIT 1"), connection)
+
+
+def request_cloud_refresh():
+    token = secret_value("GITHUB_WORKFLOW_TOKEN")
+    repository = secret_value("GITHUB_REPOSITORY", "GraceHarbour/tiktok-live-dashboard")
+    if not token:
+        raise RuntimeError("GITHUB_WORKFLOW_TOKEN is not configured in Streamlit Secrets")
+    response = requests.post(
+        f"https://api.github.com/repos/{repository}/actions/workflows/backstage-sync.yml/dispatches",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        json={"ref": "main"},
+        timeout=20,
+    )
+    if response.status_code != 204:
+        raise RuntimeError(f"GitHub refresh request failed ({response.status_code})")
 
 
 def live_duration_hours(value):
@@ -195,7 +222,10 @@ def parse_backstage_export(uploaded_file):
             }
         )
 
-    creators_frame = pd.DataFrame(creator_records).drop_duplicates(subset=["creator_id"], keep="last")
+    creators_frame = pd.DataFrame(creator_records)
+    if creators_frame.empty:
+        raise ValueError("The Backstage export did not contain any usable creator records.")
+    creators_frame = creators_frame.drop_duplicates(subset=["creator_id"], keep="last")
     manager_records = []
     assigned = creators_frame[creators_frame["manager"] != "Unassigned"]
     for manager, group in assigned.groupby("manager"):
@@ -275,6 +305,7 @@ try:
     goal_managers = load_goal_managers()
     goal_creators = load_goal_creators()
     latest_update = load_latest_update()
+    latest_collector_run = load_latest_collector_run()
 except Exception as exc:
     st.error("The dashboard could not load creator data.")
     st.code(str(exc))
@@ -308,6 +339,7 @@ with st.sidebar:
         load_goal_managers.clear()
         load_goal_creators.clear()
         load_latest_update.clear()
+        load_latest_collector_run.clear()
         st.rerun()
 
 filtered = creators.copy()
@@ -345,7 +377,7 @@ if search:
         | goal_creator_view["creator_id"].str.contains(search, case=False, na=False)
     ]
 
-performance_tab, goal_tab, admin_tab, roster_tab = st.tabs(["Manager performance", "Goal managers & creators", "Update data", "Application roster"])
+performance_tab, goal_tab, admin_tab, roster_tab = st.tabs(["Manager performance", "Goal managers & creators", "Refresh data", "Application roster"])
 
 with performance_tab:
     if performance.empty:
@@ -568,9 +600,8 @@ with goal_tab:
         )
 
 with admin_tab:
-    st.subheader("Update the shared dashboard")
-    st.write("Upload the latest Excel file from **Backstage → Data → Creator data → Export**.")
-    st.caption("The upload updates diamonds, valid LIVE days, valid LIVE hours, tier status, and each creator’s manager. Existing manager goals are preserved when the manager is present in the new file.")
+    st.subheader("Refresh Backstage data")
+    st.write("The cloud collector is scheduled to check Backstage every 30 minutes.")
 
     admin_password = secret_value("ADMIN_PASSWORD")
     admin_allowed = True
@@ -581,6 +612,39 @@ with admin_tab:
             st.error("The admin password is not correct.")
     else:
         st.warning("ADMIN_PASSWORD is not configured. Every invited dashboard viewer can update the data.")
+
+    if not latest_collector_run.empty:
+        run = latest_collector_run.iloc[0]
+        run_time = pd.to_datetime(run["finished_at"], errors="coerce")
+        run_label = run_time.strftime("%b %d, %Y %I:%M %p UTC") if pd.notna(run_time) else "Unknown time"
+        if run["status"] == "success":
+            st.success(f"Last automatic refresh succeeded: {run_label} • {int(run['creator_rows']):,} creators")
+        else:
+            st.error(f"Last automatic refresh failed: {run_label} • {run['detail']}")
+    elif not latest_update.empty:
+        st.info("Existing data is available, but the automatic collector has not completed its first run yet.")
+    else:
+        st.info("The automatic collector has not completed its first run yet.")
+
+    if st.button("Request fresh Backstage data now", type="primary", disabled=not admin_allowed):
+        try:
+            request_cloud_refresh()
+            st.success("Refresh requested. Collection normally completes within a few minutes.")
+        except Exception as exc:
+            st.error(str(exc))
+
+    if st.button("Check refresh status", disabled=not admin_allowed):
+        load_manager_performance.clear()
+        load_goal_managers.clear()
+        load_goal_creators.clear()
+        load_latest_update.clear()
+        load_latest_collector_run.clear()
+        st.rerun()
+
+    st.divider()
+    st.subheader("Manual fallback")
+    st.write("If TikTok asks the collector to sign in again, upload the latest Excel file from **Backstage → Data → Creator data → Export**.")
+    st.caption("The upload updates diamonds, valid LIVE days, valid LIVE hours, tier status, and each creator’s manager. Existing manager goals are preserved when the manager is present in the new file.")
 
     uploaded_export = st.file_uploader("Backstage Creator data export", type=["xlsx", "csv"], disabled=not admin_allowed)
     parsed_creators = None
