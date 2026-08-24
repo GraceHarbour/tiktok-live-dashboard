@@ -411,7 +411,23 @@ with performance_tab:
         st.download_button("Download manager performance", performance_csv, "manager-performance.csv", "text/csv")
 
 with goal_tab:
-    st.caption("Administration → Goal management → View by creator • August 2026 • all listed managers")
+    st.caption("Administration → Goal management → View by creator • August 2026")
+    manager_name_options = sorted(
+        name for name in goal_creator_view["manager_name"].fillna("").astype(str).unique()
+        if name and name != "Unassigned"
+    )
+    selected_goal_manager = st.selectbox(
+        "Select a manager",
+        ["All managers", *manager_name_options],
+        key="goal_manager_selector",
+    )
+    if selected_goal_manager != "All managers":
+        goal_manager_view = goal_manager_view[
+            goal_manager_view["manager_name"].fillna("").astype(str) == selected_goal_manager
+        ]
+        goal_creator_view = goal_creator_view[
+            goal_creator_view["manager_name"].fillna("").astype(str) == selected_goal_manager
+        ]
     if not latest_update.empty:
         updated_at = pd.to_datetime(latest_update.iloc[0]["updated_at"], errors="coerce")
         if pd.notna(updated_at):
