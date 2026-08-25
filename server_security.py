@@ -19,7 +19,9 @@ from google.oauth2 import id_token
 from .database import CreatorNetworkDatabase
 
 
-def require_sync_worker(*, timestamp: str | None, signature: str | None, body: bytes) -> None:
+def require_sync_worker(
+    *, timestamp: str | None, signature: str | None, body: bytes, worker_email: str | None = None
+) -> None:
     """Authenticate the isolated sync worker with a short-lived HMAC signature.
 
     The browser session stays on the worker.  The dashboard receives only a
@@ -36,6 +38,17 @@ def require_sync_worker(*, timestamp: str | None, signature: str | None, body: b
     if age > 600:
         raise HTTPException(403, "The sync request has expired.")
     expected = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
+    if hmac.compare_digest(expected, signature):
+        return
+
+    # The endpoint is behind IAP. When the reader VM presents its short-lived
+    # service-account assertion, IAP supplies this trusted identity header.
+    # Accept it only for the dedicated isolated reader account; this lets a
+    # rotated local HMAC key recover without exposing the endpoint publicly.
+    trusted_worker = os.environ.get("CREATOR_SYNC_WORKER_EMAIL", "").strip().casefold()
+    supplied_worker = (worker_email or "").strip().casefold()
+    if trusted_worker and supplied_worker.endswith(trusted_worker):
+        return
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(403, "The secure sync signature is invalid.")
 
@@ -88,3 +101,4 @@ def require_access_admin(request: Request, db: CreatorNetworkDatabase) -> dict[s
     if user["role"] not in {"owner", "admin"}:
         raise HTTPException(403, "Only dashboard owners and administrators can manage access.")
     return user
+
