@@ -150,6 +150,7 @@ async def receive_backstage_snapshot(request: Request) -> dict[str, object]:
         timestamp=request.headers.get("X-Creator-Timestamp"),
         signature=request.headers.get("X-Creator-Signature"),
         body=raw_body,
+        worker_email=request.headers.get("X-Goog-Authenticated-User-Email"),
     )
     try:
         payload = json.loads(raw_body)
@@ -452,3 +453,4 @@ def avatar(creator: dict[str, object]) -> str:
     if not url.startswith("https://"):
         return ""
     return f"<img src='{html.escape(url, quote=True)}' alt='' referrerpolicy='no-referrer' style='width:38px;height:38px;border-radius:50%;object-fit:cover'>"
+
