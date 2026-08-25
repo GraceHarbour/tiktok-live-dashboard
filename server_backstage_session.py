@@ -9,6 +9,7 @@ import hmac
 from pathlib import Path
 import json
 import os
+import time
 
 import requests
 
@@ -84,7 +85,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--iap-audience",
-        help="IAP OAuth client ID used to obtain a service-account identity token for the private endpoint.",
+        help="Enable the reader's short-lived service identity for the IAP-protected private endpoint.",
     )
     args = parser.parse_args()
     if args.every_minutes and not args.keep_session:
@@ -355,13 +356,39 @@ def publish_snapshot(snapshot: dict[str, object], *, url: str, secret: str, iap_
         "X-Creator-Signature": signature,
     }
     if iap_audience:
+        # IAP is using its Google-managed browser client. That client cannot
+        # exchange a regular service-account ID token for programmatic access,
+        # so use the documented service-account JWT path instead. The reader's
+        # VM identity signs this short-lived assertion through Google IAM; no
+        # browser cookie, Backstage credential, or service-account key is read
+        # or copied by this program.
+        import google.auth
+        from google.auth import iam, jwt
         from google.auth.transport.requests import Request
-        from google.oauth2.id_token import fetch_id_token
 
-        headers["Authorization"] = f"Bearer {fetch_id_token(Request(), iap_audience)}"
+        credentials, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        service_account_email = getattr(credentials, "service_account_email", None)
+        if not service_account_email:
+            raise RuntimeError("The reader VM does not have a service-account identity for IAP.")
+        signer = iam.Signer(Request(), credentials, service_account_email)
+        now = int(time.time())
+        assertion = jwt.encode(
+            signer,
+            {
+                "iss": service_account_email,
+                "sub": service_account_email,
+                "aud": url,
+                "iat": now,
+                "exp": now + 3600,
+            },
+        )
+        headers["Authorization"] = f"Bearer {assertion.decode('utf-8')}"
     response = requests.post(url, data=body, headers=headers, timeout=30)
     response.raise_for_status()
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
