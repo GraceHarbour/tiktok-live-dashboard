@@ -150,13 +150,19 @@ def main() -> int:
                         '[role="grid"], [role="treegrid"], [role="table"], table, '
                         '[class*="table"], [class*="Table"]'
                     ).all():
-                        candidate_headers = [
-                            text.strip().lower()
-                            for text in candidate.locator(
-                                '[role="columnheader"], th, [class*="header"], [class*="Header"]'
-                            ).all_inner_texts()
-                        ]
-                        candidate_text = candidate.inner_text()
+                        try:
+                            candidate_headers = [
+                                text.strip().lower()
+                                for text in candidate.locator(
+                                    '[role="columnheader"], th, [class*="header"], [class*="Header"]'
+                                ).all_inner_texts()
+                            ]
+                            candidate_text = candidate.inner_text()
+                        except Exception:
+                            # Broad class selectors can match non-HTML nodes in
+                            # Backstage's client-side component tree. Ignore
+                            # those and continue looking for the visible grid.
+                            continue
                         if (
                             any(header == "creator" or header.startswith("creator ") for header in candidate_headers)
                             or ("\nCreator\n" in candidate_text and "\nManager\n" in candidate_text and "\nDiamonds" in candidate_text)
