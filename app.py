@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import re
 
@@ -130,33 +131,59 @@ def manager_series(frame):
     return pd.Series("Unassigned", index=frame.index, dtype="object")
 
 
-def main():
 
+def load_business_essentials():
+    with get_engine().connect() as connection:
+        return pd.read_sql(text("SELECT section, snapshot_month, row_key, row_index, payload, captured_at FROM business_essentials_rows ORDER BY captured_at DESC, row_index ASC"), connection)
+
+
+def load_access_people():
+    with get_engine().connect() as connection:
+        return pd.read_sql(text("SELECT email, role, added_at FROM dashboard_access_people ORDER BY role, email"), connection)
+
+
+def load_monthly_metrics():
+    with get_engine().connect() as connection:
+        return pd.read_sql(text("SELECT metric_name, metric_value, updated_at FROM dashboard_monthly_metrics ORDER BY metric_name"), connection)
+
+
+def business_records(frame):
+    rows = []
+    for _, source in frame.iterrows():
+        payload = source.get("payload")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (TypeError, ValueError):
+                continue
+        if not isinstance(payload, dict):
+            continue
+        headers = payload.get("headers") or []
+        values = payload.get("row") or []
+        if not headers or not values:
+            continue
+        row = {str(header): values[index] if index < len(values) else "" for index, header in enumerate(headers)}
+        if str(row.get("Record type", "")).casefold() == "overview":
+            continue
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def main():
     st.markdown(
         """
         <style>
-        :root { --gh-navy: #030817; --gh-deep: #071a3a; --gh-blue: #102d6b; --gh-gold: #f5c542; --gh-gold-deep: #c99416; --gh-violet: #8b5cf6; --gh-text: #eef4ff; }
-        .stApp {
-          background:
-            radial-gradient(circle at 86% 2%, rgba(111, 69, 202, .27), transparent 24rem),
-            radial-gradient(circle at 18% 0%, rgba(19, 80, 184, .24), transparent 28rem),
-            linear-gradient(150deg, var(--gh-navy) 0%, #06142f 48%, #02050e 100%);
-          color: var(--gh-text);
-        }
-        [data-testid="stHeader"] { background: rgba(3, 8, 23, .70); border-bottom: 1px solid rgba(245, 197, 66, .20); }
-        [data-testid="stSidebar"] { background: linear-gradient(180deg, #030817 0%, #071a3a 55%, #030817 100%); border-right: 1px solid rgba(245, 197, 66, .38); }
+        :root { --gh-navy: #030817; --gh-deep: #071a3a; --gh-blue: #102d6b; --gh-gold: #f5c542; --gh-violet: #8b5cf6; --gh-text: #eef4ff; }
+        .stApp { background: radial-gradient(circle at 86% 2%, rgba(111,69,202,.27), transparent 24rem), radial-gradient(circle at 18% 0%, rgba(19,80,184,.24), transparent 28rem), linear-gradient(150deg, var(--gh-navy), #06142f 48%, #02050e); color: var(--gh-text); }
+        [data-testid="stHeader"] { background: rgba(3,8,23,.70); border-bottom: 1px solid rgba(245,197,66,.20); }
+        [data-testid="stSidebar"] { background: linear-gradient(180deg,#030817,#071a3a 55%,#030817); border-right: 1px solid rgba(245,197,66,.38); }
         [data-testid="stSidebar"] * { color: var(--gh-text); }
-        [data-testid="stSidebar"] [data-baseweb="select"] > div { background: rgba(9, 27, 64, .9); border-color: rgba(245, 197, 66, .5); }
-        .gh-brand { color: var(--gh-gold); font-weight: 800; letter-spacing: .18em; font-size: .82rem; margin: .55rem 0 .15rem; text-shadow: 0 0 16px rgba(245, 197, 66, .45); }
-        h1 { color: var(--gh-gold) !important; letter-spacing: -.02em; text-shadow: 0 2px 18px rgba(245, 197, 66, .28); }
-        h2, h3 { color: #f4d577 !important; }
-        [data-testid="stCaptionContainer"] p { color: #b9c6e4 !important; }
-        [data-testid="stMetric"] { background: linear-gradient(145deg, rgba(18, 48, 109, .78), rgba(4, 12, 31, .92)); border: 1px solid rgba(245, 197, 66, .42); border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 14px 28px rgba(0,0,0,.20); padding: 1rem; }
-        [data-testid="stMetricLabel"] { color: #cad7f5 !important; font-weight: 650; }
-        [data-testid="stMetricValue"] { color: var(--gh-gold) !important; font-weight: 800; text-shadow: 0 0 14px rgba(245, 197, 66, .22); }
-        [data-testid="stDataFrame"] { border: 1px solid rgba(245, 197, 66, .38); border-radius: 12px; overflow: hidden; box-shadow: 0 12px 32px rgba(0,0,0,.22); }
-        [data-testid="stDataFrame"] [role="columnheader"] { background: #0c2860 !important; color: #f7d56d !important; }
-        hr { border-color: rgba(245, 197, 66, .32) !important; }
+        .gh-brand { color: var(--gh-gold); font-weight: 800; letter-spacing: .18em; font-size: .82rem; margin: .55rem 0 .15rem; text-shadow: 0 0 16px rgba(245,197,66,.45); }
+        h1 { color: var(--gh-gold) !important; text-shadow: 0 2px 18px rgba(245,197,66,.28); }
+        h2,h3 { color: #f4d577 !important; }
+        [data-testid="stMetric"] { background: linear-gradient(145deg,rgba(18,48,109,.78),rgba(4,12,31,.92)); border: 1px solid rgba(245,197,66,.42); border-radius: 14px; padding: 1rem; }
+        [data-testid="stMetricValue"] { color: var(--gh-gold) !important; }
+        [data-testid="stDataFrame"] { border: 1px solid rgba(245,197,66,.38); border-radius: 12px; overflow: hidden; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -164,64 +191,97 @@ def main():
     st.markdown('<div class="gh-brand">⚓ GRACE HARBOUR MEDIA &nbsp;•&nbsp; CREATOR NETWORK</div>', unsafe_allow_html=True)
     st.title("TikTok Live Manager Dashboard")
 
-    st.caption("Current creator goals from the latest authorized Backstage capture.")
-
     try:
         ensure_schema()
         managers = load_goal_managers()
         creators = load_goal_creators()
+        business_source = load_business_essentials()
+        access_people = load_access_people()
+        monthly_metrics = load_monthly_metrics()
     except Exception:
         st.error("The dashboard could not read its data store. Please try refreshing in a moment.")
         st.stop()
 
-    if creators.empty:
-        st.info("No creator-goal records have been imported yet.")
-        st.stop()
-
     creators = creators.copy()
-    creators["_manager"] = manager_series(creators)
+    creators["_manager"] = manager_series(creators) if not creators.empty else pd.Series(dtype="object")
     managers = managers.copy()
     if not managers.empty:
         managers["_manager"] = manager_series(managers)
-
-    manager_names = sorted(name for name in creators["_manager"].unique() if name and name != "Unassigned")
+    business = business_records(business_source)
+    manager_values = set(creators.get("_manager", pd.Series(dtype="object")).dropna().astype(str))
+    if not business.empty and "Manager" in business.columns:
+        manager_values.update(business["Manager"].dropna().astype(str))
+    manager_names = sorted(name for name in manager_values if name and name != "Unassigned")
     choice = st.sidebar.selectbox("View manager", ["All managers", *manager_names])
-    visible = creators if choice == "All managers" else creators[creators["_manager"] == choice].copy()
-    visible_diamonds = numeric_series(visible, "diamonds")
-    tier_text = visible.get("tier_status", pd.Series("", index=visible.index)).fillna("").astype(str).str.lower()
-    rank_text = visible.get("rank_up_progress", pd.Series("", index=visible.index)).fillna("").astype(str).str.lower()
 
-    ranked_up = int((tier_text.str.contains("rank") | rank_text.str.contains("rank")).sum())
-    maintained = int((tier_text.str.contains("maintain") | rank_text.str.contains("maintain")).sum())
-    above_200k = int((visible_diamonds >= 200000).sum())
+    goals_tab, business_tab, access_tab = st.tabs(["Goal Management", "Business Essentials", "Access & Data"])
 
-    selected_manager_rows = managers if choice == "All managers" else managers[managers["_manager"] == choice]
-    new_creators = int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0
+    with goals_tab:
+        st.caption("Current Creator-tab Goal Management records from the latest authorized Backstage capture.")
+        if creators.empty:
+            st.info("No creator-goal records have been imported yet.")
+        else:
+            visible = creators if choice == "All managers" else creators[creators["_manager"] == choice].copy()
+            visible_diamonds = numeric_series(visible, "diamonds")
+            tier_text = visible.get("tier_status", pd.Series("", index=visible.index)).fillna("").astype(str).str.lower()
+            rank_text = visible.get("rank_up_progress", pd.Series("", index=visible.index)).fillna("").astype(str).str.lower()
+            ranked_up = int((tier_text.str.contains("rank") | rank_text.str.contains("rank")).sum())
+            maintained = int((tier_text.str.contains("maintain") | rank_text.str.contains("maintain")).sum())
+            above_200k = int((visible_diamonds >= 200000).sum())
+            selected_manager_rows = managers if choice == "All managers" else managers[managers["_manager"] == choice]
+            new_creators = int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0
+            first, second, third, fourth, fifth = st.columns(5)
+            first.metric("Creators", f"{len(visible):,}")
+            second.metric("Diamonds", f"{int(visible_diamonds.sum()):,}")
+            third.metric("New creators", f"{new_creators:,}")
+            fourth.metric("Maintaining tier", f"{maintained:,}")
+            fifth.metric("Ranking up", f"{ranked_up:,}")
+            st.caption(f"Creators above 200k diamonds: {above_200k:,}")
+            display = pd.DataFrame({
+                "Creator": visible.get("username", visible.get("creator_id", pd.Series("", index=visible.index))),
+                "Manager": visible["_manager"], "Diamonds": visible_diamonds.astype("int64"),
+                "Valid go LIVE days": numeric_series(visible, "valid_live_days").astype("int64"),
+                "Valid LIVE duration": numeric_series(visible, "valid_live_hours"),
+                "Bonus contribution": numeric_series(visible, "estimated_bonus"),
+                "Tier": visible.get("tier_status", pd.Series("", index=visible.index)),
+                "Rank status": visible.get("rank_up_progress", pd.Series("", index=visible.index)),
+                "Activeness": visible.get("activeness_level", pd.Series("", index=visible.index)),
+                "Live now": visible.get("live_now", pd.Series("", index=visible.index)),
+            })
+            if choice != "All managers":
+                display = display.drop(columns=["Manager"])
+            st.subheader("Creator goals")
+            st.dataframe(display.sort_values("Diamonds", ascending=False), use_container_width=True, hide_index=True)
 
-    first, second, third, fourth, fifth = st.columns(5)
-    first.metric("Creators", f"{len(visible):,}")
-    second.metric("Diamonds", f"{int(visible_diamonds.sum()):,}")
-    third.metric("New creators", f"{new_creators:,}")
-    fourth.metric("Maintaining tier", f"{maintained:,}")
-    fifth.metric("Ranking up", f"{ranked_up:,}")
-    st.caption(f"Creators above 200k diamonds: {above_200k:,}")
+    with business_tab:
+        st.caption("Business Essentials records from the latest complete Backstage capture.")
+        if business.empty:
+            st.info("No Business Essentials records have been imported yet.")
+        else:
+            if choice != "All managers" and "Manager" in business.columns:
+                business = business[business["Manager"].fillna("").astype(str) == choice].copy()
+            new_count = int(business.get("New this month", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
+            graduates = int(business.get("Mature creator", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
+            quitting = int(business.get("Quit on", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
+            one, two, three, four = st.columns(4)
+            one.metric("Creators", f"{len(business):,}")
+            two.metric("New this month", f"{new_count:,}")
+            three.metric("Premium graduates", f"{graduates:,}")
+            four.metric("Quit percentage", f"{(quitting / len(business) * 100) if len(business) else 0:.1f}%")
+            st.dataframe(business, use_container_width=True, hide_index=True)
 
-    st.subheader("Creator goals")
-    display = pd.DataFrame({
-        "Creator": visible.get("username", visible.get("creator_id", pd.Series("", index=visible.index))),
-        "Manager": visible["_manager"],
-        "Diamonds": visible_diamonds.astype("int64"),
-        "Valid go LIVE days": numeric_series(visible, "valid_live_days").astype("int64"),
-        "Valid LIVE duration": numeric_series(visible, "valid_live_hours"),
-        "Bonus contribution": numeric_series(visible, "estimated_bonus"),
-        "Tier": visible.get("tier_status", pd.Series("", index=visible.index)),
-        "Rank status": visible.get("rank_up_progress", pd.Series("", index=visible.index)),
-        "Activeness": visible.get("activeness_level", pd.Series("", index=visible.index)),
-        "Live now": visible.get("live_now", pd.Series("", index=visible.index)),
-    })
-    if choice != "All managers":
-        display = display.drop(columns=["Manager"])
-    st.dataframe(display.sort_values("Diamonds", ascending=False), use_container_width=True, hide_index=True)
+    with access_tab:
+        st.caption("Current authorized-dashboard records and last saved metric values.")
+        left, right = st.columns(2)
+        with left:
+            st.subheader("Access list")
+            st.dataframe(access_people, use_container_width=True, hide_index=True)
+        with right:
+            st.subheader("Saved monthly metrics")
+            st.dataframe(monthly_metrics, use_container_width=True, hide_index=True)
+        if not business_source.empty:
+            latest_business = pd.to_datetime(business_source["captured_at"], errors="coerce").max()
+            st.caption(f"Latest Business Essentials capture: {latest_business}")
 
 
 if __name__ == "__main__":
