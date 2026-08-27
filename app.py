@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, text
 
 
 load_dotenv()
-st.set_page_config(page_title="TikTok Live Manager Dashboard", page_icon="🎙️", layout="wide")
+st.set_page_config(page_title="TikTok Live Manager Dashboard", page_icon="⚓", layout="wide")
 
 
 
@@ -131,7 +131,39 @@ def manager_series(frame):
 
 
 def main():
+
+    st.markdown(
+        """
+        <style>
+        :root { --gh-navy: #030817; --gh-deep: #071a3a; --gh-blue: #102d6b; --gh-gold: #f5c542; --gh-gold-deep: #c99416; --gh-violet: #8b5cf6; --gh-text: #eef4ff; }
+        .stApp {
+          background:
+            radial-gradient(circle at 86% 2%, rgba(111, 69, 202, .27), transparent 24rem),
+            radial-gradient(circle at 18% 0%, rgba(19, 80, 184, .24), transparent 28rem),
+            linear-gradient(150deg, var(--gh-navy) 0%, #06142f 48%, #02050e 100%);
+          color: var(--gh-text);
+        }
+        [data-testid="stHeader"] { background: rgba(3, 8, 23, .70); border-bottom: 1px solid rgba(245, 197, 66, .20); }
+        [data-testid="stSidebar"] { background: linear-gradient(180deg, #030817 0%, #071a3a 55%, #030817 100%); border-right: 1px solid rgba(245, 197, 66, .38); }
+        [data-testid="stSidebar"] * { color: var(--gh-text); }
+        [data-testid="stSidebar"] [data-baseweb="select"] > div { background: rgba(9, 27, 64, .9); border-color: rgba(245, 197, 66, .5); }
+        .gh-brand { color: var(--gh-gold); font-weight: 800; letter-spacing: .18em; font-size: .82rem; margin: .55rem 0 .15rem; text-shadow: 0 0 16px rgba(245, 197, 66, .45); }
+        h1 { color: var(--gh-gold) !important; letter-spacing: -.02em; text-shadow: 0 2px 18px rgba(245, 197, 66, .28); }
+        h2, h3 { color: #f4d577 !important; }
+        [data-testid="stCaptionContainer"] p { color: #b9c6e4 !important; }
+        [data-testid="stMetric"] { background: linear-gradient(145deg, rgba(18, 48, 109, .78), rgba(4, 12, 31, .92)); border: 1px solid rgba(245, 197, 66, .42); border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 14px 28px rgba(0,0,0,.20); padding: 1rem; }
+        [data-testid="stMetricLabel"] { color: #cad7f5 !important; font-weight: 650; }
+        [data-testid="stMetricValue"] { color: var(--gh-gold) !important; font-weight: 800; text-shadow: 0 0 14px rgba(245, 197, 66, .22); }
+        [data-testid="stDataFrame"] { border: 1px solid rgba(245, 197, 66, .38); border-radius: 12px; overflow: hidden; box-shadow: 0 12px 32px rgba(0,0,0,.22); }
+        [data-testid="stDataFrame"] [role="columnheader"] { background: #0c2860 !important; color: #f7d56d !important; }
+        hr { border-color: rgba(245, 197, 66, .32) !important; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="gh-brand">⚓ GRACE HARBOUR MEDIA &nbsp;•&nbsp; CREATOR NETWORK</div>', unsafe_allow_html=True)
     st.title("TikTok Live Manager Dashboard")
+
     st.caption("Current creator goals from the latest authorized Backstage capture.")
 
     try:
