@@ -29,7 +29,7 @@ def secret_value(name: str, default=""):
         return value
 
 
-def require_viewer_access():
+def :
     viewer_password = secret_value("VIEWER_PASSWORD")
     if not viewer_password:
         st.error("This dashboard is locked because VIEWER_PASSWORD has not been configured.")
@@ -267,7 +267,7 @@ def replace_goal_data(creators_frame, managers_frame, source_file):
         )
 
 
-require_viewer_access()
+
 
 st.title("TikTok LIVE Creator Dashboard")
 st.caption("Manager performance, Goal management creators, and creator roster • Backstage snapshot")
@@ -334,7 +334,7 @@ performance["manager_label"] = performance["manager"].str.split("@").str[0]
 performance["valid_live_rate"] = (performance["valid_live_creators"] / performance["active_creators"].replace(0, pd.NA) * 100).fillna(0)
 performance["creators_15h_plus_pct"] = 100 - performance["creators_under_15h_pct"]
 performance["hours_maintained"] = performance["creators_15h_plus_pct"] >= hour_coverage_target
-performance["diamond_goal_progress"] = (performance["diamonds"] / performance["diamond_goal"].replace(0, pd.NA) * 100).fillna(0)
+performance["diamond_goal_progress"] = (performance["diamonds"] / perforance["diamond_goal"].replace(0, pd.NA) * 100).fillna(0)
 performance["diamonds_maintained"] = performance["diamond_goal_progress"] >= 100
 performance["hours_status"] = performance["hours_maintained"].map({True: "Maintained", False: "Needs attention"})
 
