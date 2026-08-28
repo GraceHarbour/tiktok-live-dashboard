@@ -23,7 +23,7 @@ CREATOR_URL = (
 
 
 class Bidi:
-    def __init__(self, url: str = "ws://127.0.0.1:9222/session") -> None:
+    def __init__(self, url: str = "ws://localhost:9222/session") -> None:
         self.ws = websocket.create_connection(url, timeout=30)
         self.message_id = 0
 
