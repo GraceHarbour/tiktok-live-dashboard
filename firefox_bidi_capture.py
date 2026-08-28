@@ -90,9 +90,14 @@ def visible_layout(bidi: Bidi, context: str) -> list[dict[str, Any]]:
 
 
 def page_range(text: str) -> tuple[int, int, int] | None:
-    match = re.search(r"Showing\s+(\d+)\s+to\s+(\d+)\s+of\s+(\d+)", text)
-    return tuple(map(int, match.groups())) if match else None
-
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) == 6 and parts[0] == "Showing" and parts[2] == "to" and parts[4] == "of":
+            try:
+                return int(parts[1]), int(parts[3]), int(parts[5])
+            except ValueError:
+                continue
+    return None
 
 def click_next_page(bidi: Bidi, context: str) -> bool:
     raw = str(
@@ -100,37 +105,24 @@ def click_next_page(bidi: Bidi, context: str) -> bool:
             bidi,
             context,
             """(() => {
-                const buttons = [...document.querySelectorAll('button')].map(button => {
-                    const rect = button.getBoundingClientRect();
-                    return {button, text: button.innerText.trim(), x: rect.x, y: rect.y,
-                            width: rect.width, height: rect.height, disabled: button.disabled};
-                }).filter(item => item.width > 0 && item.height > 0 && !item.disabled);
-                const numbered = buttons.filter(item => /^\\d+$/.test(item.text));
-                if (!numbered.length) return false;
-                const pagerY = Math.max(...numbered.map(item => item.y));
-                const pagerNumbers = numbered.filter(item => Math.abs(item.y - pagerY) < 16);
-                const rightmostNumber = Math.max(...pagerNumbers.map(item => item.x + item.width));
-                const next = buttons
-                    .filter(item => item.text === '' && Math.abs(item.y - pagerY) < 16
-                        && item.x >= rightmostNumber - 2)
-                    .sort((a, b) => a.x - b.x)[0];
-                if (next) {
-                    next.button.click();
-                    return true;
-                }
-                const showing = document.body.innerText.match(/Showing\s+(\d+)\s+to/);
-                const currentPage = showing ? Math.ceil(Number(showing[1]) / 10) : 0;
-                const directNext = pagerNumbers.find(
-                    item => item.text === String(currentPage + 1)
-                );
-                if (!directNext) return false;
-                directNext.button.click();
+                const line = document.body.innerText.split('\\n')
+                    .find(value => value.startsWith('Showing '));
+                const parts = line ? line.split(/\\s+/) : [];
+                const currentPage = parts.length === 6 ? Math.ceil(Number(parts[1]) / 10) : 0;
+                if (!currentPage) return false;
+                const target = String(currentPage + 1);
+                const candidates = [...document.querySelectorAll('*')]
+                    .filter(el => el.children.length === 0 && el.innerText.trim() === target)
+                    .map(el => ({el, rect: el.getBoundingClientRect()}))
+                    .filter(item => item.rect.width > 0 && item.rect.height > 0)
+                    .sort((a, b) => b.rect.y - a.rect.y);
+                if (!candidates.length) return false;
+                candidates[0].el.click();
                 return true;
             })()""",
         )
     )
     return raw.lower() == "true"
-
 
 def main() -> int:
     output = (
