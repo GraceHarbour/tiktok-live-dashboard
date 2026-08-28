@@ -854,10 +854,10 @@ def main():
             not_maintained_text = tier_text.str.contains("not maintained") | rank_text.str.contains("not maintained")
             
             ranked_mask = tier_text.str.contains("rank") | rank_text.str.contains("rank")
-                        maintained_mask = ~ranked_mask & ~not_maintained_text & (
+            maintained_mask = ~ranked_mask & ~not_maintained_text & (
                 tier_text.str.contains("maintain") | rank_text.str.contains("maintain")
             )
-                        not_maintained_mask = not_maintained_text | ~(ranked_mask | maintained_mask)
+            not_maintained_mask = not_maintained_text | ~(ranked_mask | maintained_mask)
             above_200k = int((visible_diamonds >= 200000).sum())
             selected_manager_rows = managers if choice == "All managers" else managers[managers["_manager"] == choice]
             new_creators = int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0
@@ -868,7 +868,7 @@ def main():
             third.metric("New creators", f"{new_creators:,}")
             fourth.metric("Above 200k diamonds", f"{above_200k:,}")
 
-                    fifth, sixth, seventh = st.columns(3)
+            fifth, sixth, seventh = st.columns(3)
             
         
             fifth.metric("Maintaining tier", f"{int(maintained_mask.sum()):,}")
