@@ -941,41 +941,9 @@ def main():
             three.metric("Premium graduates", f"{graduates:,}")
             four.metric("Quit percentage", f"{quit_percent:.2f}%")
 
-            st.subheader("Business Essentials sections")
-            overview = latest_business_overview(business_source)
-            overview_sections = list(overview.items())
-            section_labels = [str(name).replace("_", " ").title() for name, _ in overview_sections]
-            business_tabs = st.tabs(["Creator graduation", "All captured data", *section_labels])
-
-            with business_tabs[0]:
-                st.dataframe(visible_business.drop(columns=["Section"], errors="ignore"), use_container_width=True, hide_index=True)
-
-            with business_tabs[1]:
-                st.subheader("Creator graduation")
-                st.dataframe(visible_business.drop(columns=["Section"], errors="ignore"), use_container_width=True, hide_index=True)
-                for section_name, section_value in overview_sections:
-                    st.subheader(str(section_name).replace("_", " ").title())
-                    if section_name == "Dimensions":
-                        indicator_rows = business_indicator_table(overview)
-                        if not indicator_rows.empty:
-                            st.dataframe(indicator_rows, use_container_width=True, hide_index=True)
-                    section_rows = business_value_table(section_value)
-                    if section_rows.empty:
-                        st.info("No data was included for this section in the latest capture.")
-                    else:
-                        st.dataframe(section_rows, use_container_width=True, hide_index=True)
-
-            for section_tab, (section_name, section_value) in zip(business_tabs[2:], overview_sections):
-                with section_tab:
-                    if section_name == "Dimensions":
-                        indicator_rows = business_indicator_table(overview)
-                        if not indicator_rows.empty:
-                            st.dataframe(indicator_rows, use_container_width=True, hide_index=True)
-                    section_rows = business_value_table(section_value)
-                    if section_rows.empty:
-                        st.info("No data was included for this section in the latest capture.")
-                    else:
-                        st.dataframe(section_rows, use_container_width=True, hide_index=True)
+            st.subheader("Creator graduation")
+            st.caption("Complete creator-level Business Essentials data from the latest Backstage capture.")
+            st.dataframe(visible_business.drop(columns=["Section"], errors="ignore"), use_container_width=True, hide_index=True)
 
 
     with scouting_tab:
