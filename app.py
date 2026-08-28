@@ -885,17 +885,25 @@ def main():
 
             st.subheader("Business Essentials details")
             section_column = "Section" if "Section" in visible_business.columns else None
-            sections = sorted(name for name in visible_business.get(section_column, pd.Series(dtype="object")).dropna().astype(str).unique() if name) if section_column else []
+            sections = sorted(
+                name for name in visible_business.get(section_column, pd.Series(dtype="object")).dropna().astype(str).unique()
+                if name
+            ) if section_column else []
             if sections:
-                business_tabs = st.tabs(["All data", *sections])
-                with business_tabs[0]:
-                    st.dataframe(visible_business, use_container_width=True, hide_index=True)
-                for section_tab, section_name in zip(business_tabs[1:], sections):
-                    with section_tab:
-                        section_rows = visible_business[visible_business[section_column].astype(str) == section_name].copy()
-                        st.dataframe(section_rows.drop(columns=[section_column]), use_container_width=True, hide_index=True)
+                for section_name in sections:
+                    section_rows = visible_business[
+                        visible_business[section_column].astype(str) == section_name
+                    ].copy()
+                    with st.container(border=True):
+                        st.markdown(f"### {section_name}")
+                        st.dataframe(
+                            section_rows.drop(columns=[section_column]),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
             else:
-                st.dataframe(visible_business, use_container_width=True, hide_index=True)
+                with st.container(border=True):
+                    st.dataframe(visible_business, use_container_width=True, hide_index=True)
 
 
     with scouting_tab:
