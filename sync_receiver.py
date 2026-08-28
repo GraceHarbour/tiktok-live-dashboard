@@ -1,6 +1,6 @@
 """Private Cloud Run receiver for authorized Backstage snapshots.
 
-Cloud Run IAM restricts this service to the reader service account.  The
+Cloud Run IAM restricts this service to the reader service account. The
 receiver writes into the same PostgreSQL tables already used by app.py.
 """
 
@@ -51,6 +51,17 @@ def hours(value: object) -> float:
     return result
 
 
+def display_tier_status(outcome: str, tier: str) -> str:
+    lowered = outcome.casefold()
+    if "ranked up" in lowered:
+        return f"Ranked up to {tier.casefold()}" if tier else "Ranked up"
+    if "maintain" in lowered and "not" not in lowered:
+        return f"Maintaining {tier.casefold()}" if tier else "Maintained"
+    if "not maintained" in lowered:
+        return f"Tier not maintained / {tier}" if tier else "Tier not maintained"
+    return outcome or tier
+
+
 def creator_frames(payload: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFrame]:
     headers = payload.get("headers", [])
     rows = payload.get("rows", [])
@@ -66,11 +77,14 @@ def creator_frames(payload: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFra
         "duration": column_index(headers, "Valid LIVE duration", "LIVE duration"),
         "bonus": column_index(headers, "Estimated bonus", "Bonus contribution"),
         "tier": column_index(headers, "Tier"),
+        "tier_status": column_index(headers, "Tier status", "Rank-up status", "Tier outcome"),
         "progress": column_index(headers, "Rank-up incentive progress", "Rank up incentive progress"),
         "activeness": column_index(headers, "Activeness level", "Activeness"),
     }
     if indexes["creator"] is None:
         raise ValueError("Snapshot is missing the Creator column.")
+    if indexes["tier_status"] is None:
+        raise ValueError("Snapshot is missing the Tier status column.")
 
     records: list[dict[str, object]] = []
     for raw in rows:
@@ -82,6 +96,8 @@ def creator_frames(payload: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFra
         raw_id = value_at(raw, indexes["creator_id"])
         creator_id = raw_id if re.fullmatch(r"\d{8,}", raw_id) else f"missing:{username.casefold()}"
         manager = value_at(raw, indexes["manager"]) or "Unassigned"
+        tier = value_at(raw, indexes["tier"])
+        outcome = value_at(raw, indexes["tier_status"])
         records.append({
             "creator_id": creator_id,
             "username": username,
@@ -92,7 +108,7 @@ def creator_frames(payload: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFra
             "valid_live_days": int(number(value_at(raw, indexes["days"]))),
             "valid_live_hours": hours(value_at(raw, indexes["duration"])),
             "estimated_bonus": number(value_at(raw, indexes["bonus"])),
-            "tier_status": value_at(raw, indexes["tier"]),
+            "tier_status": display_tier_status(outcome, tier),
             "rank_up_progress": value_at(raw, indexes["progress"]),
             "activeness_level": int(number(value_at(raw, indexes["activeness"]))),
             "live_now": 0,
@@ -102,13 +118,18 @@ def creator_frames(payload: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFra
     if creators.empty:
         raise ValueError("Snapshot did not contain usable Creator rows.")
 
+    meta = payload.get("meta", {})
+    new_creator_total = int(number(meta.get("new_creators", 0))) if isinstance(meta, dict) else 0
+
     engine = database_engine()
     ensure_schema(engine)
     with engine.connect() as connection:
         current = pd.read_sql("SELECT * FROM goal_managers", connection)
     existing = current.set_index("manager").to_dict("index") if not current.empty else {}
+
     manager_rows = []
-    for manager, group in creators[creators["manager"] != "Unassigned"].groupby("manager"):
+    grouped = list(creators[creators["manager"] != "Unassigned"].groupby("manager"))
+    for index, (manager, group) in enumerate(grouped):
         prior = existing.get(manager, {})
         manager_rows.append({
             "manager": manager,
@@ -117,7 +138,7 @@ def creator_frames(payload: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFra
             "group_name": prior.get("group_name", ""),
             "diamonds": int(group["diamonds"].sum()),
             "diamond_goal": int(prior.get("diamond_goal", 0) or 0),
-            "new_creators": int(prior.get("new_creators", 0) or 0),
+            "new_creators": new_creator_total if index == 0 else 0,
             "new_creator_goal": int(prior.get("new_creator_goal", 0) or 0),
             "managed_creators": int(len(group)),
         })
