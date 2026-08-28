@@ -245,27 +245,7 @@ def main():
     ])
 
     with manager_tab:
-        st.caption("Manager performance from the latest Goal Management capture.")
-        if managers.empty:
-            st.info("No manager records have been imported yet.")
-        else:
-            manager_view = managers.copy()
-            if "_manager" not in manager_view.columns:
-                manager_view["_manager"] = manager_series(manager_view)
-            if choice != "All managers":
-                manager_view = manager_view[manager_view["_manager"] == choice].copy()
-            manager_diamonds = numeric_series(manager_view, "diamonds")
-            first, second, third = st.columns(3)
-            first.metric("Managers", f"{len(manager_view):,}")
-            second.metric("Managed creators", f"{int(numeric_series(manager_view, 'managed_creators').sum()):,}")
-            third.metric("Diamonds", f"{int(manager_diamonds.sum()):,}")
-            manager_display = pd.DataFrame({
-                "Manager": manager_view["_manager"],
-                "Creators": numeric_series(manager_view, "managed_creators").astype("int64"),
-                "Diamonds": manager_diamonds.astype("int64"),
-                "New creators": numeric_series(manager_view, "new_creators").astype("int64"),
-            })
-            st.dataframe(manager_display.sort_values("Diamonds", ascending=False), use_container_width=True, hide_index=True)
+        pass
 
     with goals_tab:
         st.caption("Current Creator-tab Goal Management records from the latest authorized Backstage capture.")
