@@ -93,6 +93,10 @@ def main() -> int:
             raise RuntimeError("The Creator table did not load in Firefox before the deadline.")
         return 0
     finally:
+        try:
+            bidi.call("session.end")
+        except Exception:
+            pass
         bidi.close()
 
 
