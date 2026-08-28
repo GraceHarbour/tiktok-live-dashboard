@@ -943,33 +943,39 @@ def main():
 
             st.subheader("Business Essentials sections")
             overview = latest_business_overview(business_source)
-            metrics_tab, graduation_tab, rewards_tab, program_tab = st.tabs([
-                "Agency metrics", "Creator graduation", "Benefits & rewards", "Program details"
-            ])
-            with metrics_tab:
-                metrics = business_indicator_table(overview)
-                if metrics.empty:
-                    st.info("No agency-level Business Essentials metrics were included in the latest capture.")
-                else:
-                    st.dataframe(metrics, use_container_width=True, hide_index=True)
-            with graduation_tab:
+            overview_sections = list(overview.items())
+            section_labels = [str(name).replace("_", " ").title() for name, _ in overview_sections]
+            business_tabs = st.tabs(["Creator graduation", "All captured data", *section_labels])
+
+            with business_tabs[0]:
                 st.dataframe(visible_business.drop(columns=["Section"], errors="ignore"), use_container_width=True, hide_index=True)
-            with rewards_tab:
-                rewards = business_value_table(overview.get("RewardConfigItems", []))
-                if rewards.empty:
-                    st.info("No benefits and reward configuration was included in the latest capture.")
-                else:
-                    st.dataframe(rewards, use_container_width=True, hide_index=True)
-            with program_tab:
-                program = business_value_table({
-                    "Month": overview.get("Month"),
-                    "Graduation line": overview.get("GraduationLine"),
-                    "Last month result": overview.get("LastMonthResultGenerated"),
-                })
-                if program.empty:
-                    st.info("No program detail was included in the latest capture.")
-                else:
-                    st.dataframe(program, use_container_width=True, hide_index=True)
+
+            with business_tabs[1]:
+                st.subheader("Creator graduation")
+                st.dataframe(visible_business.drop(columns=["Section"], errors="ignore"), use_container_width=True, hide_index=True)
+                for section_name, section_value in overview_sections:
+                    st.subheader(str(section_name).replace("_", " ").title())
+                    if section_name == "Dimensions":
+                        indicator_rows = business_indicator_table(overview)
+                        if not indicator_rows.empty:
+                            st.dataframe(indicator_rows, use_container_width=True, hide_index=True)
+                    section_rows = business_value_table(section_value)
+                    if section_rows.empty:
+                        st.info("No data was included for this section in the latest capture.")
+                    else:
+                        st.dataframe(section_rows, use_container_width=True, hide_index=True)
+
+            for section_tab, (section_name, section_value) in zip(business_tabs[2:], overview_sections):
+                with section_tab:
+                    if section_name == "Dimensions":
+                        indicator_rows = business_indicator_table(overview)
+                        if not indicator_rows.empty:
+                            st.dataframe(indicator_rows, use_container_width=True, hide_index=True)
+                    section_rows = business_value_table(section_value)
+                    if section_rows.empty:
+                        st.info("No data was included for this section in the latest capture.")
+                    else:
+                        st.dataframe(section_rows, use_container_width=True, hide_index=True)
 
 
     with scouting_tab:
