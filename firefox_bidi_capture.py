@@ -2,7 +2,7 @@
 """Read the visible TikTok Backstage Creator table through Firefox BiDi.
 
 This intentionally attaches only to Firefox's remote-debugging WebDriver BiDi
-endpoint.  It does not launch, depend on, or fall back to Chromium.
+endpoint. It does not launch, depend on, or fall back to Chromium.
 """
 
 from __future__ import annotations
@@ -24,13 +24,19 @@ CREATOR_URL = (
 
 class Bidi:
     def __init__(self, url: str = "ws://localhost:9222/session") -> None:
-        self.ws = websocket.create_connection(url, timeout=30, origin="http://127.0.0.1")
+        self.ws = websocket.create_connection(
+            url, timeout=30, origin="http://127.0.0.1"
+        )
         self.message_id = 0
 
-    def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def call(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         self.message_id += 1
         message_id = self.message_id
-        self.ws.send(json.dumps({"id": message_id, "method": method, "params": params or {}}))
+        self.ws.send(
+            json.dumps({"id": message_id, "method": method, "params": params or {}})
+        )
         while True:
             reply = json.loads(self.ws.recv())
             if reply.get("id") != message_id:
@@ -64,7 +70,11 @@ def evaluate(bidi: Bidi, context: str, expression: str) -> Any:
 
 
 def main() -> int:
-    output = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data/firefox-creator-page.txt")
+    output = (
+        Path(sys.argv[1])
+        if len(sys.argv) > 1
+        else Path("data/firefox-creator-page.txt")
+    )
     bidi = Bidi()
     try:
         bidi.call("session.new", {"capabilities": {"alwaysMatch": {}}})
@@ -78,10 +88,18 @@ def main() -> int:
         )
         deadline = time.time() + 90
         text = ""
+        headers_visible_at: float | None = None
         while time.time() < deadline:
-            text = str(evaluate(bidi, context, "document.body ? document.body.innerText : ''"))
+            text = str(
+                evaluate(bidi, context, "document.body ? document.body.innerText : ''")
+            )
             if "Diamonds" in text and "Valid go LIVE days" in text:
-                break
+                # Backstage renders labels before creator rows. Keep the page open
+                # long enough for the visible source values to arrive.
+                if headers_visible_at is None:
+                    headers_visible_at = time.time()
+                elif time.time() - headers_visible_at >= 25:
+                    break
             time.sleep(2)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(text, encoding="utf-8")
