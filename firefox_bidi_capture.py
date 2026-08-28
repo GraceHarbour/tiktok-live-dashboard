@@ -111,13 +111,15 @@ def click_next_page(bidi: Bidi, context: str) -> bool:
                 const currentPage = parts.length === 6 ? Math.ceil(Number(parts[1]) / 10) : 0;
                 if (!currentPage) return false;
                 const target = String(currentPage + 1);
-                const candidates = [...document.querySelectorAll('a, button, [role="button"], li, span, div')]
-                    .filter(el => el.textContent.trim() === target)
-                    .map(el => ({el, rect: el.getBoundingClientRect()}))
-                    .filter(item => item.rect.width > 0 && item.rect.height > 0)
-                    .sort((a, b) => b.rect.y - a.rect.y);
+                const result = document.evaluate(
+                    \`//*[normalize-space(text())='\${target}']\`, document, null,
+                    XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null
+                );
+                const candidates = Array.from(
+                    {length: result.snapshotLength}, (_, index) => result.snapshotItem(index)
+                );
                 if (!candidates.length) return false;
-                candidates[0].el.click();
+                candidates[candidates.length - 1].click();
                 return true;
             })()""",
         )
