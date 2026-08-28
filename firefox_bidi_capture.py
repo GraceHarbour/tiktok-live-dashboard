@@ -127,6 +127,19 @@ def main() -> int:
         output.with_name("firefox-creator-layout.json").write_text(
             layout, encoding="utf-8"
         )
+        controls = str(
+            evaluate(
+                bidi,
+                context,
+                """JSON.stringify([...document.querySelectorAll('button')].map(button => ({
+                    text: button.innerText.trim(), ariaLabel: button.getAttribute('aria-label'),
+                    title: button.getAttribute('title'), disabled: button.disabled
+                })))""",
+            )
+        )
+        output.with_name("firefox-creator-controls.json").write_text(
+            controls, encoding="utf-8"
+        )
         print(f"Saved {len(text)} characters from Firefox to {output}")
         if "Diamonds" not in text:
             raise RuntimeError("The Creator table did not load in Firefox before the deadline.")
