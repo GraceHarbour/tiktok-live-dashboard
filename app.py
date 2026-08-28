@@ -573,21 +573,31 @@ def business_records(frame):
     return pd.DataFrame(rows)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+def official_business_quit_rate(frame):
+    for _, source in frame.iterrows():
+        payload = source.get("payload")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (TypeError, ValueError):
+                continue
+        if not isinstance(payload, dict):
+            continue
+        overview = payload.get("overview")
+        if not isinstance(overview, dict):
+            continue
+        for dimension in overview.get("Dimensions", []):
+            if not isinstance(dimension, dict):
+                continue
+            for indicator in dimension.get("DefaultIndicators", []):
+                if not isinstance(indicator, dict):
+                    continue
+                if indicator.get("IndicatorName") == "mtd_ratio_of_new_hosts_who_quit_within_15_days":
+                    try:
+                        return float(indicator.get("IndicatorValue")) * 100
+                    except (TypeError, ValueError):
+                        return None
+    return None
 
 
 
@@ -875,12 +885,14 @@ def main():
             new_count = int(visible_business.get("New this month", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
             graduates = int(visible_business.get("Mature creator", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
             quitting = int(visible_business.get("Quit on", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
+            official_quit_rate = official_business_quit_rate(business_source) if choice == "All managers" else None
+            quit_percent = official_quit_rate if official_quit_rate is not None else ((quitting / len(visible_business) * 100) if len(visible_business) else 0)
 
             one, two, three, four = st.columns(4)
             one.metric("Creators", f"{len(visible_business):,}")
             two.metric("New this month", f"{new_count:,}")
             three.metric("Premium graduates", f"{graduates:,}")
-            four.metric("Quit percentage", f"{(quitting / len(visible_business) * 100) if len(visible_business) else 0:.1f}%")
+            four.metric("Quit percentage", f"{quit_percent:.2f}%")
 
             st.subheader("Business Essentials details")
             section_column = "Section" if "Section" in visible_business.columns else None
