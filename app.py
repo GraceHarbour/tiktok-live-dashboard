@@ -566,8 +566,9 @@ def business_records(frame):
         if not headers or not values:
             continue
         row = {str(header): values[index] if index < len(values) else "" for index, header in enumerate(headers)}
-        row["Section"] = str(source.get("section") or "Business Essentials")
-        if str(row.get("Record type", "")).casefold() == "overview":
+        record_type = str(row.get("Record type") or "").strip()
+        row["Section"] = record_type or str(source.get("section") or "Business Essentials")
+        if record_type.casefold() == "overview":
             continue
         rows.append(row)
     return pd.DataFrame(rows)
@@ -898,13 +899,13 @@ def main():
             section_column = "Section" if "Section" in visible_business.columns else None
             sections = sorted(name for name in visible_business.get(section_column, pd.Series(dtype="object")).dropna().astype(str).unique() if name) if section_column else []
             if sections:
-                business_tabs = st.tabs(["All data", *sections])
-                with business_tabs[0]:
-                    st.dataframe(visible_business, use_container_width=True, hide_index=True)
-                for section_tab, section_name in zip(business_tabs[1:], sections):
+                business_tabs = st.tabs([*sections, "All data"])
+                for section_tab, section_name in zip(business_tabs[:-1], sections):
                     with section_tab:
                         section_rows = visible_business[visible_business[section_column].astype(str) == section_name].copy()
                         st.dataframe(section_rows.drop(columns=[section_column]), use_container_width=True, hide_index=True)
+                with business_tabs[-1]:
+                    st.dataframe(visible_business.drop(columns=[section_column]), use_container_width=True, hide_index=True)
             else:
                 st.dataframe(visible_business, use_container_width=True, hide_index=True)
 
