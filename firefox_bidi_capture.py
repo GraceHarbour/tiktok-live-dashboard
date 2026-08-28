@@ -106,6 +106,27 @@ def main() -> int:
         html_output = output.with_suffix(".html")
         html = str(evaluate(bidi, context, "document.documentElement.outerHTML"))
         html_output.write_text(html, encoding="utf-8")
+        # Keep a visible layout map as well as the raw page text. Backstage
+        # renders its table as positioned elements, so coordinates retain
+        # the row/column relationship for the values shown on the page.
+        layout = str(
+            evaluate(
+                bidi,
+                context,
+                """JSON.stringify([...document.body.querySelectorAll('*')]
+                    .filter(el => el.children.length === 0 && el.innerText?.trim())
+                    .map(el => {
+                        const rect = el.getBoundingClientRect();
+                        return {text: el.innerText.trim(), x: Math.round(rect.x),
+                                y: Math.round(rect.y), width: Math.round(rect.width),
+                                height: Math.round(rect.height)};
+                    })
+                    .filter(item => item.width > 0 && item.height > 0))""",
+            )
+        )
+        output.with_name("firefox-creator-layout.json").write_text(
+            layout, encoding="utf-8"
+        )
         print(f"Saved {len(text)} characters from Firefox to {output}")
         if "Diamonds" not in text:
             raise RuntimeError("The Creator table did not load in Firefox before the deadline.")
