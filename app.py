@@ -4,6 +4,8 @@ import os
 import re
 
 
+
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -14,8 +16,16 @@ from sqlalchemy import create_engine, text
 
 
 
+
+
+
+
 load_dotenv()
 st.set_page_config(page_title="TikTok Live Manager Dashboard", page_icon="⚓", layout="wide")
+
+
+
+
 
 
 
@@ -24,6 +34,10 @@ def quote_identifier(name: str) -> str:
     if not name or not all(part.replace("_", "").isalnum() for part in name.split(".")):
         raise ValueError(f"Unsafe database identifier: {name!r}")
     return ".".join(f'"{part}"' for part in name.split("."))
+
+
+
+
 
 
 
@@ -38,10 +52,18 @@ def secret_value(name: str, default=""):
 
 
 
+
+
+
+
 @st.cache_resource
 def load_settings():
     with open("config.yaml", "r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
+
+
+
+
 
 
 
@@ -68,6 +90,10 @@ def get_engine():
 
 
 
+
+
+
+
 @st.cache_resource
 def ensure_schema():
     statements = [
@@ -81,6 +107,10 @@ def ensure_schema():
     with get_engine().begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+
+
+
+
 
 
 
@@ -101,10 +131,18 @@ def load_creators():
 
 
 
+
+
+
+
 @st.cache_data(ttl=300)
 def load_manager_performance():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT * FROM manager_performance"), connection)
+
+
+
+
 
 
 
@@ -117,6 +155,10 @@ def load_goal_managers():
 
 
 
+
+
+
+
 @st.cache_data(ttl=300)
 def load_goal_creators():
     with get_engine().connect() as connection:
@@ -124,10 +166,15 @@ def load_goal_creators():
 
 
 
+
+
+
 def numeric_series(frame, column):
     if column not in frame.columns:
         return pd.Series(0, index=frame.index, dtype="float64")
     return pd.to_numeric(frame[column], errors="coerce").fillna(0)
+
+
 
 
 def manager_series(frame):
@@ -140,10 +187,15 @@ def manager_series(frame):
 
 
 
+
+
+
 @st.cache_data(ttl=300)
 def load_business_essentials():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT section, snapshot_month, row_key, row_index, payload, captured_at FROM business_essentials_rows ORDER BY captured_at DESC, row_index ASC"), connection)
+
+
 
 
 @st.cache_data(ttl=300)
@@ -152,10 +204,14 @@ def load_access_people():
         return pd.read_sql(text("SELECT email, role, added_at FROM dashboard_access_people ORDER BY role, email"), connection)
 
 
+
+
 @st.cache_data(ttl=300)
 def load_monthly_metrics():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT metric_name, metric_value, updated_at FROM dashboard_monthly_metrics ORDER BY metric_name"), connection)
+
+
 
 
 def business_records(frame):
@@ -180,20 +236,62 @@ def business_records(frame):
     return pd.DataFrame(rows)
 
 
+
+
+
+@st.cache_data(ttl=60)
+def load_shared_prior_month():
+    try:
+        with get_engine().connect() as connection:
+            result = connection.execute(text(
+                "SELECT file_name, sheet_name, columns_json, rows_json, uploaded_at "
+                "FROM dashboard_prior_month_uploads WHERE id = 1"
+            )).mappings().first()
+        if not result:
+            return None
+        return {
+            "file_name": result["file_name"],
+            "sheet_name": result["sheet_name"],
+            "columns": json.loads(result["columns_json"] or "[]"),
+            "rows": json.loads(result["rows_json"] or "[]"),
+            "uploaded_at": result["uploaded_at"],
+        }
+    except Exception:
+        return None
+
+
+def save_shared_prior_month(file_name, sheet_name, columns, frame):
+    rows = frame.where(pd.notna(frame), None).to_dict(orient="records")
+    with get_engine().begin() as connection:
+        connection.execute(text(
+            "CREATE TABLE IF NOT EXISTS dashboard_prior_month_uploads ("
+            "id SMALLINT PRIMARY KEY CHECK (id = 1), "
+            "file_name TEXT NOT NULL, sheet_name TEXT, columns_json TEXT NOT NULL, "
+            "rows_json TEXT NOT NULL, uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"
+        ))
+        connection.execute(text(
+            "INSERT INTO dashboard_prior_month_uploads "
+            "(id, file_name, sheet_name, columns_json, rows_json, uploaded_at) "
+            "VALUES (1, :file_name, :sheet_name, :columns_json, :rows_json, NOW()) "
+            "ON CONFLICT (id) DO UPDATE SET file_name = EXCLUDED.file_name, "
+            "sheet_name = EXCLUDED.sheet_name, columns_json = EXCLUDED.columns_json, "
+            "rows_json = EXCLUDED.rows_json, uploaded_at = EXCLUDED.uploaded_at"
+        ), {
+            "file_name": file_name,
+            "sheet_name": sheet_name,
+            "columns_json": json.dumps(columns, default=str),
+            "rows_json": json.dumps(rows, default=str),
+        })
+
+
 def main():
     st.markdown(
         """
         <style>
         :root { --gh-navy: #030817; --gh-deep: #071a3a; --gh-blue: #102d6b; --gh-gold: #f5c542; --gh-violet: #8b5cf6; --gh-text: #eef4ff; }
         .stApp { position: relative; overflow-x: hidden; background: radial-gradient(circle at 86% 2%, rgba(111,69,202,.27), transparent 24rem), radial-gradient(circle at 18% 0%, rgba(19,80,184,.24), transparent 28rem), linear-gradient(150deg, var(--gh-navy), #06142f 48%, #02050e); color: var(--gh-text); }
-        .stApp::before { content: "⚓"; position: fixed; z-index: 0; right: -3rem; top: 4rem; color: rgba(245,197,66,.018); font-size: 31rem; line-height: 1; transform: rotate(-11deg); pointer-events: none; }
+        .stApp::before { content: "⚓"; position: fixed; z-index: 0; right: -3rem; top: 4rem; color: rgba(245,197,66,.010); font-size: 28rem; line-height: 1; transform: rotate(-11deg); pointer-events: none; }
         .stApp > * { position: relative; z-index: 1; }
-        .gh-harbour-scene { position: relative; height: 112px; overflow: hidden; border: 1px solid rgba(245,197,66,.45); border-radius: 16px; margin: .3rem 0 1.1rem; background: radial-gradient(circle at 10% 24%, rgba(255,195,51,.88) 0 2px, rgba(255,181,0,.25) 3px 16px, transparent 42px), linear-gradient(180deg, #040b24 0%, #071c48 55%, #071330 56%, #010611 100%); box-shadow: inset 0 0 42px rgba(10,85,190,.48), 0 0 22px rgba(245,197,66,.14); }
-        .gh-harbour-scene::before { content: ""; position: absolute; inset: 54px 0 0; background: repeating-linear-gradient(176deg, rgba(119,157,255,.42) 0 1px, transparent 1px 9px), linear-gradient(90deg, transparent, rgba(58,106,220,.36), transparent); opacity: .76; }
-        .gh-lighthouse { position: absolute; left: 9%; bottom: 16px; width: 25px; height: 58px; background: linear-gradient(90deg,#111827,#ead08a,#111827); border-radius: 5px 5px 2px 2px; box-shadow: 0 0 28px rgba(255,190,42,.82); }
-        .gh-lighthouse::before { content: ""; position: absolute; left: -7px; top: -10px; width: 39px; height: 12px; background: #f5c542; border-radius: 4px; box-shadow: 0 0 25px 8px rgba(255,188,38,.62); }
-        .gh-crest { position: absolute; right: 6%; top: 15px; color: var(--gh-gold); font-weight: 900; letter-spacing: .16em; font-size: 1rem; text-align: center; text-shadow: 0 0 14px rgba(245,197,66,.75); }
-        .gh-crest b { display:block; font-size: 2.6rem; line-height: 1; }
         [data-testid="stHeader"] { background: rgba(3,8,23,.70); border-bottom: 1px solid rgba(245,197,66,.20); }
         [data-testid="stSidebar"] { background: linear-gradient(180deg,#030817,#071a3a 55%,#030817); border-right: 1px solid rgba(245,197,66,.38); }
         [data-testid="stSidebar"] * { color: var(--gh-text); }
@@ -207,9 +305,10 @@ def main():
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("""<div class="gh-harbour-scene"><div class="gh-lighthouse"></div><div class="gh-crest"><b>⚓</b>GRACE HARBOUR<br>CREATOR NETWORK</div></div>""", unsafe_allow_html=True)
+    st.image("assets/grace-harbour-harbor-banner.png", use_container_width=True)
     st.markdown('<div class="gh-brand">⚓ GRACE HARBOUR MEDIA &nbsp;•&nbsp; CREATOR NETWORK</div>', unsafe_allow_html=True)
     st.title("TikTok Live Manager Dashboard")
+
 
     try:
         # The data tables are provisioned by the importer. Do not run DDL during
@@ -223,6 +322,7 @@ def main():
         st.error("The dashboard could not read its data store. Please try refreshing in a moment.")
         st.stop()
 
+
     creators = creators.copy()
     creators["_manager"] = manager_series(creators) if not creators.empty else pd.Series(dtype="object")
     managers = managers.copy()
@@ -235,6 +335,7 @@ def main():
     manager_names = sorted(name for name in manager_values if name and name != "Unassigned")
     choice = st.sidebar.selectbox("View manager", ["All managers", *manager_names])
 
+
     manager_tab, goals_tab, prior_month_tab, business_tab, scouting_tab, access_tab = st.tabs([
         "Manager",
         "Goal Management",
@@ -244,8 +345,10 @@ def main():
         "Access & Data",
     ])
 
+
     with manager_tab:
         pass
+
 
     with goals_tab:
         st.caption("Current Creator-tab Goal Management records from the latest authorized Backstage capture.")
@@ -284,10 +387,28 @@ def main():
             st.subheader("Creator goals")
             st.dataframe(display.sort_values("Diamonds", ascending=False), use_container_width=True, hide_index=True)
 
+
     with prior_month_tab:
+        shared_prior = load_shared_prior_month()
+        st.caption("A shared prior-month view for all dashboard visitors.")
+        if shared_prior:
+            shared_frame = pd.DataFrame(shared_prior["rows"])
+            shared_columns = [column for column in shared_prior["columns"] if column in shared_frame.columns]
+            st.subheader("Current shared prior-month view")
+            st.caption(f"Source: {shared_prior['file_name']} • last published {shared_prior['uploaded_at']}")
+            if shared_columns:
+                st.dataframe(shared_frame[shared_columns], use_container_width=True, hide_index=True)
+            else:
+                st.info("The shared file has no selected display columns yet.")
+        else:
+            st.info("No shared prior-month spreadsheet has been published yet.")
+
+        st.divider()
+        st.subheader("Publish a shared prior-month view")
         prior_file = st.file_uploader("Choose prior-month spreadsheet", type=["xlsx", "xls", "csv"], key="prior_month_file")
         if prior_file is not None:
             try:
+                selected_sheet = ""
                 if prior_file.name.lower().endswith(".csv"):
                     prior_data = pd.read_csv(prior_file)
                 else:
@@ -295,13 +416,21 @@ def main():
                     selected_sheet = st.selectbox("Worksheet", workbook.sheet_names, key="prior_month_sheet")
                     prior_data = pd.read_excel(workbook, sheet_name=selected_sheet)
                 available_columns = list(prior_data.columns)
-                selected_columns = st.multiselect("Columns to include", available_columns, default=available_columns, key="prior_month_columns")
+                selected_columns = st.multiselect(
+                    "Columns to include", available_columns, default=available_columns, key="prior_month_columns"
+                )
                 if selected_columns:
                     st.dataframe(prior_data[selected_columns], use_container_width=True, hide_index=True)
+                    if st.button("Publish shared prior-month view", type="primary"):
+                        save_shared_prior_month(prior_file.name, selected_sheet, selected_columns, prior_data[selected_columns])
+                        load_shared_prior_month.clear()
+                        st.success("The shared prior-month view is published for everyone with dashboard access.")
+                        st.rerun()
                 else:
                     st.info("Choose one or more columns to display.")
             except Exception as error:
                 st.error(f"That spreadsheet could not be read: {error}")
+
 
     with business_tab:
         st.caption("Business Essentials records from the latest complete Backstage capture.")
@@ -320,9 +449,11 @@ def main():
             four.metric("Quit percentage", f"{(quitting / len(business) * 100) if len(business) else 0:.1f}%")
             st.dataframe(business, use_container_width=True, hide_index=True)
 
+
     with scouting_tab:
         st.caption("Scouting records will appear here when the scouting capture is imported.")
         st.info("No scouting records have been imported yet.")
+
 
     with access_tab:
         st.caption("Current authorized-dashboard records and last saved metric values.")
@@ -336,6 +467,7 @@ def main():
         if not business_source.empty:
             latest_business = pd.to_datetime(business_source["captured_at"], errors="coerce").max()
             st.caption(f"Latest Business Essentials capture: {latest_business}")
+
 
 if __name__ == "__main__":
     main()
