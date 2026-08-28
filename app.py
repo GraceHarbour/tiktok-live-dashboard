@@ -6,12 +6,24 @@ import re
 
 
 
+
+
+
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 import yaml
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
+
+
+
+
+
+
+
+
 
 
 
@@ -30,10 +42,26 @@ st.set_page_config(page_title="TikTok Live Manager Dashboard", page_icon="⚓", 
 
 
 
+
+
+
+
+
+
+
+
 def quote_identifier(name: str) -> str:
     if not name or not all(part.replace("_", "").isalnum() for part in name.split(".")):
         raise ValueError(f"Unsafe database identifier: {name!r}")
     return ".".join(f'"{part}"' for part in name.split("."))
+
+
+
+
+
+
+
+
 
 
 
@@ -56,10 +84,26 @@ def secret_value(name: str, default=""):
 
 
 
+
+
+
+
+
+
+
+
 @st.cache_resource
 def load_settings():
     with open("config.yaml", "r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
+
+
+
+
+
+
+
+
 
 
 
@@ -94,6 +138,14 @@ def get_engine():
 
 
 
+
+
+
+
+
+
+
+
 @st.cache_resource
 def ensure_schema():
     statements = [
@@ -107,6 +159,14 @@ def ensure_schema():
     with get_engine().begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+
+
+
+
+
+
+
+
 
 
 
@@ -135,10 +195,26 @@ def load_creators():
 
 
 
+
+
+
+
+
+
+
+
 @st.cache_data(ttl=300)
 def load_manager_performance():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT * FROM manager_performance"), connection)
+
+
+
+
+
+
+
+
 
 
 
@@ -159,6 +235,14 @@ def load_goal_managers():
 
 
 
+
+
+
+
+
+
+
+
 @st.cache_data(ttl=300)
 def load_goal_creators():
     with get_engine().connect() as connection:
@@ -169,10 +253,20 @@ def load_goal_creators():
 
 
 
+
+
+
+
+
+
 def numeric_series(frame, column):
     if column not in frame.columns:
         return pd.Series(0, index=frame.index, dtype="float64")
     return pd.to_numeric(frame[column], errors="coerce").fillna(0)
+
+
+
+
 
 
 
@@ -190,10 +284,20 @@ def manager_series(frame):
 
 
 
+
+
+
+
+
+
 @st.cache_data(ttl=300)
 def load_business_essentials():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT section, snapshot_month, row_key, row_index, payload, captured_at FROM business_essentials_rows ORDER BY captured_at DESC, row_index ASC"), connection)
+
+
+
+
 
 
 
@@ -206,10 +310,18 @@ def load_access_people():
 
 
 
+
+
+
+
 @st.cache_data(ttl=300)
 def load_monthly_metrics():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT metric_name, metric_value, updated_at FROM dashboard_monthly_metrics ORDER BY metric_name"), connection)
+
+
+
+
 
 
 
@@ -239,6 +351,11 @@ def business_records(frame):
 
 
 
+
+
+
+
+
 @st.cache_data(ttl=60)
 def load_shared_prior_month():
     try:
@@ -258,6 +375,8 @@ def load_shared_prior_month():
         }
     except Exception:
         return None
+
+
 
 
 def save_shared_prior_month(file_name, sheet_name, columns, frame):
@@ -284,6 +403,8 @@ def save_shared_prior_month(file_name, sheet_name, columns, frame):
         })
 
 
+
+
 def main():
     st.markdown(
         """
@@ -305,9 +426,11 @@ def main():
         """,
         unsafe_allow_html=True,
     )
-    st.image("assets/grace-harbour-harbor-banner.png", use_container_width=True)
+    st.image("assets/grace-harbour-approved-banner.png", use_container_width=True)
     st.markdown('<div class="gh-brand">⚓ GRACE HARBOUR MEDIA &nbsp;•&nbsp; CREATOR NETWORK</div>', unsafe_allow_html=True)
     st.title("TikTok Live Manager Dashboard")
+
+
 
 
     try:
@@ -323,6 +446,8 @@ def main():
         st.stop()
 
 
+
+
     creators = creators.copy()
     creators["_manager"] = manager_series(creators) if not creators.empty else pd.Series(dtype="object")
     managers = managers.copy()
@@ -336,6 +461,8 @@ def main():
     choice = st.sidebar.selectbox("View manager", ["All managers", *manager_names])
 
 
+
+
     manager_tab, goals_tab, prior_month_tab, business_tab, scouting_tab, access_tab = st.tabs([
         "Manager",
         "Goal Management",
@@ -346,8 +473,12 @@ def main():
     ])
 
 
+
+
     with manager_tab:
         pass
+
+
 
 
     with goals_tab:
@@ -388,6 +519,8 @@ def main():
             st.dataframe(display.sort_values("Diamonds", ascending=False), use_container_width=True, hide_index=True)
 
 
+
+
     with prior_month_tab:
         shared_prior = load_shared_prior_month()
         st.caption("A shared prior-month view for all dashboard visitors.")
@@ -402,6 +535,7 @@ def main():
                 st.info("The shared file has no selected display columns yet.")
         else:
             st.info("No shared prior-month spreadsheet has been published yet.")
+
 
         st.divider()
         st.subheader("Publish a shared prior-month view")
@@ -432,6 +566,8 @@ def main():
                 st.error(f"That spreadsheet could not be read: {error}")
 
 
+
+
     with business_tab:
         st.caption("Business Essentials records from the latest complete Backstage capture.")
         if business.empty:
@@ -450,9 +586,13 @@ def main():
             st.dataframe(business, use_container_width=True, hide_index=True)
 
 
+
+
     with scouting_tab:
         st.caption("Scouting records will appear here when the scouting capture is imported.")
         st.info("No scouting records have been imported yet.")
+
+
 
 
     with access_tab:
@@ -467,6 +607,8 @@ def main():
         if not business_source.empty:
             latest_business = pd.to_datetime(business_source["captured_at"], errors="coerce").max()
             st.caption(f"Latest Business Essentials capture: {latest_business}")
+
+
 
 
 if __name__ == "__main__":
