@@ -114,8 +114,17 @@ def click_next_page(bidi: Bidi, context: str) -> bool:
                     .filter(item => item.text === '' && Math.abs(item.y - pagerY) < 16
                         && item.x >= rightmostNumber - 2)
                     .sort((a, b) => a.x - b.x)[0];
-                if (!next) return false;
-                next.button.click();
+                if (next) {
+                    next.button.click();
+                    return true;
+                }
+                const showing = document.body.innerText.match(/Showing\s+(\d+)\s+to/);
+                const currentPage = showing ? Math.ceil(Number(showing[1]) / 10) : 0;
+                const directNext = pagerNumbers.find(
+                    item => item.text === String(currentPage + 1)
+                );
+                if (!directNext) return false;
+                directNext.button.click();
                 return true;
             })()""",
         )
