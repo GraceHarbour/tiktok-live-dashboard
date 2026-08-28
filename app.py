@@ -602,6 +602,52 @@ def official_business_quit_rate(frame):
 
 
 
+def latest_business_overview(frame):
+    for _, source in frame.iterrows():
+        payload = source.get("payload")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (TypeError, ValueError):
+                continue
+        if not isinstance(payload, dict):
+            continue
+        overview = payload.get("overview")
+        if isinstance(overview, dict):
+            return overview
+    return {}
+
+
+def business_display_value(value):
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, default=str)
+    return value
+
+
+def business_value_table(value):
+    if isinstance(value, list):
+        records = [item if isinstance(item, dict) else {"Value": business_display_value(item)} for item in value]
+        return pd.DataFrame([{str(key): business_display_value(item) for key, item in record.items()} for record in records]) if records else pd.DataFrame()
+    if isinstance(value, dict):
+        return pd.DataFrame([{"Field": key, "Value": business_display_value(item)} for key, item in value.items()])
+    return pd.DataFrame([{"Value": business_display_value(value)}]) if value not in (None, "") else pd.DataFrame()
+
+
+def business_indicator_table(overview):
+    rows = []
+    for dimension in overview.get("Dimensions", []):
+        if not isinstance(dimension, dict):
+            continue
+        for indicator in dimension.get("DefaultIndicators", []):
+            if isinstance(indicator, dict):
+                rows.append({
+                    "Metric group": dimension.get("Dimension", ""),
+                    "Metric": str(indicator.get("IndicatorName", "")).replace("_", " ").title(),
+                    "Value": indicator.get("IndicatorValue", ""),
+                })
+    return pd.DataFrame(rows)
+
+
 @st.cache_data(ttl=60)
 def load_shared_prior_month():
     try:
@@ -895,19 +941,35 @@ def main():
             three.metric("Premium graduates", f"{graduates:,}")
             four.metric("Quit percentage", f"{quit_percent:.2f}%")
 
-            st.subheader("Business Essentials details")
-            section_column = "Section" if "Section" in visible_business.columns else None
-            sections = sorted(name for name in visible_business.get(section_column, pd.Series(dtype="object")).dropna().astype(str).unique() if name) if section_column else []
-            if sections:
-                business_tabs = st.tabs([*sections, "All data"])
-                for section_tab, section_name in zip(business_tabs[:-1], sections):
-                    with section_tab:
-                        section_rows = visible_business[visible_business[section_column].astype(str) == section_name].copy()
-                        st.dataframe(section_rows.drop(columns=[section_column]), use_container_width=True, hide_index=True)
-                with business_tabs[-1]:
-                    st.dataframe(visible_business.drop(columns=[section_column]), use_container_width=True, hide_index=True)
-            else:
-                st.dataframe(visible_business, use_container_width=True, hide_index=True)
+            st.subheader("Business Essentials sections")
+            overview = latest_business_overview(business_source)
+            metrics_tab, graduation_tab, rewards_tab, program_tab = st.tabs([
+                "Agency metrics", "Creator graduation", "Benefits & rewards", "Program details"
+            ])
+            with metrics_tab:
+                metrics = business_indicator_table(overview)
+                if metrics.empty:
+                    st.info("No agency-level Business Essentials metrics were included in the latest capture.")
+                else:
+                    st.dataframe(metrics, use_container_width=True, hide_index=True)
+            with graduation_tab:
+                st.dataframe(visible_business.drop(columns=["Section"], errors="ignore"), use_container_width=True, hide_index=True)
+            with rewards_tab:
+                rewards = business_value_table(overview.get("RewardConfigItems", []))
+                if rewards.empty:
+                    st.info("No benefits and reward configuration was included in the latest capture.")
+                else:
+                    st.dataframe(rewards, use_container_width=True, hide_index=True)
+            with program_tab:
+                program = business_value_table({
+                    "Month": overview.get("Month"),
+                    "Graduation line": overview.get("GraduationLine"),
+                    "Last month result": overview.get("LastMonthResultGenerated"),
+                })
+                if program.empty:
+                    st.info("No program detail was included in the latest capture.")
+                else:
+                    st.dataframe(program, use_container_width=True, hide_index=True)
 
 
     with scouting_tab:
