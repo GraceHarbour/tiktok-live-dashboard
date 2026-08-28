@@ -550,6 +550,98 @@ def load_monthly_metrics():
 
 
 
+
+def business_overview_measures(frame):
+    overview = {}
+    for _, source in frame.iterrows():
+        payload = source.get("payload")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (TypeError, ValueError):
+                continue
+        if not isinstance(payload, dict):
+            continue
+        candidate = payload.get("overview")
+        if isinstance(candidate, dict):
+            overview = candidate
+            break
+    if not overview:
+        return pd.DataFrame(columns=["Category", "Measure", "Current", "Target"])
+
+    label_keys = (
+        "TaskName", "MetricName", "DisplayName", "Name", "Title",
+        "Label", "DimensionName", "ConditionName", "Description",
+    )
+    current_keys = (
+        "CurrentValue", "Current", "MetricValue", "Value", "Actual",
+        "CompletedValue", "ProgressValue", "Count",
+    )
+    target_keys = (
+        "TargetValue", "Target", "Goal", "TaskTarget",
+        "TotalValue", "RequiredValue",
+    )
+
+    def pick(item, candidates):
+        if not isinstance(item, dict):
+            return None
+        lowered = {str(key).casefold(): value for key, value in item.items()}
+        for key in candidates:
+            value = lowered.get(key.casefold())
+            if value not in (None, "", [], {}):
+                return value
+        return None
+
+    def text_value(value):
+        if value is None or isinstance(value, (dict, list, tuple, set)):
+            return ""
+        return str(value).strip()
+
+    rows = []
+    seen = set()
+
+    def walk(value, category, inherited_label="", depth=0):
+        if depth > 7:
+            return
+        if isinstance(value, list):
+            for item in value:
+                walk(item, category, inherited_label, depth + 1)
+            return
+        if not isinstance(value, dict):
+            return
+
+        label = text_value(pick(value, label_keys)) or inherited_label
+        current = pick(value, current_keys)
+        target = pick(value, target_keys)
+        current_text = text_value(current)
+        target_text = text_value(target)
+        if label and current_text:
+            row = (category, label, current_text, target_text)
+            if row not in seen:
+                seen.add(row)
+                rows.append({
+                    "Category": category,
+                    "Measure": label,
+                    "Current": current_text,
+                    "Target": target_text,
+                })
+
+        for key, child in value.items():
+            if isinstance(child, (dict, list)):
+                walk(child, category, label or str(key).replace("_", " ").title(), depth + 1)
+
+    overview_groups = (
+        ("Overview metrics", overview.get("Dimensions")),
+        ("Business targets", overview.get("TaskTagList")),
+        ("Progress toward targets", overview.get("TaskProgress")),
+        ("Creator graduation", overview.get("GraduationLine")),
+        ("Benefits and rewards", overview.get("Benefits")),
+    )
+    for category, value in overview_groups:
+        walk(value, category)
+
+    return pd.DataFrame(rows, columns=["Category", "Measure", "Current", "Target"])
+
 def business_records(frame):
     rows = []
     for _, source in frame.iterrows():
@@ -760,13 +852,25 @@ def main():
             selected_manager_rows = managers if choice == "All managers" else managers[managers["_manager"] == choice]
             new_creators = int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0
 
-            first, second, third, fourth, fifth = st.columns(5)
+            ranked_mask = tier_text.str.contains("rank") | rank_text.str.contains("rank")
+            maintained_mask = ~ranked_mask & (
+                tier_text.str.contains("maintain") | rank_text.str.contains("maintain")
+            )
+            not_maintained_mask = ~(ranked_mask | maintained_mask)
+            above_200k = int((visible_diamonds >= 200000).sum())
+            selected_manager_rows = managers if choice == "All managers" else managers[managers["_manager"] == choice]
+            new_creators = int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0
+
+            first, second, third, fourth = st.columns(4)
             first.metric("Creators", f"{len(visible):,}")
             second.metric("Diamonds", f"{int(visible_diamonds.sum()):,}")
             third.metric("New creators", f"{new_creators:,}")
-            fourth.metric("Maintaining tier", f"{maintained:,}")
-            fifth.metric("Ranking up", f"{ranked_up:,}")
-            st.caption(f"Creators above 200k diamonds: {above_200k:,}")
+            fourth.metric("Above 200k diamonds", f"{above_200k:,}")
+
+            fifth, sixth, seventh = st.columns(3)
+            fifth.metric("Maintaining tier", f"{int(maintained_mask.sum()):,}")
+            sixth.metric("Ranking up", f"{int(ranked_mask.sum()):,}")
+            seventh.metric("Tier not maintained", f"{int(not_maintained_mask.sum()):,}")
 
             def creator_goal_display(frame, include_manager=False):
                 output = pd.DataFrame({
@@ -784,32 +888,44 @@ def main():
                     output.insert(1, "Manager", frame["_manager"].fillna("").astype(str).values)
                 return output.sort_values("Diamonds", ascending=False)
 
-            def manager_summary(frame, manager_label):
-                manager_row = managers[managers["_manager"] == manager_label] if not managers.empty else pd.DataFrame()
-                manager_new = int(numeric_series(manager_row, "new_creators").sum()) if not manager_row.empty else 0
-                summary_tier = frame.get("tier_status", pd.Series("", index=frame.index)).fillna("").astype(str).str.lower()
-                summary_rank = frame.get("rank_up_progress", pd.Series("", index=frame.index)).fillna("").astype(str).str.lower()
-                a, b, c, d = st.columns(4)
-                a.metric("Creators", f"{len(frame):,}")
-                b.metric("Diamonds", f"{int(numeric_series(frame, 'diamonds').sum()):,}")
-                c.metric("New creators", f"{manager_new:,}")
-                d.metric("Maintaining / ranking", f"{int((summary_tier.str.contains('maintain') | summary_rank.str.contains('maintain') | summary_tier.str.contains('rank') | summary_rank.str.contains('rank')).sum()):,}")
+            def goal_section(title, frame, empty_message, include_manager=False):
+                with st.container(border=True):
+                    st.subheader(title)
+                    if frame.empty:
+                        st.caption(empty_message)
+                    else:
+                        st.dataframe(
+                            creator_goal_display(frame, include_manager=include_manager),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
 
-            st.subheader("Creators by manager")
-            manager_order = sorted(name for name in visible["_manager"].dropna().astype(str).unique() if name and name != "Unassigned")
-            if choice == "All managers" and manager_order:
-                manager_tabs = st.tabs(["All managers", *manager_order])
-                with manager_tabs[0]:
-                    st.dataframe(creator_goal_display(visible, include_manager=True), use_container_width=True, hide_index=True)
-                for manager_tab, manager_name in zip(manager_tabs[1:], manager_order):
-                    with manager_tab:
-                        manager_creators = visible[visible["_manager"] == manager_name].copy()
-                        manager_summary(manager_creators, manager_name)
-                        st.dataframe(creator_goal_display(manager_creators), use_container_width=True, hide_index=True)
-            else:
-                if choice != "All managers":
-                    manager_summary(visible, choice)
-                st.dataframe(creator_goal_display(visible), use_container_width=True, hide_index=True)
+            selection_label = "all managers" if choice == "All managers" else choice
+            st.caption(f"Showing every current Goal Management field for {selection_label}.")
+            goal_section(
+                "All creator goals",
+                visible,
+                "No creator-goal records match this selection.",
+                include_manager=choice == "All managers",
+            )
+            goal_section(
+                "Maintaining tier",
+                visible[maintained_mask].copy(),
+                "No creators are currently marked as maintaining tier.",
+                include_manager=choice == "All managers",
+            )
+            goal_section(
+                "Ranking up",
+                visible[ranked_mask].copy(),
+                "No creators are currently marked as ranking up.",
+                include_manager=choice == "All managers",
+            )
+            goal_section(
+                "Tier not maintained",
+                visible[not_maintained_mask].copy(),
+                "No creators are currently marked as not maintained.",
+                include_manager=choice == "All managers",
+            )
 
 
     with prior_month_tab:
@@ -882,6 +998,19 @@ def main():
             two.metric("New this month", f"{new_count:,}")
             three.metric("Premium graduates", f"{graduates:,}")
             four.metric("Quit percentage", f"{(quitting / len(visible_business) * 100) if len(visible_business) else 0:.1f}%")
+
+            overview_measures = business_overview_measures(business_source)
+            if not overview_measures.empty:
+                st.subheader("Business Essentials overview")
+                st.caption("Current measures captured from the Business Essentials overview.")
+                for category_name, category_rows in overview_measures.groupby("Category", sort=False):
+                    with st.container(border=True):
+                        st.markdown(f"### {category_name}")
+                        st.dataframe(
+                            category_rows.drop(columns=["Category"]),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
 
             st.subheader("Business Essentials details")
             section_column = "Section" if "Section" in visible_business.columns else None
