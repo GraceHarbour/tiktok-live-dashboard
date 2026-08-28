@@ -24,7 +24,7 @@ CREATOR_URL = (
 
 class Bidi:
     def __init__(self, url: str = "ws://localhost:9222/session") -> None:
-        self.ws = websocket.create_connection(url, timeout=30)
+        self.ws = websocket.create_connection(url, timeout=30, origin="http://localhost")
         self.message_id = 0
 
     def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
