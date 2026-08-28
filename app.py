@@ -10,12 +10,36 @@ import re
 
 
 
+
+
+
+
+
+
+
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 import yaml
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -50,10 +74,42 @@ st.set_page_config(page_title="TikTok Live Manager Dashboard", page_icon="⚓", 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def quote_identifier(name: str) -> str:
     if not name or not all(part.replace("_", "").isalnum() for part in name.split(".")):
         raise ValueError(f"Unsafe database identifier: {name!r}")
     return ".".join(f'"{part}"' for part in name.split("."))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -92,10 +148,42 @@ def secret_value(name: str, default=""):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @st.cache_resource
 def load_settings():
     with open("config.yaml", "r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -146,6 +234,22 @@ def get_engine():
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @st.cache_resource
 def ensure_schema():
     statements = [
@@ -159,6 +263,22 @@ def ensure_schema():
     with get_engine().begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -203,10 +323,42 @@ def load_creators():
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @st.cache_data(ttl=300)
 def load_manager_performance():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT * FROM manager_performance"), connection)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -243,6 +395,22 @@ def load_goal_managers():
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @st.cache_data(ttl=300)
 def load_goal_creators():
     with get_engine().connect() as connection:
@@ -259,10 +427,30 @@ def load_goal_creators():
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 def numeric_series(frame, column):
     if column not in frame.columns:
         return pd.Series(0, index=frame.index, dtype="float64")
     return pd.to_numeric(frame[column], errors="coerce").fillna(0)
+
+
+
+
+
+
+
+
 
 
 
@@ -290,10 +478,30 @@ def manager_series(frame):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 @st.cache_data(ttl=300)
 def load_business_essentials():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT section, snapshot_month, row_key, row_index, payload, captured_at FROM business_essentials_rows ORDER BY captured_at DESC, row_index ASC"), connection)
+
+
+
+
+
+
+
+
 
 
 
@@ -314,10 +522,26 @@ def load_access_people():
 
 
 
+
+
+
+
+
+
+
+
 @st.cache_data(ttl=300)
 def load_monthly_metrics():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT metric_name, metric_value, updated_at FROM dashboard_monthly_metrics ORDER BY metric_name"), connection)
+
+
+
+
+
+
+
+
 
 
 
@@ -342,10 +566,21 @@ def business_records(frame):
         if not headers or not values:
             continue
         row = {str(header): values[index] if index < len(values) else "" for index, header in enumerate(headers)}
+        row["Section"] = str(source.get("section") or "Business Essentials")
         if str(row.get("Record type", "")).casefold() == "overview":
             continue
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -379,6 +614,10 @@ def load_shared_prior_month():
 
 
 
+
+
+
+
 def save_shared_prior_month(file_name, sheet_name, columns, frame):
     rows = frame.where(pd.notna(frame), None).to_dict(orient="records")
     with get_engine().begin() as connection:
@@ -401,6 +640,10 @@ def save_shared_prior_month(file_name, sheet_name, columns, frame):
             "columns_json": json.dumps(columns, default=str),
             "rows_json": json.dumps(rows, default=str),
         })
+
+
+
+
 
 
 
@@ -433,6 +676,10 @@ def main():
 
 
 
+
+
+
+
     try:
         # The data tables are provisioned by the importer. Do not run DDL during
         # a visitor request: it can block a Streamlit session behind a database lock.
@@ -444,6 +691,10 @@ def main():
     except Exception:
         st.error("The dashboard could not read its data store. Please try refreshing in a moment.")
         st.stop()
+
+
+
+
 
 
 
@@ -463,6 +714,10 @@ def main():
 
 
 
+
+
+
+
     manager_tab, goals_tab, prior_month_tab, business_tab, scouting_tab, access_tab = st.tabs([
         "Manager",
         "Goal Management",
@@ -475,8 +730,16 @@ def main():
 
 
 
+
+
+
+
     with manager_tab:
         pass
+
+
+
+
 
 
 
@@ -495,6 +758,7 @@ def main():
             above_200k = int((visible_diamonds >= 200000).sum())
             selected_manager_rows = managers if choice == "All managers" else managers[managers["_manager"] == choice]
             new_creators = int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0
+
             first, second, third, fourth, fifth = st.columns(5)
             first.metric("Creators", f"{len(visible):,}")
             second.metric("Diamonds", f"{int(visible_diamonds.sum()):,}")
@@ -502,23 +766,49 @@ def main():
             fourth.metric("Maintaining tier", f"{maintained:,}")
             fifth.metric("Ranking up", f"{ranked_up:,}")
             st.caption(f"Creators above 200k diamonds: {above_200k:,}")
-            display = pd.DataFrame({
-                "Creator": visible.get("username", visible.get("creator_id", pd.Series("", index=visible.index))),
-                "Manager": visible["_manager"], "Diamonds": visible_diamonds.astype("int64"),
-                "Valid go LIVE days": numeric_series(visible, "valid_live_days").astype("int64"),
-                "Valid LIVE duration": numeric_series(visible, "valid_live_hours"),
-                "Bonus contribution": numeric_series(visible, "estimated_bonus"),
-                "Tier": visible.get("tier_status", pd.Series("", index=visible.index)),
-                "Rank status": visible.get("rank_up_progress", pd.Series("", index=visible.index)),
-                "Activeness": visible.get("activeness_level", pd.Series("", index=visible.index)),
-                "Live now": visible.get("live_now", pd.Series("", index=visible.index)),
-            })
-            if choice != "All managers":
-                display = display.drop(columns=["Manager"])
-            st.subheader("Creator goals")
-            st.dataframe(display.sort_values("Diamonds", ascending=False), use_container_width=True, hide_index=True)
 
+            def creator_goal_display(frame, include_manager=False):
+                output = pd.DataFrame({
+                    "Creator": frame.get("username", frame.get("creator_id", pd.Series("", index=frame.index))),
+                    "Diamonds": numeric_series(frame, "diamonds").astype("int64"),
+                    "Valid go LIVE days": numeric_series(frame, "valid_live_days").astype("int64"),
+                    "Valid LIVE duration": numeric_series(frame, "valid_live_hours"),
+                    "Bonus contribution": numeric_series(frame, "estimated_bonus"),
+                    "Tier": frame.get("tier_status", pd.Series("", index=frame.index)),
+                    "Tier movement": frame.get("rank_up_progress", pd.Series("", index=frame.index)),
+                    "Activeness": frame.get("activeness_level", pd.Series("", index=frame.index)),
+                    "Live now": frame.get("live_now", pd.Series("", index=frame.index)),
+                })
+                if include_manager:
+                    output.insert(1, "Manager", frame["_manager"].fillna("").astype(str).values)
+                return output.sort_values("Diamonds", ascending=False)
 
+            def manager_summary(frame, manager_label):
+                manager_row = managers[managers["_manager"] == manager_label] if not managers.empty else pd.DataFrame()
+                manager_new = int(numeric_series(manager_row, "new_creators").sum()) if not manager_row.empty else 0
+                summary_tier = frame.get("tier_status", pd.Series("", index=frame.index)).fillna("").astype(str).str.lower()
+                summary_rank = frame.get("rank_up_progress", pd.Series("", index=frame.index)).fillna("").astype(str).str.lower()
+                a, b, c, d = st.columns(4)
+                a.metric("Creators", f"{len(frame):,}")
+                b.metric("Diamonds", f"{int(numeric_series(frame, 'diamonds').sum()):,}")
+                c.metric("New creators", f"{manager_new:,}")
+                d.metric("Maintaining / ranking", f"{int((summary_tier.str.contains('maintain') | summary_rank.str.contains('maintain') | summary_tier.str.contains('rank') | summary_rank.str.contains('rank')).sum()):,}")
+
+            st.subheader("Creators by manager")
+            manager_order = sorted(name for name in visible["_manager"].dropna().astype(str).unique() if name and name != "Unassigned")
+            if choice == "All managers" and manager_order:
+                manager_tabs = st.tabs(["All managers", *manager_order])
+                with manager_tabs[0]:
+                    st.dataframe(creator_goal_display(visible, include_manager=True), use_container_width=True, hide_index=True)
+                for manager_tab, manager_name in zip(manager_tabs[1:], manager_order):
+                    with manager_tab:
+                        manager_creators = visible[visible["_manager"] == manager_name].copy()
+                        manager_summary(manager_creators, manager_name)
+                        st.dataframe(creator_goal_display(manager_creators), use_container_width=True, hide_index=True)
+            else:
+                if choice != "All managers":
+                    manager_summary(visible, choice)
+                st.dataframe(creator_goal_display(visible), use_container_width=True, hide_index=True)
 
 
     with prior_month_tab:
@@ -535,6 +825,8 @@ def main():
                 st.info("The shared file has no selected display columns yet.")
         else:
             st.info("No shared prior-month spreadsheet has been published yet.")
+
+
 
 
         st.divider()
@@ -568,29 +860,50 @@ def main():
 
 
 
+
+
+
+
     with business_tab:
         st.caption("Business Essentials records from the latest complete Backstage capture.")
         if business.empty:
             st.info("No Business Essentials records have been imported yet.")
         else:
-            if choice != "All managers" and "Manager" in business.columns:
-                business = business[business["Manager"].fillna("").astype(str) == choice].copy()
-            new_count = int(business.get("New this month", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
-            graduates = int(business.get("Mature creator", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
-            quitting = int(business.get("Quit on", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
+            visible_business = business.copy()
+            if choice != "All managers" and "Manager" in visible_business.columns:
+                visible_business = visible_business[visible_business["Manager"].fillna("").astype(str) == choice].copy()
+            new_count = int(visible_business.get("New this month", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
+            graduates = int(visible_business.get("Mature creator", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
+            quitting = int(visible_business.get("Quit on", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
+
             one, two, three, four = st.columns(4)
-            one.metric("Creators", f"{len(business):,}")
+            one.metric("Creators", f"{len(visible_business):,}")
             two.metric("New this month", f"{new_count:,}")
             three.metric("Premium graduates", f"{graduates:,}")
-            four.metric("Quit percentage", f"{(quitting / len(business) * 100) if len(business) else 0:.1f}%")
-            st.dataframe(business, use_container_width=True, hide_index=True)
+            four.metric("Quit percentage", f"{(quitting / len(visible_business) * 100) if len(visible_business) else 0:.1f}%")
 
-
+            st.subheader("Business Essentials details")
+            section_column = "Section" if "Section" in visible_business.columns else None
+            sections = sorted(name for name in visible_business.get(section_column, pd.Series(dtype="object")).dropna().astype(str).unique() if name) if section_column else []
+            if sections:
+                business_tabs = st.tabs(["All data", *sections])
+                with business_tabs[0]:
+                    st.dataframe(visible_business, use_container_width=True, hide_index=True)
+                for section_tab, section_name in zip(business_tabs[1:], sections):
+                    with section_tab:
+                        section_rows = visible_business[visible_business[section_column].astype(str) == section_name].copy()
+                        st.dataframe(section_rows.drop(columns=[section_column]), use_container_width=True, hide_index=True)
+            else:
+                st.dataframe(visible_business, use_container_width=True, hide_index=True)
 
 
     with scouting_tab:
         st.caption("Scouting records will appear here when the scouting capture is imported.")
         st.info("No scouting records have been imported yet.")
+
+
+
+
 
 
 
@@ -607,6 +920,10 @@ def main():
         if not business_source.empty:
             latest_business = pd.to_datetime(business_source["captured_at"], errors="coerce").max()
             st.caption(f"Latest Business Essentials capture: {latest_business}")
+
+
+
+
 
 
 
