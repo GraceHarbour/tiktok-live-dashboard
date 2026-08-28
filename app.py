@@ -566,86 +566,29 @@ def business_records(frame):
         if not headers or not values:
             continue
         row = {str(header): values[index] if index < len(values) else "" for index, header in enumerate(headers)}
-        record_type = str(row.get("Record type") or "").strip()
-        row["Section"] = record_type or str(source.get("section") or "Business Essentials")
-        if record_type.casefold() == "overview":
+        row["Section"] = str(source.get("section") or "Business Essentials")
+        if str(row.get("Record type", "")).casefold() == "overview":
             continue
         rows.append(row)
     return pd.DataFrame(rows)
 
 
-def official_business_quit_rate(frame):
-    for _, source in frame.iterrows():
-        payload = source.get("payload")
-        if isinstance(payload, str):
-            try:
-                payload = json.loads(payload)
-            except (TypeError, ValueError):
-                continue
-        if not isinstance(payload, dict):
-            continue
-        overview = payload.get("overview")
-        if not isinstance(overview, dict):
-            continue
-        for dimension in overview.get("Dimensions", []):
-            if not isinstance(dimension, dict):
-                continue
-            for indicator in dimension.get("DefaultIndicators", []):
-                if not isinstance(indicator, dict):
-                    continue
-                if indicator.get("IndicatorName") == "mtd_ratio_of_new_hosts_who_quit_within_15_days":
-                    try:
-                        return float(indicator.get("IndicatorValue")) * 100
-                    except (TypeError, ValueError):
-                        return None
-    return None
 
 
 
-def latest_business_overview(frame):
-    for _, source in frame.iterrows():
-        payload = source.get("payload")
-        if isinstance(payload, str):
-            try:
-                payload = json.loads(payload)
-            except (TypeError, ValueError):
-                continue
-        if not isinstance(payload, dict):
-            continue
-        overview = payload.get("overview")
-        if isinstance(overview, dict):
-            return overview
-    return {}
 
 
-def business_display_value(value):
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, default=str)
-    return value
 
 
-def business_value_table(value):
-    if isinstance(value, list):
-        records = [item if isinstance(item, dict) else {"Value": business_display_value(item)} for item in value]
-        return pd.DataFrame([{str(key): business_display_value(item) for key, item in record.items()} for record in records]) if records else pd.DataFrame()
-    if isinstance(value, dict):
-        return pd.DataFrame([{"Field": key, "Value": business_display_value(item)} for key, item in value.items()])
-    return pd.DataFrame([{"Value": business_display_value(value)}]) if value not in (None, "") else pd.DataFrame()
 
 
-def business_indicator_table(overview):
-    rows = []
-    for dimension in overview.get("Dimensions", []):
-        if not isinstance(dimension, dict):
-            continue
-        for indicator in dimension.get("DefaultIndicators", []):
-            if isinstance(indicator, dict):
-                rows.append({
-                    "Metric group": dimension.get("Dimension", ""),
-                    "Metric": str(indicator.get("IndicatorName", "")).replace("_", " ").title(),
-                    "Value": indicator.get("IndicatorValue", ""),
-                })
-    return pd.DataFrame(rows)
+
+
+
+
+
+
+
 
 
 @st.cache_data(ttl=60)
@@ -721,6 +664,7 @@ def main():
         h2,h3 { color: #f4d577 !important; }
         [data-testid="stMetric"] { background: linear-gradient(145deg,rgba(18,48,109,.78),rgba(4,12,31,.92)); border: 1px solid rgba(245,197,66,.42); border-radius: 14px; padding: 1rem; }
         [data-testid="stMetricValue"] { color: var(--gh-gold) !important; }
+        [data-testid="stMetricLabel"] { color: #ffffff !important; font-weight: 800 !important; opacity: 1 !important; }
         [data-testid="stDataFrame"] { border: 1px solid rgba(245,197,66,.38); border-radius: 12px; overflow: hidden; }
         </style>
         """,
@@ -932,18 +876,26 @@ def main():
             new_count = int(visible_business.get("New this month", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
             graduates = int(visible_business.get("Mature creator", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
             quitting = int(visible_business.get("Quit on", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
-            official_quit_rate = official_business_quit_rate(business_source) if choice == "All managers" else None
-            quit_percent = official_quit_rate if official_quit_rate is not None else ((quitting / len(visible_business) * 100) if len(visible_business) else 0)
 
             one, two, three, four = st.columns(4)
             one.metric("Creators", f"{len(visible_business):,}")
             two.metric("New this month", f"{new_count:,}")
             three.metric("Premium graduates", f"{graduates:,}")
-            four.metric("Quit percentage", f"{quit_percent:.2f}%")
+            four.metric("Quit percentage", f"{(quitting / len(visible_business) * 100) if len(visible_business) else 0:.1f}%")
 
-            st.subheader("Creator graduation")
-            st.caption("Complete creator-level Business Essentials data from the latest Backstage capture.")
-            st.dataframe(visible_business.drop(columns=["Section"], errors="ignore"), use_container_width=True, hide_index=True)
+            st.subheader("Business Essentials details")
+            section_column = "Section" if "Section" in visible_business.columns else None
+            sections = sorted(name for name in visible_business.get(section_column, pd.Series(dtype="object")).dropna().astype(str).unique() if name) if section_column else []
+            if sections:
+                business_tabs = st.tabs(["All data", *sections])
+                with business_tabs[0]:
+                    st.dataframe(visible_business, use_container_width=True, hide_index=True)
+                for section_tab, section_name in zip(business_tabs[1:], sections):
+                    with section_tab:
+                        section_rows = visible_business[visible_business[section_column].astype(str) == section_name].copy()
+                        st.dataframe(section_rows.drop(columns=[section_column]), use_container_width=True, hide_index=True)
+            else:
+                st.dataframe(visible_business, use_container_width=True, hide_index=True)
 
 
     with scouting_tab:
