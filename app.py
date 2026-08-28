@@ -186,7 +186,7 @@ def main():
         <style>
         :root { --gh-navy: #030817; --gh-deep: #071a3a; --gh-blue: #102d6b; --gh-gold: #f5c542; --gh-violet: #8b5cf6; --gh-text: #eef4ff; }
         .stApp { position: relative; overflow-x: hidden; background: radial-gradient(circle at 86% 2%, rgba(111,69,202,.27), transparent 24rem), radial-gradient(circle at 18% 0%, rgba(19,80,184,.24), transparent 28rem), linear-gradient(150deg, var(--gh-navy), #06142f 48%, #02050e); color: var(--gh-text); }
-        .stApp::before { content: "⚓"; position: fixed; z-index: 0; right: -3rem; top: 4rem; color: rgba(245,197,66,.055); font-size: 31rem; line-height: 1; transform: rotate(-11deg); pointer-events: none; }
+        .stApp::before { content: "⚓"; position: fixed; z-index: 0; right: -3rem; top: 4rem; color: rgba(245,197,66,.018); font-size: 31rem; line-height: 1; transform: rotate(-11deg); pointer-events: none; }
         .stApp > * { position: relative; z-index: 1; }
         .gh-harbour-scene { position: relative; height: 112px; overflow: hidden; border: 1px solid rgba(245,197,66,.45); border-radius: 16px; margin: .3rem 0 1.1rem; background: radial-gradient(circle at 10% 24%, rgba(255,195,51,.88) 0 2px, rgba(255,181,0,.25) 3px 16px, transparent 42px), linear-gradient(180deg, #040b24 0%, #071c48 55%, #071330 56%, #010611 100%); box-shadow: inset 0 0 42px rgba(10,85,190,.48), 0 0 22px rgba(245,197,66,.14); }
         .gh-harbour-scene::before { content: ""; position: absolute; inset: 54px 0 0; background: repeating-linear-gradient(176deg, rgba(119,157,255,.42) 0 1px, transparent 1px 9px), linear-gradient(90deg, transparent, rgba(58,106,220,.36), transparent); opacity: .76; }
@@ -235,7 +235,37 @@ def main():
     manager_names = sorted(name for name in manager_values if name and name != "Unassigned")
     choice = st.sidebar.selectbox("View manager", ["All managers", *manager_names])
 
-    goals_tab, business_tab, access_tab = st.tabs(["Goal Management", "Business Essentials", "Access & Data"])
+    manager_tab, goals_tab, prior_month_tab, business_tab, scouting_tab, access_tab = st.tabs([
+        "Manager",
+        "Goal Management",
+        "Goal Management Prior Month",
+        "Business Essentials",
+        "Scouting",
+        "Access & Data",
+    ])
+
+    with manager_tab:
+        st.caption("Manager performance from the latest Goal Management capture.")
+        if managers.empty:
+            st.info("No manager records have been imported yet.")
+        else:
+            manager_view = managers.copy()
+            if "_manager" not in manager_view.columns:
+                manager_view["_manager"] = manager_series(manager_view)
+            if choice != "All managers":
+                manager_view = manager_view[manager_view["_manager"] == choice].copy()
+            manager_diamonds = numeric_series(manager_view, "diamonds")
+            first, second, third = st.columns(3)
+            first.metric("Managers", f"{len(manager_view):,}")
+            second.metric("Managed creators", f"{int(numeric_series(manager_view, 'managed_creators').sum()):,}")
+            third.metric("Diamonds", f"{int(manager_diamonds.sum()):,}")
+            manager_display = pd.DataFrame({
+                "Manager": manager_view["_manager"],
+                "Creators": numeric_series(manager_view, "managed_creators").astype("int64"),
+                "Diamonds": manager_diamonds.astype("int64"),
+                "New creators": numeric_series(manager_view, "new_creators").astype("int64"),
+            })
+            st.dataframe(manager_display.sort_values("Diamonds", ascending=False), use_container_width=True, hide_index=True)
 
     with goals_tab:
         st.caption("Current Creator-tab Goal Management records from the latest authorized Backstage capture.")
@@ -274,6 +304,25 @@ def main():
             st.subheader("Creator goals")
             st.dataframe(display.sort_values("Diamonds", ascending=False), use_container_width=True, hide_index=True)
 
+    with prior_month_tab:
+        prior_file = st.file_uploader("Choose prior-month spreadsheet", type=["xlsx", "xls", "csv"], key="prior_month_file")
+        if prior_file is not None:
+            try:
+                if prior_file.name.lower().endswith(".csv"):
+                    prior_data = pd.read_csv(prior_file)
+                else:
+                    workbook = pd.ExcelFile(prior_file)
+                    selected_sheet = st.selectbox("Worksheet", workbook.sheet_names, key="prior_month_sheet")
+                    prior_data = pd.read_excel(workbook, sheet_name=selected_sheet)
+                available_columns = list(prior_data.columns)
+                selected_columns = st.multiselect("Columns to include", available_columns, default=available_columns, key="prior_month_columns")
+                if selected_columns:
+                    st.dataframe(prior_data[selected_columns], use_container_width=True, hide_index=True)
+                else:
+                    st.info("Choose one or more columns to display.")
+            except Exception as error:
+                st.error(f"That spreadsheet could not be read: {error}")
+
     with business_tab:
         st.caption("Business Essentials records from the latest complete Backstage capture.")
         if business.empty:
@@ -291,6 +340,10 @@ def main():
             four.metric("Quit percentage", f"{(quitting / len(business) * 100) if len(business) else 0:.1f}%")
             st.dataframe(business, use_container_width=True, hide_index=True)
 
+    with scouting_tab:
+        st.caption("Scouting records will appear here when the scouting capture is imported.")
+        st.info("No scouting records have been imported yet.")
+
     with access_tab:
         st.caption("Current authorized-dashboard records and last saved metric values.")
         left, right = st.columns(2)
@@ -303,7 +356,6 @@ def main():
         if not business_source.empty:
             latest_business = pd.to_datetime(business_source["captured_at"], errors="coerce").max()
             st.caption(f"Latest Business Essentials capture: {latest_business}")
-
 
 if __name__ == "__main__":
     main()
