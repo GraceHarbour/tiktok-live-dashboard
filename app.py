@@ -55,7 +55,15 @@ def get_engine():
         url = "postgresql+psycopg://" + url.removeprefix("postgresql://")
     elif url.startswith("postgres://"):
         url = "postgresql+psycopg://" + url.removeprefix("postgres://")
-    return create_engine(url, pool_pre_ping=True)
+    return create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_size=3,
+        max_overflow=2,
+        pool_timeout=10,
+        pool_recycle=120,
+        connect_args={"connect_timeout": 10},
+    )
 
 
 
@@ -132,16 +140,19 @@ def manager_series(frame):
 
 
 
+@st.cache_data(ttl=300)
 def load_business_essentials():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT section, snapshot_month, row_key, row_index, payload, captured_at FROM business_essentials_rows ORDER BY captured_at DESC, row_index ASC"), connection)
 
 
+@st.cache_data(ttl=300)
 def load_access_people():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT email, role, added_at FROM dashboard_access_people ORDER BY role, email"), connection)
 
 
+@st.cache_data(ttl=300)
 def load_monthly_metrics():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT metric_name, metric_value, updated_at FROM dashboard_monthly_metrics ORDER BY metric_name"), connection)
@@ -174,7 +185,15 @@ def main():
         """
         <style>
         :root { --gh-navy: #030817; --gh-deep: #071a3a; --gh-blue: #102d6b; --gh-gold: #f5c542; --gh-violet: #8b5cf6; --gh-text: #eef4ff; }
-        .stApp { background: radial-gradient(circle at 86% 2%, rgba(111,69,202,.27), transparent 24rem), radial-gradient(circle at 18% 0%, rgba(19,80,184,.24), transparent 28rem), linear-gradient(150deg, var(--gh-navy), #06142f 48%, #02050e); color: var(--gh-text); }
+        .stApp { position: relative; overflow-x: hidden; background: radial-gradient(circle at 86% 2%, rgba(111,69,202,.27), transparent 24rem), radial-gradient(circle at 18% 0%, rgba(19,80,184,.24), transparent 28rem), linear-gradient(150deg, var(--gh-navy), #06142f 48%, #02050e); color: var(--gh-text); }
+        .stApp::before { content: "⚓"; position: fixed; z-index: 0; right: -3rem; top: 4rem; color: rgba(245,197,66,.055); font-size: 31rem; line-height: 1; transform: rotate(-11deg); pointer-events: none; }
+        .stApp > * { position: relative; z-index: 1; }
+        .gh-harbour-scene { position: relative; height: 112px; overflow: hidden; border: 1px solid rgba(245,197,66,.45); border-radius: 16px; margin: .3rem 0 1.1rem; background: radial-gradient(circle at 10% 24%, rgba(255,195,51,.88) 0 2px, rgba(255,181,0,.25) 3px 16px, transparent 42px), linear-gradient(180deg, #040b24 0%, #071c48 55%, #071330 56%, #010611 100%); box-shadow: inset 0 0 42px rgba(10,85,190,.48), 0 0 22px rgba(245,197,66,.14); }
+        .gh-harbour-scene::before { content: ""; position: absolute; inset: 54px 0 0; background: repeating-linear-gradient(176deg, rgba(119,157,255,.42) 0 1px, transparent 1px 9px), linear-gradient(90deg, transparent, rgba(58,106,220,.36), transparent); opacity: .76; }
+        .gh-lighthouse { position: absolute; left: 9%; bottom: 16px; width: 25px; height: 58px; background: linear-gradient(90deg,#111827,#ead08a,#111827); border-radius: 5px 5px 2px 2px; box-shadow: 0 0 28px rgba(255,190,42,.82); }
+        .gh-lighthouse::before { content: ""; position: absolute; left: -7px; top: -10px; width: 39px; height: 12px; background: #f5c542; border-radius: 4px; box-shadow: 0 0 25px 8px rgba(255,188,38,.62); }
+        .gh-crest { position: absolute; right: 6%; top: 15px; color: var(--gh-gold); font-weight: 900; letter-spacing: .16em; font-size: 1rem; text-align: center; text-shadow: 0 0 14px rgba(245,197,66,.75); }
+        .gh-crest b { display:block; font-size: 2.6rem; line-height: 1; }
         [data-testid="stHeader"] { background: rgba(3,8,23,.70); border-bottom: 1px solid rgba(245,197,66,.20); }
         [data-testid="stSidebar"] { background: linear-gradient(180deg,#030817,#071a3a 55%,#030817); border-right: 1px solid rgba(245,197,66,.38); }
         [data-testid="stSidebar"] * { color: var(--gh-text); }
@@ -188,11 +207,13 @@ def main():
         """,
         unsafe_allow_html=True,
     )
+    st.markdown("""<div class="gh-harbour-scene"><div class="gh-lighthouse"></div><div class="gh-crest"><b>⚓</b>GRACE HARBOUR<br>CREATOR NETWORK</div></div>""", unsafe_allow_html=True)
     st.markdown('<div class="gh-brand">⚓ GRACE HARBOUR MEDIA &nbsp;•&nbsp; CREATOR NETWORK</div>', unsafe_allow_html=True)
     st.title("TikTok Live Manager Dashboard")
 
     try:
-        ensure_schema()
+        # The data tables are provisioned by the importer. Do not run DDL during
+        # a visitor request: it can block a Streamlit session behind a database lock.
         managers = load_goal_managers()
         creators = load_goal_creators()
         business_source = load_business_essentials()
