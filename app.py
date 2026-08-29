@@ -1185,7 +1185,7 @@ def main():
             ]), use_container_width=True, hide_index=True, height=245)
 
 
-with access_tab:
+    with access_tab:
         st.caption("Current authorized-dashboard records and last saved metric values.")
         left, right = st.columns(2)
         with left:
