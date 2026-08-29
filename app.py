@@ -907,7 +907,7 @@ def main():
             goal_manager_current = st.session_state.get("goal_management_manager_filter", "All managers")
             _goal_logo_key = "agency" if goal_manager_current == "All managers" else "".join(c for c in goal_manager_current.lower() if c.isalnum())
             _goal_logo_name = manager_logo_files.get(_goal_logo_key)
-            _goal_logo_path = (ASSETS_DIR / "agency-logo.png" if _goal_logo_key == "agency" else ASSETS_DIR / "manager-logos" / _goal_logo_name) if _goal_logo_name else None
+            _goal_logo_path = (Path(__file__).resolve().parent / "assets" / "agency-logo.png" if _goal_logo_key == "agency" else Path(__file__).resolve().parent / "assets" / "manager-logos" / _goal_logo_name) if _goal_logo_name else None
             _goal_logo_mime = "image/png" if _goal_logo_path and _goal_logo_path.suffix.lower() == ".png" else "image/jpeg"
             st.markdown(f"""<div style="width:100%;text-align:center;margin:0 0 8px 0"><img src="data:{_goal_logo_mime};base64,{__import__("base64").b64encode(_goal_logo_path.read_bytes()).decode()}" alt="Grace Harbour Creator Network" style="width:180px;max-width:30vw;height:auto"></div>""", unsafe_allow_html=True) if _goal_logo_path and _goal_logo_path.exists() else None
             goal_filter_left, goal_filter_right = st.columns(2)
