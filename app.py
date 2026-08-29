@@ -26,6 +26,7 @@ import yaml
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
 
 
 
@@ -222,11 +223,7 @@ def get_engine():
         url = url.replace(".pooler.supabase.com:5432/", ".pooler.supabase.com:6543/")
     return create_engine(
         url,
-        pool_pre_ping=True,
-        pool_size=3,
-        max_overflow=2,
-        pool_timeout=10,
-        pool_recycle=120,
+        poolclass=NullPool,
         connect_args={"connect_timeout": 10, "sslmode": "require"},
     )
 
