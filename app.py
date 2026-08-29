@@ -1003,7 +1003,27 @@ def main():
             one.metric("Creators evaluated", f"{len(summary_business):,}")
             two.metric("New creators this month", f"{new_count:,}")
             three.metric("Reached graduation", f"{graduates:,}")
-            four.metric("Quit percentage", f"{(quitting / len(summary_business) * 100) if len(summary_business) else 0:.2f}%")
+            four.metric("Graduation rate", f"{(graduates / len(summary_business) * 100) if len(summary_business) else 0:.2f}%")
+
+            live_days_text = summary_business.get("Valid go LIVE days", pd.Series(dtype="object")).fillna("").astype(str)
+            live_days = pd.to_numeric(live_days_text.str.extract(r"(\d+)")[0], errors="coerce").fillna(0)
+            duration_text = summary_business.get("Valid LIVE duration", pd.Series(dtype="object")).fillna("").astype(str)
+            duration_parts = duration_text.str.extract(r"(?:(?P<hours>\d+)h)?\s*(?:(?P<minutes>\d+)m)?\s*(?:(?P<seconds>\d+)s)?").fillna(0).astype(float)
+            total_live_hours = float((duration_parts["hours"] + duration_parts["minutes"] / 60 + duration_parts["seconds"] / 3600).sum()) if not duration_parts.empty else 0.0
+            graduation_rows = visible_business[visible_business["Section"].astype(str).str.contains("Reached graduation", na=False)].copy() if "Section" in visible_business.columns else pd.DataFrame()
+            evaluated_pages = summary_business["Source page"].nunique() if "Source page" in summary_business.columns else 0
+            graduation_pages = graduation_rows["Source page"].nunique() if "Source page" in graduation_rows.columns else 0
+            five, six, seven, eight = st.columns(4)
+            five.metric("Active creators", f"{int(live_days.gt(0).sum()):,}")
+            six.metric("Valid Go LIVE days", f"{int(live_days.sum()):,}")
+            seven.metric("Valid LIVE hours", f"{total_live_hours:,.1f}")
+            eight.metric("Average LIVE hours", f"{(total_live_hours / len(summary_business)) if len(summary_business) else 0:,.1f}")
+
+            nine, ten, eleven, twelve = st.columns(4)
+            nine.metric("Creators quit", f"{quitting:,}")
+            ten.metric("Quit rate", f"{(quitting / len(summary_business) * 100) if len(summary_business) else 0:.2f}%")
+            eleven.metric("Evaluated pages read", f"{evaluated_pages:,}")
+            twelve.metric("Graduation pages read", f"{graduation_pages:,}")
             if "Source page" in visible_business.columns:
                 graduation_pages = 0
                 if "Section" in visible_business.columns:
