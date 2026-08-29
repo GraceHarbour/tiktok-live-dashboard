@@ -493,7 +493,7 @@ def manager_series(frame):
 @st.cache_data(ttl=300)
 def load_business_essentials():
     with get_engine().connect() as connection:
-        return pd.read_sql(text("SELECT section, snapshot_month, row_key, row_index, payload, captured_at FROM business_essentials_rows ORDER BY captured_at DESC, row_index ASC"), connection)
+        return pd.read_sql(text("SELECT section, snapshot_month, row_key, row_index, payload, captured_at FROM business_essentials_rows WHERE snapshot_month = (SELECT MAX(snapshot_month) FROM business_essentials_rows) ORDER BY captured_at DESC, row_index ASC"), connection)
 
 
 
