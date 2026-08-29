@@ -844,24 +844,24 @@ def main():
 
 
     with manager_tab:
-        st.caption("A combined view of the latest Goal Management and Business Essentials measures.")
+        st.caption("A combined view of the latest Goal Management and Business Essentials measures."); dashboard_manager_choices = ["Agency", *sorted(creators.get("_manager", pd.Series(dtype=str)).dropna().astype(str).unique().tolist())]; dashboard_choice = st.selectbox("Dashboard view", dashboard_manager_choices, key="dashboard_manager_filter")
         if creators.empty:
             st.info("No Goal Management records have been imported yet.")
         else:
-            dashboard_creators = creators.copy()
+            dashboard_creators = creators.copy(); dashboard_creators = dashboard_creators[dashboard_creators["_manager"] == dashboard_choice].copy() if dashboard_choice != "Agency" else dashboard_creators; dashboard_managers = managers[managers["_manager"] == dashboard_choice].copy() if dashboard_choice != "Agency" and not managers.empty else managers.copy()
             dashboard_diamonds = numeric_series(dashboard_creators, "diamonds")
             dashboard_tier = dashboard_creators.get("tier_status", pd.Series("", index=dashboard_creators.index)).fillna("").astype(str).str.lower()
             dashboard_rank = dashboard_creators.get("rank_up_progress", pd.Series("", index=dashboard_creators.index)).fillna("").astype(str).str.lower()
             dashboard_maintained = dashboard_tier.str.contains("maintained|maintain", na=False) | dashboard_rank.str.contains("maintain", na=False)
             dashboard_ranked = dashboard_tier.str.contains("ranked up|ranking up", na=False) | dashboard_rank.str.contains("rank up|ranked up", na=False)
             dashboard_not_maintained = dashboard_tier.str.contains("not maintained|not maintain", na=False) | dashboard_rank.str.contains("not maintained|not maintain", na=False)
-            dashboard_new_creators = int(numeric_series(managers, "new_creators").sum()) if not managers.empty else 0
-            st.subheader("Goal Management overview")
+            dashboard_new_creators = int(numeric_series(dashboard_managers, "new_creators").sum()) if not dashboard_managers.empty else 0
+            agency_logo = __import__("pathlib").Path(__file__).resolve().parent / "assets" / "agency-logo.jpg"; st.subheader("Goal Management overview")
             a, b, c, d = st.columns(4)
             a.metric("Creators", f"{len(dashboard_creators):,}")
             b.metric("Diamonds", f"{int(dashboard_diamonds.sum()):,}")
             c.metric("New creators", f"{dashboard_new_creators:,}")
-            d.metric("Above 200k diamonds", f"{int(dashboard_diamonds.ge(200_000).sum()):,}")
+            d.image(str(agency_logo), width=145) if dashboard_choice == "Agency" and agency_logo.exists() else None; d.metric("Above 200k diamonds", f"{int(dashboard_diamonds.ge(200_000).sum()):,}")
             e, f, g = st.columns(3)
             e.metric("Maintaining tier", f"{int(dashboard_maintained.sum()):,}")
             f.metric("Ranking up", f"{int(dashboard_ranked.sum()):,}")
@@ -869,7 +869,7 @@ def main():
         if business.empty:
             st.info("No Business Essentials records have been imported yet.")
         else:
-            dashboard_business = business.copy()
+            dashboard_business = business.copy(); dashboard_business = dashboard_business[dashboard_business["Manager"].fillna("").astype(str) == dashboard_choice].copy() if dashboard_choice != "Agency" and "Manager" in dashboard_business.columns else dashboard_business
             dashboard_sections = dashboard_business.get("Section", pd.Series("", index=dashboard_business.index)).astype(str)
             dashboard_stability = dashboard_business[dashboard_sections.str.contains("Creator Stability", case=False, na=False)].copy()
             dashboard_graduation = dashboard_business[dashboard_sections.str.contains("Creator Graduation", case=False, na=False) & dashboard_sections.str.contains("Evaluated", case=False, na=False)].copy()
