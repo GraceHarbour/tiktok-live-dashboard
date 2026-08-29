@@ -1168,10 +1168,23 @@ def main():
             card_one.metric("Creators in Maintenance Rate", f"{total_maintenance:,}")
             card_two.metric("Maintaining or ranked up", f"{maintaining_count:,}")
             card_three.metric("Maintenance rate", f"{maintenance_rate:.2f}%")
-            st.caption("Each creator below comes from the Maintenance Rate source read.")
-            maintenance_columns = [column for column in ["creator", "maintained_tier", "raw_row", "page_read"] if column in maintenance_data.columns]
-            maintenance_display = maintenance_data[maintenance_columns].rename(columns={"maintained_tier": "maintaining_or_ranked_up"})
-            st.dataframe(maintenance_display, use_container_width=True, hide_index=True, height=720)
+            st.caption("Complete source table from the latest Maintenance Rate read.")
+            source_headers = []
+            if "header" in maintenance_data.columns and not maintenance_data["header"].dropna().empty:
+                source_headers = [item.strip() for item in str(maintenance_data["header"].dropna().iloc[0]).splitlines() if item.strip()]
+            source_rows = []
+            for _, source_row in maintenance_data.iterrows():
+                cells = source_row.get("cells") if isinstance(source_row.get("cells"), list) else []
+                display_row = {}
+                for cell_index, cell_value in enumerate(cells):
+                    column_name = source_headers[cell_index] if cell_index < len(source_headers) else f"Source column {cell_index + 1}"
+                    display_row[column_name] = str(cell_value).replace("\n", " · ").strip()
+                if not display_row:
+                    display_row = {"Creator": source_row.get("creator", ""), "Source row": source_row.get("raw_row", "")}
+                display_row["Qualifies"] = "Yes" if bool(source_row.get("maintained_tier", False)) else "No"
+                display_row["Page read"] = source_row.get("page_read", "")
+                source_rows.append(display_row)
+            st.dataframe(pd.DataFrame(source_rows), use_container_width=True, hide_index=True, height=720)
         else:
             st.info("Maintenance source pages have not supplied a complete read yet. The dashboard remains online, and these boxes will populate automatically as soon as the scheduled maintenance reader imports its next complete run.")
 
