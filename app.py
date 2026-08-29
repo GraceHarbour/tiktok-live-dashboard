@@ -829,12 +829,13 @@ def main():
 
 
 
-    manager_tab, goals_tab, business_tab, scouting_tab, prior_month_tab, access_tab = st.tabs([
+    manager_tab, goals_tab, business_tab, scouting_tab, prior_month_tab, tier_guide_tab, access_tab = st.tabs([
         "Dashboard",
         "Goal Management",
         "Business Essentials",
         "Scouting",
         "Goal Management Prior Month",
+ "Tier & Level Guide",
         "Access & Data",
     ])
 
@@ -1155,7 +1156,36 @@ def main():
 
 
 
-    with access_tab:
+    with tier_guide_tab:
+        st.subheader("Tier & Level Guide")
+        st.caption("Monthly requirements for creator tiers and LIVE activeness levels.")
+        tier_col, level_col = st.columns(2)
+        with tier_col:
+            st.markdown("#### Diamond path")
+            st.dataframe(pd.DataFrame([
+                {"Tier": "Tier 1", "Monthly diamonds": "0"},
+                {"Tier": "Tier 2", "Monthly diamonds": "100K"},
+                {"Tier": "Tier 3", "Monthly diamonds": "200K"},
+                {"Tier": "Tier 4", "Monthly diamonds": "300K"},
+                {"Tier": "Tier 5", "Monthly diamonds": "500K"},
+                {"Tier": "Tier 6", "Monthly diamonds": "1M"},
+                {"Tier": "Tier 7", "Monthly diamonds": "1.6M"},
+                {"Tier": "Tier 8", "Monthly diamonds": "3M"},
+                {"Tier": "Tier 9", "Monthly diamonds": "5M"},
+                {"Tier": "Tier 10", "Monthly diamonds": "8M"},
+            ]), use_container_width=True, hide_index=True, height=430)
+        with level_col:
+            st.markdown("#### Time (Go LIVE) path")
+            st.dataframe(pd.DataFrame([
+                {"Level": "Level 1", "Monthly diamonds": "100", "LIVE duration": "20 hours", "Valid LIVE days": "8"},
+                {"Level": "Level 2", "Monthly diamonds": "100", "LIVE duration": "30 hours", "Valid LIVE days": "11"},
+                {"Level": "Level 3", "Monthly diamonds": "100", "LIVE duration": "40 hours", "Valid LIVE days": "15"},
+                {"Level": "Level 4", "Monthly diamonds": "100", "LIVE duration": "60 hours", "Valid LIVE days": "18"},
+                {"Level": "Level 5", "Monthly diamonds": "100", "LIVE duration": "80 hours", "Valid LIVE days": "22"},
+            ]), use_container_width=True, hide_index=True, height=245)
+
+
+with access_tab:
         st.caption("Current authorized-dashboard records and last saved metric values.")
         left, right = st.columns(2)
         with left:
