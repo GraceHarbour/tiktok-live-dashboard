@@ -773,6 +773,8 @@ def main():
 [data-testid="stTabs"] [data-baseweb="tab-list"] { gap: .45rem; flex-wrap: wrap; }
 [data-testid="stTabs"] [data-baseweb="tab"] { color: #ffffff !important; background: rgba(7, 26, 58, .78); border: 1px solid rgba(255, 217, 90, .38); border-radius: 8px 8px 0 0; font-size: 1.24rem !important; font-weight: 900 !important; letter-spacing: .025em; padding: .7rem 1.05rem !important; text-shadow: 0 1px 8px #000; }
 [data-testid="stTabs"] [aria-selected="true"] { color: #fff4a8 !important; background: rgba(20, 61, 117, .92); border-bottom-color: #ffd95a !important; box-shadow: inset 0 -3px #ffd95a; }
+[data-testid="stTabs"] [role="tab"], [data-testid="stTabs"] [role="tab"] * { color: #fffbe8 !important; opacity: 1 !important; }
+[data-testid="stTabs"] [role="tab"][aria-selected="true"], [data-testid="stTabs"] [role="tab"][aria-selected="true"] * { color: #ffd95a !important; }
         </style>
         """,
         unsafe_allow_html=True,
