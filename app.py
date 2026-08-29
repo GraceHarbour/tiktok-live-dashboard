@@ -224,7 +224,7 @@ def get_engine():
         max_overflow=2,
         pool_timeout=10,
         pool_recycle=120,
-        connect_args={"connect_timeout": 10},
+        connect_args={"connect_timeout": 10, "sslmode": "require"},
     )
 
 
