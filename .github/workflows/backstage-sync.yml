@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  refresh: False
+  refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
