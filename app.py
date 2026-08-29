@@ -1024,16 +1024,23 @@ def main():
             shared_frame = pd.DataFrame(shared_prior["rows"])
             shared_columns = [column for column in shared_prior["columns"] if column in shared_frame.columns]
             st.subheader("Current shared prior-month view")
-            st.caption(f"Source: {shared_prior['file_name']} • last published {shared_prior['uploaded_at']}")
+            st.caption(f"Source: {shared_prior['file_name']} · last published {shared_prior['uploaded_at']}")
             if shared_columns:
-                st.dataframe(shared_frame[shared_columns], use_container_width=True, hide_index=True)
+                manager_column = next((column for column in shared_columns if str(column).strip().lower() in {"manager", "manager name", "manager_name", "assigned manager"}), None)
+                if manager_column:
+                    manager_values = shared_frame[manager_column].fillna("").astype(str).str.strip()
+                    available_managers = sorted(value for value in manager_values.unique().tolist() if value)
+                    prior_manager_choice = st.selectbox("Manager", ["All managers", *available_managers], key="prior_month_manager_filter")
+                    display_frame = shared_frame if prior_manager_choice == "All managers" else shared_frame.loc[manager_values == prior_manager_choice]
+                    st.caption(f"Showing {len(display_frame):,} prior-month records for {prior_manager_choice.lower() if prior_manager_choice == 'All managers' else prior_manager_choice}.")
+                else:
+                    display_frame = shared_frame
+                    st.caption("This published file has no Manager column to filter yet.")
+                st.dataframe(display_frame[shared_columns], use_container_width=True, hide_index=True)
             else:
                 st.info("The shared file has no selected display columns yet.")
         else:
             st.info("No shared prior-month spreadsheet has been published yet.")
-
-
-
 
         st.divider()
         st.subheader("Publish a shared prior-month view")
