@@ -992,15 +992,23 @@ def main():
             visible_business = business.copy()
             if choice != "All managers" and "Manager" in visible_business.columns:
                 visible_business = visible_business[visible_business["Manager"].fillna("").astype(str) == choice].copy()
-            new_count = int(visible_business.get("New this month", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
-            graduates = int(visible_business.get("Mature creator", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
-            quitting = int(visible_business.get("Quit on", pd.Series(dtype="object")).astype(str).str.casefold().eq("true").sum())
-
+            summary_business = visible_business
+            if "Section" in summary_business.columns and (summary_business["Section"].astype(str) == "172 Evaluated").any():
+                summary_business = summary_business[summary_business["Section"].astype(str) == "172 Evaluated"].copy()
+            new_count = int(summary_business.get("New creator this month", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+            graduates = int(summary_business.get("Reached graduation", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+            quit_values = summary_business.get("Quit on", pd.Series(dtype="object")).fillna("").astype(str).str.strip()
+            quitting = int((~quit_values.isin(["", "-", "No", "N/A", "Not set"])).sum())
             one, two, three, four = st.columns(4)
-            one.metric("Creators", f"{len(visible_business):,}")
-            two.metric("New this month", f"{new_count:,}")
-            three.metric("Premium graduates", f"{graduates:,}")
-            four.metric("Quit percentage", f"{(quitting / len(visible_business) * 100) if len(visible_business) else 0:.1f}%")
+            one.metric("Creators evaluated", f"{len(summary_business):,}")
+            two.metric("New creators this month", f"{new_count:,}")
+            three.metric("Reached graduation", f"{graduates:,}")
+            four.metric("Quit percentage", f"{(quitting / len(summary_business) * 100) if len(summary_business) else 0:.2f}%")
+            if "Source page" in visible_business.columns:
+                graduation_pages = 0
+                if "Section" in visible_business.columns:
+                    graduation_pages = visible_business[visible_business["Section"].astype(str).str.contains("Reached graduation", na=False)]["Source page"].nunique()
+                st.caption(f"Verified source read: {summary_business['Source page'].nunique():,} evaluated pages and {graduation_pages:,} graduation pages. Every captured row is listed below.")
 
             overview_measures = business_overview_measures(business_source)
             if not overview_measures.empty:
