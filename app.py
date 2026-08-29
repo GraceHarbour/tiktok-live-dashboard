@@ -1166,11 +1166,12 @@ def main():
             maintenance_rate = (maintaining_count / total_maintenance * 100) if total_maintenance else 0.0
             card_one, card_two, card_three = st.columns(3)
             card_one.metric("Creators in Maintenance Rate", f"{total_maintenance:,}")
-            card_two.metric("Maintaining tier", f"{maintaining_count:,}")
+            card_two.metric("Maintaining or ranked up", f"{maintaining_count:,}")
             card_three.metric("Maintenance rate", f"{maintenance_rate:.2f}%")
             st.caption("Each creator below comes from the Maintenance Rate source read.")
             maintenance_columns = [column for column in ["creator", "maintained_tier", "raw_row", "page_read"] if column in maintenance_data.columns]
-            st.dataframe(maintenance_data[maintenance_columns], use_container_width=True, hide_index=True, height=720)
+            maintenance_display = maintenance_data[maintenance_columns].rename(columns={"maintained_tier": "maintaining_or_ranked_up"})
+            st.dataframe(maintenance_display, use_container_width=True, hide_index=True, height=720)
         else:
             st.info("Maintenance source pages have not supplied a complete read yet. The dashboard remains online, and these boxes will populate automatically as soon as the scheduled maintenance reader imports its next complete run.")
 
