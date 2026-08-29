@@ -771,7 +771,7 @@ def main():
 .gh-dashboard-title { position: absolute; top: clamp(1rem,4vw,3rem); right: clamp(1rem,4vw,4rem); max-width: 54%; color: #fff6c9; font-family: Georgia, serif; font-size: clamp(1.55rem,3.4vw,4rem); font-weight: 900; line-height: 1.04; text-align: right; letter-spacing: .025em; text-shadow: 0 3px 18px #000, 0 0 24px rgba(245,197,66,.62); }
 .gh-network { position: absolute; left: clamp(1rem,3vw,3rem); bottom: clamp(.8rem,2.2vw,2rem); color: #fff0ae; font-size: clamp(.72rem,1.3vw,1.2rem); font-weight: 900; letter-spacing: .13em; text-shadow: 0 2px 12px #000; }
 [data-testid="stTabs"] [data-baseweb="tab-list"] { gap: .45rem; flex-wrap: wrap; }
-[data-testid="stTabs"] [data-baseweb="tab"] { color: #fff7c4 !important; font-size: 1.04rem !important; font-weight: 900 !important; letter-spacing: .025em; padding: .7rem 1.05rem !important; text-shadow: 0 1px 8px #000; }
+[data-testid="stTabs"] [data-baseweb="tab"] { color: #fff7c4 !important; font-size: 1.12rem !important; font-weight: 900 !important; letter-spacing: .025em; padding: .7rem 1.05rem !important; text-shadow: 0 1px 8px #000; }
 [data-testid="stTabs"] [aria-selected="true"] { color: #ffd95a !important; border-bottom-color: #ffd95a !important; }
         </style>
         """,
@@ -828,7 +828,7 @@ def main():
 
 
     manager_tab, goals_tab, prior_month_tab, business_tab, scouting_tab, access_tab = st.tabs([
-        "Manager",
+        "Dashboard",
         "Goal Management",
         "Goal Management Prior Month",
         "Business Essentials",
