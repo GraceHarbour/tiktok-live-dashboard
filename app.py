@@ -844,7 +844,7 @@ def main():
 
 
     with manager_tab:
-        st.caption("A combined view of the latest Goal Management and Business Essentials measures."); agency_logo = __import__("pathlib").Path(__file__).resolve().parent / "assets" / "agency-logo.jpg"; st.markdown(f'<div style="text-align:center;margin:0 0 12px 0"><img src="data:image/jpeg;base64,{__import__("base64").b64encode(agency_logo.read_bytes()).decode()}" alt="Grace Harbour Creator Network" style="width:220px;max-width:100%;height:auto"></div>', unsafe_allow_html=True) if agency_logo.exists() else None; dashboard_manager_choices = ["Agency", *[m for m in sorted(creators.get("_manager", pd.Series(dtype=str)).dropna().astype(str).unique().tolist()) if m.strip() and m.strip() != "-"]]; dashboard_choice = st.selectbox("Dashboard view", dashboard_manager_choices, key="dashboard_manager_filter")
+        st.caption("A combined view of the latest Goal Management and Business Essentials measures."); dashboard_manager_choices = ["Agency", *[m for m in sorted(creators.get("_manager", pd.Series(dtype=str)).dropna().astype(str).unique().tolist()) if m.strip() and m.strip() != "-"]]; dashboard_choice = st.selectbox("Dashboard view", dashboard_manager_choices, key="dashboard_manager_filter")
         if creators.empty:
             st.info("No Goal Management records have been imported yet.")
         else:
