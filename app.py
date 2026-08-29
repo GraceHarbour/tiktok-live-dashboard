@@ -1058,6 +1058,9 @@ def main():
                 selected_columns = st.multiselect(
                     "Columns to include", available_columns, default=available_columns, key="prior_month_columns"
                 )
+                uploaded_manager_column = next((column for column in available_columns if str(column).strip().lower() in {"manager", "manager name", "manager_name", "assigned manager"}), None)
+                if uploaded_manager_column and uploaded_manager_column not in selected_columns:
+                    selected_columns.append(uploaded_manager_column)
                 if selected_columns:
                     st.dataframe(prior_data[selected_columns], use_container_width=True, hide_index=True)
                     if st.button("Publish shared prior-month view", type="primary"):
