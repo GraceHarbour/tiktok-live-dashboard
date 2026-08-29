@@ -844,7 +844,7 @@ def main():
 
 
     with manager_tab:
-        st.caption("A combined view of the latest Goal Management and Business Essentials measures."); dashboard_manager_choices = ["Agency", *sorted(creators.get("_manager", pd.Series(dtype=str)).dropna().astype(str).unique().tolist())]; dashboard_choice = st.selectbox("Dashboard view", dashboard_manager_choices, key="dashboard_manager_filter")
+        st.caption("A combined view of the latest Goal Management and Business Essentials measures."); dashboard_manager_choices = ["Agency", *[m for m in sorted(creators.get("_manager", pd.Series(dtype=str)).dropna().astype(str).unique().tolist()) if m.strip() and m.strip() != "-"]]; dashboard_choice = st.selectbox("Dashboard view", dashboard_manager_choices, key="dashboard_manager_filter")
         if creators.empty:
             st.info("No Goal Management records have been imported yet.")
         else:
