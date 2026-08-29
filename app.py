@@ -1168,23 +1168,42 @@ def main():
             card_one.metric("Creators in Maintenance Rate", f"{total_maintenance:,}")
             card_two.metric("Maintaining or ranked up", f"{maintaining_count:,}")
             card_three.metric("Maintenance rate", f"{maintenance_rate:.2f}%")
-            st.caption("Complete source table from the latest Maintenance Rate read.")
-            source_headers = []
-            if "header" in maintenance_data.columns and not maintenance_data["header"].dropna().empty:
-                source_headers = [item.strip() for item in str(maintenance_data["header"].dropna().iloc[0]).splitlines() if item.strip()]
-            source_rows = []
+            st.caption("Cleaned Maintenance Rate read from the latest source pages.")
+
+            clean_rows = []
             for _, source_row in maintenance_data.iterrows():
-                cells = source_row.get("cells") if isinstance(source_row.get("cells"), list) else []
-                display_row = {}
-                for cell_index, cell_value in enumerate(cells):
-                    column_name = source_headers[cell_index] if cell_index < len(source_headers) else f"Source column {cell_index + 1}"
-                    display_row[column_name] = str(cell_value).replace("\n", " · ").strip()
-                if not display_row:
-                    display_row = {"Creator": source_row.get("creator", ""), "Source row": source_row.get("raw_row", "")}
-                display_row["Qualifies"] = "Yes" if bool(source_row.get("maintained_tier", False)) else "No"
-                display_row["Page read"] = source_row.get("page_read", "")
-                source_rows.append(display_row)
-            st.dataframe(pd.DataFrame(source_rows), use_container_width=True, hide_index=True, height=720)
+                raw = str(source_row.get("raw_row", "")).replace("\u0014", " ").replace("\n", " ")
+                raw = re.sub(r"\s+", " ", raw).strip()
+                tier_matches = re.findall(r"\bTier\s+\d+\b", raw, flags=re.IGNORECASE)
+                tier_matches = ["Tier " + re.search(r"\d+", item).group() for item in tier_matches]
+
+                progress_match = re.search(r"([\d,]+)\s*/\s*([\d,]+)", raw)
+                progress = ""
+                if progress_match:
+                    progress = f"{progress_match.group(1).replace(',', '')}/{progress_match.group(2).replace(',', '')}"
+
+                current_tier = tier_matches[0] if tier_matches else ""
+                last_month_tier = tier_matches[-1] if len(tier_matches) > 1 else ""
+                next_tier = next((tier for tier in tier_matches[1:] if tier != current_tier and tier != last_month_tier), "")
+                if not next_tier and len(tier_matches) >= 3:
+                    next_tier = tier_matches[2]
+
+                valid_days_match = re.search(r"\b\d+\s*d\b", raw, flags=re.IGNORECASE)
+                valid_days = valid_days_match.group(0).replace(" ", "") if valid_days_match else ""
+                status = "Ranked up" if re.search(r"Ranked up", raw, flags=re.IGNORECASE) else ("Maintained tier" if re.search(r"Maintained tier", raw, flags=re.IGNORECASE) else "Not maintained")
+
+                clean_rows.append({
+                    "Creator": source_row.get("creator", ""),
+                    "Tier progress": progress,
+                    "Current tier": current_tier,
+                    "Next tier": next_tier,
+                    "Valid Go LIVE days": valid_days,
+                    "Tier last month": last_month_tier,
+                    "Maintained": "Yes" if bool(source_row.get("maintained_tier", False)) else "No",
+                    "Status": status,
+                })
+
+            st.dataframe(pd.DataFrame(clean_rows), use_container_width=True, hide_index=True, height=720)
         else:
             st.info("Maintenance source pages have not supplied a complete read yet. The dashboard remains online, and these boxes will populate automatically as soon as the scheduled maintenance reader imports its next complete run.")
 
