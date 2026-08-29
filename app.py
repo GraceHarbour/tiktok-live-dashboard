@@ -831,13 +831,14 @@ def main():
 
 
 
-    manager_tab, goals_tab, business_tab, scouting_tab, prior_month_tab, tier_guide_tab, access_tab = st.tabs([
+    manager_tab, goals_tab, business_tab, maintenance_tab, scouting_tab, prior_month_tab, tier_guide_tab, access_tab = st.tabs([
         "Dashboard",
         "Goal Management",
         "Business Essentials",
+        "Maintenance Rate",
         "Scouting",
         "Goal Management Prior Month",
- "Tier & Level Guide",
+        "Tier & Level Guide",
         "Access & Data",
     ])
 
@@ -1146,6 +1147,34 @@ def main():
                 with st.container(border=True):
                     st.markdown(f"### {section_name}")
                     st.dataframe(section_rows.drop(columns=["Section"], errors="ignore"), use_container_width=True, hide_index=True)
+
+    with maintenance_tab:
+        st.subheader("Maintenance Rate")
+        st.caption("Current maintenance progress from the latest Goal Management read. The rate updates with the same source data as the dashboard.")
+        maintenance_creators = creators.copy()
+        if choice != "All managers" and not maintenance_creators.empty:
+            maintenance_creators = maintenance_creators[manager_series(maintenance_creators).eq(choice)].copy()
+        maintenance_status = maintenance_creators.get("tier_status", pd.Series("", index=maintenance_creators.index)).fillna("").astype(str)
+        maintenance_mask = maintenance_status.str.contains("maintain", case=False, na=False)
+        not_maintained_mask = maintenance_status.str.contains("not maintain", case=False, na=False)
+        maintenance_rows = maintenance_creators[maintenance_mask].copy()
+        maintained_rows = maintenance_rows[~not_maintained_mask.loc[maintenance_rows.index]].copy()
+        total_maintenance = len(maintenance_rows)
+        maintaining_count = len(maintained_rows)
+        maintenance_rate = (maintaining_count / total_maintenance * 100) if total_maintenance else 0.0
+
+        card_one, card_two, card_three = st.columns(3)
+        card_one.metric("Creators in maintenance", f"{total_maintenance:,}")
+        card_two.metric("Maintaining tier", f"{maintaining_count:,}")
+        card_three.metric("Maintenance rate", f"{maintenance_rate:.2f}%")
+
+        if maintenance_rows.empty:
+            st.info("No maintenance-rate creators are in the latest source read yet. The three summary boxes will populate automatically when that read is imported.")
+        else:
+            st.caption("Each creator below is included in the Maintenance Rate calculation.")
+            display_columns = [column for column in ["username", "manager_name", "manager", "tier_status", "diamonds", "valid_live_days", "valid_live_hours"] if column in maintenance_rows.columns]
+            st.dataframe(maintenance_rows[display_columns], use_container_width=True, hide_index=True, height=520)
+
 
     with scouting_tab:
         st.caption("Scouting records will appear here when the scouting capture is imported.")
