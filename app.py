@@ -1026,7 +1026,7 @@ def main():
             st.subheader("Current shared prior-month view")
             st.caption(f"Source: {shared_prior['file_name']} · last published {shared_prior['uploaded_at']}")
             if shared_columns:
-                manager_column = next((column for column in shared_columns if str(column).strip().lower() in {"manager", "manager name", "manager_name", "assigned manager"}), None)
+                manager_column = next((column for column in shared_columns if str(column).strip().lower() in {"manager", "manager name", "manager_name", "assigned manager", "creator network manager"}), None)
                 if manager_column:
                     manager_values = shared_frame[manager_column].fillna("").astype(str).str.strip()
                     available_managers = sorted(value for value in manager_values.unique().tolist() if value)
@@ -1058,7 +1058,7 @@ def main():
                 selected_columns = st.multiselect(
                     "Columns to include", available_columns, default=available_columns, key="prior_month_columns"
                 )
-                uploaded_manager_column = next((column for column in available_columns if str(column).strip().lower() in {"manager", "manager name", "manager_name", "assigned manager"}), None)
+                uploaded_manager_column = next((column for column in available_columns if str(column).strip().lower() in {"manager", "manager name", "manager_name", "assigned manager", "creator network manager"}), None)
                 if uploaded_manager_column and uploaded_manager_column not in selected_columns:
                     selected_columns.append(uploaded_manager_column)
                 if selected_columns:
