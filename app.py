@@ -218,6 +218,8 @@ def get_engine():
         url = "postgresql+psycopg://" + url.removeprefix("postgresql://")
     elif url.startswith("postgres://"):
         url = "postgresql+psycopg://" + url.removeprefix("postgres://")
+    if ".pooler.supabase.com:5432/" in url:
+        url = url.replace(".pooler.supabase.com:5432/", ".pooler.supabase.com:6543/")
     return create_engine(
         url,
         pool_pre_ping=True,
