@@ -1150,30 +1150,29 @@ def main():
 
     with maintenance_tab:
         st.subheader("Maintenance Rate")
-        st.caption("Current maintenance progress from the latest Goal Management read. The rate updates with the same source data as the dashboard.")
-        maintenance_creators = creators.copy()
-        if choice != "All managers" and not maintenance_creators.empty:
-            maintenance_creators = maintenance_creators[manager_series(maintenance_creators).eq(choice)].copy()
-        maintenance_status = maintenance_creators.get("tier_status", pd.Series("", index=maintenance_creators.index)).fillna("").astype(str)
-        maintenance_mask = maintenance_status.str.contains("maintain", case=False, na=False)
-        not_maintained_mask = maintenance_status.str.contains("not maintain", case=False, na=False)
-        maintenance_rows = maintenance_creators[maintenance_mask].copy()
-        maintained_rows = maintenance_rows[~not_maintained_mask.loc[maintenance_rows.index]].copy()
-        total_maintenance = len(maintenance_rows)
-        maintaining_count = len(maintained_rows)
-        maintenance_rate = (maintaining_count / total_maintenance * 100) if total_maintenance else 0.0
+        st.caption("Latest maintenance records from the three authorized Maintenance Rate source pages.")
 
-        card_one, card_two, card_three = st.columns(3)
-        card_one.metric("Creators in maintenance", f"{total_maintenance:,}")
-        card_two.metric("Maintaining tier", f"{maintaining_count:,}")
-        card_three.metric("Maintenance rate", f"{maintenance_rate:.2f}%")
+        maintenance_data = pd.DataFrame()
+        try:
+            maintenance_payloads = pd.read_sql(text("SELECT payload FROM maintenance_rate_rows ORDER BY row_index"), get_engine())
+            if not maintenance_payloads.empty:
+                maintenance_data = pd.DataFrame(maintenance_payloads["payload"].tolist())
+        except Exception:
+            maintenance_data = pd.DataFrame()
 
-        if maintenance_rows.empty:
-            st.info("No maintenance-rate creators are in the latest source read yet. The three summary boxes will populate automatically when that read is imported.")
+        if not maintenance_data.empty and "maintained_tier" in maintenance_data.columns:
+            total_maintenance = len(maintenance_data)
+            maintaining_count = int(maintenance_data["maintained_tier"].fillna(False).astype(bool).sum())
+            maintenance_rate = (maintaining_count / total_maintenance * 100) if total_maintenance else 0.0
+            card_one, card_two, card_three = st.columns(3)
+            card_one.metric("Creators in Maintenance Rate", f"{total_maintenance:,}")
+            card_two.metric("Maintaining tier", f"{maintaining_count:,}")
+            card_three.metric("Maintenance rate", f"{maintenance_rate:.2f}%")
+            st.caption("Each creator below comes from the Maintenance Rate source read.")
+            maintenance_columns = [column for column in ["creator", "maintained_tier", "raw_row", "page_read"] if column in maintenance_data.columns]
+            st.dataframe(maintenance_data[maintenance_columns], use_container_width=True, hide_index=True, height=720)
         else:
-            st.caption("Each creator below is included in the Maintenance Rate calculation.")
-            display_columns = [column for column in ["username", "manager_name", "manager", "tier_status", "diamonds", "valid_live_days", "valid_live_hours"] if column in maintenance_rows.columns]
-            st.dataframe(maintenance_rows[display_columns], use_container_width=True, hide_index=True, height=520)
+            st.info("Maintenance source pages have not supplied a complete read yet. The dashboard remains online, and these boxes will populate automatically as soon as the scheduled maintenance reader imports its next complete run.")
 
 
     with scouting_tab:
