@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -22,6 +23,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 import yaml
+from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
@@ -58,6 +60,12 @@ from sqlalchemy import create_engine, text
 
 load_dotenv()
 st.set_page_config(page_title="TikTok Live Manager Dashboard", page_icon="⚓", layout="wide")
+
+
+@st.cache_data(show_spinner=False)
+def banner_data_uri() -> str:
+    banner = Path(__file__).resolve().parent / "assets" / "grace-harbour-approved-banner.png"
+    return "data:image/png;base64," + base64.b64encode(banner.read_bytes()).decode("ascii")
 
 
 
@@ -758,13 +766,21 @@ def main():
         [data-testid="stMetricValue"] { color: var(--gh-gold) !important; }
         [data-testid="stMetricLabel"] { color: #ffffff !important; font-weight: 800 !important; opacity: 1 !important; }
         [data-testid="stDataFrame"] { border: 1px solid rgba(245,197,66,.38); border-radius: 12px; overflow: hidden; }
+.gh-hero { position: relative; overflow: hidden; min-height: 260px; border: 1px solid rgba(245,197,66,.48); border-radius: 16px; box-shadow: 0 0 32px rgba(89,55,180,.28), inset 0 0 32px rgba(0,0,0,.35); margin: .35rem 0 1.1rem; background: #020817; }
+.gh-hero img { display: block; width: 100%; min-height: 260px; height: clamp(260px, 27vw, 430px); object-fit: cover; object-position: center; }
+.gh-dashboard-title { position: absolute; top: clamp(1rem,4vw,3rem); right: clamp(1rem,4vw,4rem); max-width: 54%; color: #fff6c9; font-family: Georgia, serif; font-size: clamp(1.55rem,3.4vw,4rem); font-weight: 900; line-height: 1.04; text-align: right; letter-spacing: .025em; text-shadow: 0 3px 18px #000, 0 0 24px rgba(245,197,66,.62); }
+.gh-network { position: absolute; left: clamp(1rem,3vw,3rem); bottom: clamp(.8rem,2.2vw,2rem); color: #fff0ae; font-size: clamp(.72rem,1.3vw,1.2rem); font-weight: 900; letter-spacing: .13em; text-shadow: 0 2px 12px #000; }
+[data-testid="stTabs"] [data-baseweb="tab-list"] { gap: .45rem; flex-wrap: wrap; }
+[data-testid="stTabs"] [data-baseweb="tab"] { color: #fff7c4 !important; font-size: 1.04rem !important; font-weight: 900 !important; letter-spacing: .025em; padding: .7rem 1.05rem !important; text-shadow: 0 1px 8px #000; }
+[data-testid="stTabs"] [aria-selected="true"] { color: #ffd95a !important; border-bottom-color: #ffd95a !important; }
         </style>
         """,
         unsafe_allow_html=True,
     )
-    st.image("assets/grace-harbour-approved-banner.png", use_container_width=True)
-    st.markdown('<div class="gh-brand">⚓ GRACE HARBOUR MEDIA &nbsp;•&nbsp; CREATOR NETWORK</div>', unsafe_allow_html=True)
-    st.title("TikTok Live Manager Dashboard")
+    st.markdown(
+        f'<div class="gh-hero"><img src="{banner_data_uri()}" alt="Grace Harbour lighthouse and water"><div class="gh-dashboard-title">TikTok Live<br>Manager Dashboard</div><div class="gh-network">⚓ GRACE HARBOUR MEDIA &nbsp;•&nbsp; CREATOR NETWORK</div></div>',
+        unsafe_allow_html=True,
+    )
 
 
 
