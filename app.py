@@ -829,14 +829,15 @@ def main():
 
 
 
-    manager_tab, goals_tab, business_tab, scouting_tab, prior_month_tab, tier_guide_tab, access_tab = st.tabs([
+    manager_tab, goals_tab, business_tab, scouting_tab, prior_month_tab, tier_guide_tab, maintenance_tab, access_tab = st.tabs([
         "Dashboard",
         "Goal Management",
         "Business Essentials",
         "Scouting",
         "Goal Management Prior Month",
  "Tier & Level Guide",
-        "Access & Data",
+        "Maintenance Rate",
+    "Access & Data",
     ])
 
 
@@ -1185,7 +1186,18 @@ def main():
             ]), use_container_width=True, hide_index=True, height=245)
 
 
-    with access_tab:
+    with maintenance_tab:
+        st.subheader("Maintenance Rate")
+        m = pd.read_sql("select payload from maintenance_rate_rows order by row_index", get_engine())
+        r = pd.DataFrame(m["payload"].tolist())
+        total = len(r); good = int(r["maintained_tier"].sum())
+        a, b, c = st.columns(3)
+        a.metric("Creators in Maintenance Rate", total)
+        b.metric("Maintaining tier", good)
+        c.metric("Maintenance rate", f"{good / total * 100:.2f}%" if total else "0.00%")
+        st.dataframe(r[["creator", "maintained_tier", "raw_row", "page_read"]], use_container_width=True, hide_index=True, height=720)
+
+with access_tab:
         st.subheader("Access Management")
         st.caption("Add, change, or remove dashboard access from the secure authorization page.")
         st.link_button("Open Manage Access", "https://dashboard.graceharbourmedia.com/access", use_container_width=True)
