@@ -844,7 +844,52 @@ def main():
 
 
     with manager_tab:
-        pass
+        st.caption("A combined view of the latest Goal Management and Business Essentials measures.")
+        if creators.empty:
+            st.info("No Goal Management records have been imported yet.")
+        else:
+            dashboard_creators = creators.copy()
+            dashboard_diamonds = numeric_series(dashboard_creators, "diamonds")
+            dashboard_tier = dashboard_creators.get("tier_status", pd.Series("", index=dashboard_creators.index)).fillna("").astype(str).str.lower()
+            dashboard_rank = dashboard_creators.get("rank_up_progress", pd.Series("", index=dashboard_creators.index)).fillna("").astype(str).str.lower()
+            dashboard_maintained = dashboard_tier.str.contains("maintained|maintain", na=False) | dashboard_rank.str.contains("maintain", na=False)
+            dashboard_ranked = dashboard_tier.str.contains("ranked up|ranking up", na=False) | dashboard_rank.str.contains("rank up|ranked up", na=False)
+            dashboard_not_maintained = dashboard_tier.str.contains("not maintained|not maintain", na=False) | dashboard_rank.str.contains("not maintained|not maintain", na=False)
+            dashboard_new_creators = int(numeric_series(managers, "new_creators").sum()) if not managers.empty else 0
+            st.subheader("Goal Management overview")
+            a, b, c, d = st.columns(4)
+            a.metric("Creators", f"{len(dashboard_creators):,}")
+            b.metric("Diamonds", f"{int(dashboard_diamonds.sum()):,}")
+            c.metric("New creators", f"{dashboard_new_creators:,}")
+            d.metric("Above 200k diamonds", f"{int(dashboard_diamonds.ge(200_000).sum()):,}")
+            e, f, g = st.columns(3)
+            e.metric("Maintaining tier", f"{int(dashboard_maintained.sum()):,}")
+            f.metric("Ranking up", f"{int(dashboard_ranked.sum()):,}")
+            g.metric("Tier not maintained", f"{int(dashboard_not_maintained.sum()):,}")
+        if business.empty:
+            st.info("No Business Essentials records have been imported yet.")
+        else:
+            dashboard_business = business.copy()
+            dashboard_sections = dashboard_business.get("Section", pd.Series("", index=dashboard_business.index)).astype(str)
+            dashboard_stability = dashboard_business[dashboard_sections.str.contains("Creator Stability", case=False, na=False)].copy()
+            dashboard_graduation = dashboard_business[dashboard_sections.str.contains("Creator Graduation", case=False, na=False) & dashboard_sections.str.contains("Evaluated", case=False, na=False)].copy()
+            dashboard_reached = dashboard_business[dashboard_sections.str.contains("Reached graduation", case=False, na=False)].copy()
+            dashboard_reward = dashboard_business[dashboard_sections.str.contains("Extra Reward", case=False, na=False)].copy()
+            dashboard_new = int(dashboard_graduation.get("New creator this month", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+            dashboard_quit = int(dashboard_stability.get("Voluntary quit", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+            dashboard_reached_count = int(dashboard_reached.get("Reached graduation", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+            dashboard_reward_completed = int(dashboard_reward.get("Completed rank-up incentive", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+            st.subheader("Business Essentials overview")
+            h, i, j, k = st.columns(4)
+            h.metric("Creator Stability - evaluated", f"{len(dashboard_stability):,}")
+            i.metric("New creators this month", f"{dashboard_new:,}")
+            j.metric("Creators quit", f"{dashboard_quit:,}")
+            k.metric("Quit rate", f"{(dashboard_quit / len(dashboard_stability) * 100) if len(dashboard_stability) else 0:.2f}%")
+            l, m, n, o = st.columns(4)
+            l.metric("Reached graduation", f"{dashboard_reached_count:,}")
+            m.metric("Graduation rate", f"{(dashboard_reached_count / len(dashboard_graduation) * 100) if len(dashboard_graduation) else 0:.2f}%")
+            n.metric("Premium Invite Graduates", f"{dashboard_reward_completed:,} / {len(dashboard_reward):,}")
+            o.metric("Creators with Extra Reward", f"{len(dashboard_reward):,}")
 
 
 
@@ -858,14 +903,24 @@ def main():
         if creators.empty:
             st.info("No creator-goal records have been imported yet.")
         else:
-            visible = creators if choice == "All managers" else creators[creators["_manager"] == choice].copy()
+            goal_filter_left, goal_filter_right = st.columns(2)
+            goal_manager_choice = goal_filter_left.selectbox("Manager", ["All managers", *manager_names], key="goal_management_manager_filter")
+            tier_source = creators.get("tier_status", pd.Series("", index=creators.index)).fillna("").astype(str)
+            tier_levels = (tier_source.str.extract(r"(?i)(tier\s*\d+)")[0].dropna().str.replace(r"\s+", " ", regex=True).str.title().drop_duplicates().sort_values().tolist())
+            goal_tier_choice = goal_filter_right.selectbox("Tier level", ["All tiers", *tier_levels], key="goal_management_tier_filter")
+            visible = creators.copy()
+            if goal_manager_choice != "All managers":
+                visible = visible[visible["_manager"] == goal_manager_choice].copy()
+            if goal_tier_choice != "All tiers":
+                visible_tiers = (visible.get("tier_status", pd.Series("", index=visible.index)).fillna("").astype(str).str.extract(r"(?i)(tier\s*\d+)")[0].fillna("").str.replace(r"\s+", " ", regex=True).str.title())
+                visible = visible[visible_tiers == goal_tier_choice].copy()
             visible_diamonds = numeric_series(visible, "diamonds")
             tier_text = visible.get("tier_status", pd.Series("", index=visible.index)).fillna("").astype(str).str.lower()
             rank_text = visible.get("rank_up_progress", pd.Series("", index=visible.index)).fillna("").astype(str).str.lower()
             ranked_up = int((tier_text.str.contains("rank") | rank_text.str.contains("rank")).sum())
             maintained = int((tier_text.str.contains("maintain") | rank_text.str.contains("maintain")).sum())
             above_200k = int((visible_diamonds >= 200000).sum())
-            selected_manager_rows = managers if choice == "All managers" else managers[managers["_manager"] == choice]
+            selected_manager_rows = managers if goal_manager_choice == "All managers" else managers[managers["_manager"] == goal_manager_choice]
             new_creators = int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0
             not_maintained_text = tier_text.str.contains("not maintained") | rank_text.str.contains("not maintained")
             
@@ -875,7 +930,7 @@ def main():
             )
             not_maintained_mask = not_maintained_text | ~(ranked_mask | maintained_mask)
             above_200k = int((visible_diamonds >= 200000).sum())
-            selected_manager_rows = managers if choice == "All managers" else managers[managers["_manager"] == choice]
+            selected_manager_rows = managers if goal_manager_choice == "All managers" else managers[managers["_manager"] == goal_manager_choice]
             new_creators = int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0
 
             first, second, third, fourth = st.columns(4)
@@ -919,31 +974,31 @@ def main():
                             hide_index=True,
                         )
 
-            selection_label = "all managers" if choice == "All managers" else choice
+            selection_label = "all managers" if goal_manager_choice == "All managers" else goal_manager_choice
             st.caption(f"Showing every current Goal Management field for {selection_label}.")
             goal_section(
                 "All creator goals",
                 visible,
                 "No creator-goal records match this selection.",
-                include_manager=choice == "All managers",
+                include_manager=goal_manager_choice == "All managers",
             )
             goal_section(
                 "Maintaining tier",
                 visible[maintained_mask].copy(),
                 "No creators are currently marked as maintaining tier.",
-                include_manager=choice == "All managers",
+                include_manager=goal_manager_choice == "All managers",
             )
             goal_section(
                 "Ranking up",
                 visible[ranked_mask].copy(),
                 "No creators are currently marked as ranking up.",
-                include_manager=choice == "All managers",
+                include_manager=goal_manager_choice == "All managers",
             )
             goal_section(
                 "Tier not maintained",
                 visible[not_maintained_mask].copy(),
                 "No creators are currently marked as not maintained.",
-                include_manager=choice == "All managers",
+                include_manager=goal_manager_choice == "All managers",
             )
 
 
