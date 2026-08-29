@@ -799,7 +799,7 @@ def main():
         access_people = load_access_people()
         monthly_metrics = load_monthly_metrics()
     except Exception as exc:
-        print(f"DASHBOARD_BOOT_FAILURE class={type(exc).__name__} sqlstate={getattr(getattr(exc, 'orig', None), 'sqlstate', None)}")
+        print(f"DASHBOARD_BOOT_FAILURE class={type(exc).__name__} sqlstate={getattr(getattr(exc, 'orig', None), 'sqlstate', None)} detail={exc}")
         st.error("The dashboard could not read its data store. Please try refreshing in a moment.")
         st.stop()
 
