@@ -1186,23 +1186,10 @@ def main():
 
 
     with access_tab:
-        st.caption("Current authorized-dashboard records and last saved metric values.")
-        left, right = st.columns(2)
-        with left:
-            st.subheader("Access list")
-            st.dataframe(access_people, use_container_width=True, hide_index=True)
-        with right:
-            st.subheader("Saved monthly metrics")
-            st.dataframe(monthly_metrics, use_container_width=True, hide_index=True)
-        if not business_source.empty:
-            latest_business = pd.to_datetime(business_source["captured_at"], errors="coerce").max()
-            st.caption(f"Latest Business Essentials capture: {latest_business}")
-
-
-
-
-
-
+        st.subheader("Access Management")
+        st.caption("Add, change, or remove dashboard access from the secure authorization page.")
+        st.link_button("Open Manage Access", "https://dashboard.graceharbourmedia.com/access", use_container_width=True)
+        st.info("Only dashboard owners and administrators can open this page or change access. Members can view the dashboard only.")
 
 
 if __name__ == "__main__":
