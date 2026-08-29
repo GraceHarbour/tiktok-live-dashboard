@@ -141,6 +141,7 @@ def secret_value(name: str, default=""):
     except Exception as exc:
         print(f"DASHBOARD_BOOT_FAILURE class={type(exc).__name__} sqlstate={getattr(getattr(exc, 'orig', None), 'sqlstate', None)}")
         st.error("The dashboard could not read its data store. Please try refreshing in a moment.")
+        st.caption(f"Data-store diagnostic: {type(exc).__name__}")
         st.stop()
 
 
