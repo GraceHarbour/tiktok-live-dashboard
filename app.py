@@ -992,79 +992,59 @@ def main():
             visible_business = business.copy()
             if choice != "All managers" and "Manager" in visible_business.columns:
                 visible_business = visible_business[visible_business["Manager"].fillna("").astype(str) == choice].copy()
-            summary_business = visible_business
-            if "Section" in summary_business.columns and (summary_business["Section"].astype(str) == "172 Evaluated").any():
-                summary_business = summary_business[summary_business["Section"].astype(str) == "172 Evaluated"].copy()
-            new_count = int(summary_business.get("New creator this month", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
-            graduates = int(summary_business.get("Reached graduation", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
-            quit_values = summary_business.get("Quit on", pd.Series(dtype="object")).fillna("").astype(str).str.strip()
-            quitting = int((~quit_values.isin(["", "-", "No", "N/A", "Not set"])).sum())
-            one, two, three, four = st.columns(4)
-            one.metric("Creators evaluated", f"{len(summary_business):,}")
-            two.metric("New creators this month", f"{new_count:,}")
-            three.metric("Reached graduation", f"{graduates:,}")
-            four.metric("Graduation rate", f"{(graduates / len(summary_business) * 100) if len(summary_business) else 0:.2f}%")
 
-            live_days_text = summary_business.get("Valid go LIVE days", pd.Series(dtype="object")).fillna("").astype(str)
-            live_days = pd.to_numeric(live_days_text.str.extract(r"(\d+)")[0], errors="coerce").fillna(0)
-            duration_text = summary_business.get("Valid LIVE duration", pd.Series(dtype="object")).fillna("").astype(str)
-            duration_parts = duration_text.str.extract(r"(?:(?P<hours>\d+)h)?\s*(?:(?P<minutes>\d+)m)?\s*(?:(?P<seconds>\d+)s)?").fillna(0).astype(float)
+            section_series = visible_business.get("Section", pd.Series("", index=visible_business.index)).astype(str)
+            stability_rows = visible_business[section_series.str.contains("Creator Stability", case=False, na=False)].copy()
+            graduation_rows = visible_business[section_series.str.contains("Creator Graduation", case=False, na=False) & section_series.str.contains("Evaluated", case=False, na=False)].copy()
+            reached_rows = visible_business[section_series.str.contains("Reached graduation", case=False, na=False)].copy()
+            reward_rows = visible_business[section_series.str.contains("Extra Reward", case=False, na=False)].copy()
+
+            new_count = int(graduation_rows.get("New creator this month", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+            reached_count = int(reached_rows.get("Reached graduation", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+            quit_count = int(stability_rows.get("Voluntary quit", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+            extra_completed = int(reward_rows.get("Completed rank-up incentive", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+
+            live_days = pd.to_numeric(stability_rows.get("Valid go LIVE days", pd.Series(dtype="object")).fillna("").astype(str).str.extract(r"(\d+)")[0], errors="coerce").fillna(0)
+            duration_parts = stability_rows.get("Valid LIVE duration", pd.Series(dtype="object")).fillna("").astype(str).str.extract(r"(?:(?P<hours>\d+)h)?\s*(?:(?P<minutes>\d+)m)?\s*(?:(?P<seconds>\d+)s)?").fillna(0).astype(float)
             total_live_hours = float((duration_parts["hours"] + duration_parts["minutes"] / 60 + duration_parts["seconds"] / 3600).sum()) if not duration_parts.empty else 0.0
-            graduation_rows = visible_business[visible_business["Section"].astype(str).str.contains("Reached graduation", na=False)].copy() if "Section" in visible_business.columns else pd.DataFrame()
-            evaluated_pages = summary_business["Source page"].nunique() if "Source page" in summary_business.columns else 0
+            stability_pages = stability_rows["Source page"].nunique() if "Source page" in stability_rows.columns else 0
             graduation_pages = graduation_rows["Source page"].nunique() if "Source page" in graduation_rows.columns else 0
+            reward_pages = reward_rows["Source page"].nunique() if "Source page" in reward_rows.columns else 0
+
+            one, two, three, four = st.columns(4)
+            one.metric("Creator Stability — evaluated", f"{len(stability_rows):,}")
+            two.metric("New creators this month", f"{new_count:,}")
+            three.metric("Creators quit", f"{quit_count:,}")
+            four.metric("Quit rate", f"{(quit_count / len(stability_rows) * 100) if len(stability_rows) else 0:.2f}%")
+
             five, six, seven, eight = st.columns(4)
-            five.metric("Active creators", f"{int(live_days.gt(0).sum()):,}")
-            six.metric("Valid Go LIVE days", f"{int(live_days.sum()):,}")
-            seven.metric("Valid LIVE hours", f"{total_live_hours:,.1f}")
-            eight.metric("Average LIVE hours", f"{(total_live_hours / len(summary_business)) if len(summary_business) else 0:,.1f}")
+            five.metric("Reached graduation", f"{reached_count:,}")
+            six.metric("Graduation rate", f"{(reached_count / len(graduation_rows) * 100) if len(graduation_rows) else 0:.2f}%")
+            seven.metric("Premium Invite Graduates", f"{extra_completed:,} / {len(reward_rows):,}")
+            eight.metric("Creators with Extra Reward", f"{len(reward_rows):,}")
 
             nine, ten, eleven, twelve = st.columns(4)
-            nine.metric("Creators quit", f"{quitting:,}")
-            ten.metric("Quit rate", f"{(quitting / len(summary_business) * 100) if len(summary_business) else 0:.2f}%")
-            eleven.metric("Evaluated pages read", f"{evaluated_pages:,}")
-            twelve.metric("Graduation pages read", f"{graduation_pages:,}")
-            if "Source page" in visible_business.columns:
-                graduation_pages = 0
-                if "Section" in visible_business.columns:
-                    graduation_pages = visible_business[visible_business["Section"].astype(str).str.contains("Reached graduation", na=False)]["Source page"].nunique()
-                st.caption(f"Verified source read: {summary_business['Source page'].nunique():,} evaluated pages and {graduation_pages:,} graduation pages. Every captured row is listed below.")
+            nine.metric("Active stability creators", f"{int(live_days.gt(0).sum()):,}")
+            ten.metric("Valid Go LIVE days", f"{int(live_days.sum()):,}")
+            eleven.metric("Valid LIVE hours", f"{total_live_hours:,.1f}")
+            twelve.metric("Creator Stability pages read", f"{stability_pages:,}")
 
-            overview_measures = business_overview_measures(business_source)
-            if not overview_measures.empty:
-                st.subheader("Business Essentials overview")
-                st.caption("Current measures captured from the Business Essentials overview.")
-                for category_name, category_rows in overview_measures.groupby("Category", sort=False):
-                    with st.container(border=True):
-                        st.markdown(f"### {category_name}")
-                        st.dataframe(
-                            category_rows.drop(columns=["Category"]),
-                            use_container_width=True,
-                            hide_index=True,
-                        )
+            st.caption(f"Verified source read: {stability_pages:,} Creator Stability pages, {graduation_pages:,} Creator Graduation evaluated pages, and {reward_pages:,} Extra Reward pages. Every captured creator is listed below.")
 
             st.subheader("Business Essentials details")
-            section_column = "Section" if "Section" in visible_business.columns else None
-            sections = sorted(
-                name for name in visible_business.get(section_column, pd.Series(dtype="object")).dropna().astype(str).unique()
-                if name
-            ) if section_column else []
-            if sections:
-                for section_name in sections:
-                    section_rows = visible_business[
-                        visible_business[section_column].astype(str) == section_name
-                    ].copy()
-                    with st.container(border=True):
-                        st.markdown(f"### {section_name}")
-                        st.dataframe(
-                            section_rows.drop(columns=[section_column]),
-                            use_container_width=True,
-                            hide_index=True,
-                        )
-            else:
+            preferred_sections = [
+                "Creator Stability — Evaluated Creators",
+                "Creator Graduation — 172 Evaluated",
+                "Creator Graduation — 21 Reached graduation",
+                "Creator Graduation — Creators with Extra Reward",
+            ]
+            section_names = [name for name in preferred_sections if name in set(section_series)]
+            section_names.extend(name for name in section_series.dropna().unique() if name not in section_names)
+            for section_name in section_names:
+                section_rows = visible_business[section_series == section_name].copy()
                 with st.container(border=True):
-                    st.dataframe(visible_business, use_container_width=True, hide_index=True)
-
+                    st.markdown(f"### {section_name}")
+                    st.dataframe(section_rows.drop(columns=["Section"], errors="ignore"), use_container_width=True, hide_index=True)
 
     with scouting_tab:
         st.caption("Scouting records will appear here when the scouting capture is imported.")
