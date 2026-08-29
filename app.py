@@ -844,7 +844,7 @@ def main():
 
 
     with manager_tab:
-        st.caption("A combined view of the latest Goal Management and Business Essentials measures."); dashboard_manager_choices = ["Agency", *[m for m in sorted(creators.get("_manager", pd.Series(dtype=str)).dropna().astype(str).unique().tolist()) if m.strip() and m.strip() != "-"]]; dashboard_choice = st.selectbox("Dashboard view", dashboard_manager_choices, key="dashboard_manager_filter")
+        st.caption("A combined view of the latest Goal Management and Business Essentials measures."); agency_logo = __import__("pathlib").Path(__file__).resolve().parent / "assets" / "agency-logo.jpg"; st.image(str(agency_logo), width=260) if agency_logo.exists() else None; dashboard_manager_choices = ["Agency", *[m for m in sorted(creators.get("_manager", pd.Series(dtype=str)).dropna().astype(str).unique().tolist()) if m.strip() and m.strip() != "-"]]; dashboard_choice = st.selectbox("Dashboard view", dashboard_manager_choices, key="dashboard_manager_filter")
         if creators.empty:
             st.info("No Goal Management records have been imported yet.")
         else:
@@ -856,12 +856,12 @@ def main():
             dashboard_ranked = dashboard_tier.str.contains("ranked up|ranking up", na=False) | dashboard_rank.str.contains("rank up|ranked up", na=False)
             dashboard_not_maintained = dashboard_tier.str.contains("not maintained|not maintain", na=False) | dashboard_rank.str.contains("not maintained|not maintain", na=False)
             dashboard_new_creators = int(numeric_series(dashboard_managers, "new_creators").sum()) if not dashboard_managers.empty else 0
-            agency_logo = __import__("pathlib").Path(__file__).resolve().parent / "assets" / "agency-logo.jpg"; st.subheader("Goal Management overview")
+            st.subheader("Goal Management overview")
             a, b, c, d = st.columns(4)
             a.metric("Creators", f"{len(dashboard_creators):,}")
             b.metric("Diamonds", f"{int(dashboard_diamonds.sum()):,}")
             c.metric("New creators", f"{dashboard_new_creators:,}")
-            d.image(str(agency_logo), width=145) if dashboard_choice == "Agency" and agency_logo.exists() else None; d.metric("Above 200k diamonds", f"{int(dashboard_diamonds.ge(200_000).sum()):,}")
+            d.metric("Above 200k diamonds", f"{int(dashboard_diamonds.ge(200_000).sum()):,}")
             e, f, g = st.columns(3)
             e.metric("Maintaining tier", f"{int(dashboard_maintained.sum()):,}")
             f.metric("Ranking up", f"{int(dashboard_ranked.sum()):,}")
