@@ -1038,7 +1038,7 @@ def main():
                 else:
                     display_frame = shared_frame
                     st.caption("This published file has no Manager column to filter yet.")
-                st.dataframe(display_frame[shared_columns], use_container_width=True, hide_index=True)
+                st.dataframe(display_frame[shared_columns], use_container_width=True, hide_index=True, height=720)
             else:
                 st.info("The shared file has no selected display columns yet.")
         else:
