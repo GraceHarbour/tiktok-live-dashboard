@@ -1466,7 +1466,7 @@ def main():
                 if search_scout:
                     view_rows = view_rows[view_rows["username"].fillna("").astype(str).str.contains(search_scout, case=False, na=False)]
                 display_columns = ["username", "followers", "likes", "applied_to_join", "scouting_status", "live_streams", "diamonds", "live_hours", "avg_live_viewers", 
-        ", "assigned_manager", "source_label", "lead_expiry", "captured_at"]
+                "assigned_manager", "source_label", "lead_expiry", "captured_at"]
                 labels = {"username":"Creator", "followers":"Followers", "likes":"Likes", "applied_to_join":"Applied", "scouting_status":"Scouting status", "live_streams":"LIVE streams", "diamonds":"Diamonds", "live_hours":"LIVE hours", "avg_live_viewers":"Avg. LIVE viewers", "invitation_type":"Invitation type", "assigned_manager":"Manager", "source_label":"Source", "lead_expiry":"Lead expires", "captured_at":"Last refreshed"}
                 display_frame = view_rows[[column for column in display_columns if column in view_rows.columns]].rename(columns=labels)
                 if all(column in display_frame.columns for column in ["Creator", "Followers", "Likes"]):
