@@ -829,6 +829,16 @@ def main():
 [data-testid="stTabs"] [aria-selected="true"] { color: #fff4a8 !important; background: rgba(20, 61, 117, .92); border-bottom-color: #ffd95a !important; box-shadow: inset 0 -3px #ffd95a; }
 [data-testid="stTabs"] [role="tab"], [data-testid="stTabs"] [role="tab"] * { color: #fffbe8 !important; opacity: 1 !important; }
 [data-testid="stTabs"] [role="tab"][aria-selected="true"], [data-testid="stTabs"] [role="tab"][aria-selected="true"] * { color: #ffd95a !important; }
+
+        .gh-scout-hero { margin: .6rem 0 1rem; padding: 1.25rem 1.4rem; border: 1px solid rgba(245,197,66,.48); border-radius: 16px; background: linear-gradient(125deg, rgba(18,48,109,.94), rgba(61,28,114,.86)); box-shadow: 0 0 28px rgba(111,69,202,.22); }
+        .gh-scout-hero-title { color: #fff4b0; font-size: 1.5rem; font-weight: 900; letter-spacing: .04em; margin: 0; text-shadow: 0 2px 12px #000; }
+        .gh-scout-hero-copy { color: #f3f7ff; margin: .35rem 0 0; font-size: 1rem; }
+        .gh-scout-manager-label { color: #f5c542; font-weight: 900; letter-spacing: .12em; text-align: center; text-transform: uppercase; margin: .4rem 0 .15rem; }
+        .gh-scout-table { border: 1px solid rgba(245,197,66,.35); border-radius: 14px; overflow-x: auto; background: rgba(3,8,23,.82); padding: .3rem; }
+        .gh-scout-table table { width: 100%; border-collapse: collapse; color: #f3f7ff; font-size: .88rem; }
+        .gh-scout-table th { color: #fff1a5; background: rgba(21,61,117,.85); text-align: left; padding: .7rem .55rem; white-space: nowrap; }
+        .gh-scout-table td { border-top: 1px solid rgba(245,197,66,.18); padding: .55rem; vertical-align: top; }
+        .gh-scout-table tr:nth-child(even) td { background: rgba(31,58,110,.20); }
         </style>
         """,
         unsafe_allow_html=True,
@@ -1288,6 +1298,7 @@ def main():
     with scouting_tab:
         st.subheader("Scouting")
         st.caption("Two separate reads with dedicated Agency and manager views. Refreshes run at :20 and :50 after each hour.")
+        st.markdown('<div class="gh-scout-hero"><p class="gh-scout-hero-title">Creator Scouting Center</p><p class="gh-scout-hero-copy">Review applied creators and invitations by Agency or manager, with the live activity that matters for each lead.</p></div>', unsafe_allow_html=True)
         scouting = load_scouting_records()
         if scouting.empty:
             st.info("The Scouting reader is being connected. This page will show the selected Backstage reads as soon as its first scheduled capture completes.")
@@ -1318,6 +1329,7 @@ def main():
                 selected_photo_key = "agency" if scouting_view == "Agency overview" else scouting_photo_keys.get(scouting_view.casefold(), "".join(char for char in scouting_view.casefold() if char.isalnum()))
                 selected_photo_name = manager_logo_files.get(selected_photo_key)
                 selected_photo_path = (Path(__file__).resolve().parent / "assets" / "agency-logo.png") if selected_photo_key == "agency" else (Path(__file__).resolve().parent / "assets" / "manager-logos" / selected_photo_name if selected_photo_name else None)
+                st.markdown(f'<div class="gh-scout-manager-label">{heading} • {scouting_view}</div>', unsafe_allow_html=True)
                 if selected_photo_path and selected_photo_path.exists():
                     photo_left, photo_center, photo_right = st.columns([1, 1, 1])
                     with photo_center:
@@ -1340,7 +1352,8 @@ def main():
                     view_rows = view_rows[view_rows["username"].fillna("").astype(str).str.contains(search_scout, case=False, na=False)]
                 display_columns = ["username", "followers", "likes", "applied_to_join", "scouting_status", "live_streams", "diamonds", "live_hours", "avg_live_viewers", "invitation_type", "assigned_manager", "source_label", "lead_expiry", "captured_at"]
                 labels = {"username":"Creator", "followers":"Followers", "likes":"Likes", "applied_to_join":"Applied", "scouting_status":"Scouting status", "live_streams":"LIVE streams", "diamonds":"Diamonds", "live_hours":"LIVE hours", "avg_live_viewers":"Avg. LIVE viewers", "invitation_type":"Invitation type", "assigned_manager":"Manager", "source_label":"Source", "lead_expiry":"Lead expires", "captured_at":"Last refreshed"}
-                st.dataframe(view_rows[[column for column in display_columns if column in view_rows.columns]].rename(columns=labels), use_container_width=True, hide_index=True, height=620)
+                display_frame = view_rows[[column for column in display_columns if column in view_rows.columns]].rename(columns=labels)
+                st.markdown('<div class="gh-scout-table">' + display_frame.to_html(index=False, escape=True) + '</div>', unsafe_allow_html=True)
 
             applied_scouting_tab, invitation_scouting_tab = st.tabs(["Applied", "Invitations"])
             with applied_scouting_tab:
