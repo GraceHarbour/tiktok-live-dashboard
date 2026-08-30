@@ -898,6 +898,9 @@ def main():
         .st-key-dashboard_manager_filter label, .st-key-dashboard_manager_filter label * { color: #fff4b0 !important; opacity: 1 !important; font-size: 1.25rem !important; font-weight: 900 !important; text-shadow: 0 1px 8px #000; }
         .st-key-dashboard_manager_filter [data-baseweb="select"] > div { background: #12376f !important; border: 2px solid #ffd95a !important; }
         .st-key-dashboard_manager_filter [data-baseweb="select"] [role="combobox"], .st-key-dashboard_manager_filter [data-baseweb="select"] [role="combobox"] * { color: #ffffff !important; font-size: 1.2rem !important; font-weight: 900 !important; }
+        /* The number itself inside each dashboard summary card. */
+        [data-testid="stMetricValue"], [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] div, [data-testid="stMetricValue"] span, [data-testid="stMetricValue"] p { font-size: clamp(4.8rem, 7.5vw, 6.8rem) !important; line-height: .95 !important; color: #ffe36a !important; font-weight: 950 !important; text-shadow: 0 0 26px rgba(245,197,66,.68) !important; }
+        [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * { font-size: 1rem !important; opacity: .88 !important; }
         </style>
         """,
         unsafe_allow_html=True,
