@@ -642,7 +642,7 @@ def load_monthly_metrics():
 def load_scouting_records():
     try:
         with get_engine().connect() as connection:
-            return pd.read_sql(text("SELECT source, username, followers, likes, applied_to_join, scouting_status, live_streams, diamonds, live_hours, avg_live_viewers, invitation_type, assigned_manager, source_label, lead_expiry, captured_at FROM scouting_records ORDER BY assigned_manager, source, username"), connection)
+            return pd.read_sql(text("SELECT source, username, followers, likes, applied_to_join, scouting_status, live_streams, diamonds, live_hours, avg_live_viewers, invitation_type, assigned_manager, source_label, lead_expiry, captured_at FROM scouting_records ORDER BY source, ctid"), connection)
     except Exception:
         return pd.DataFrame(columns=["source", "username", "followers", "likes", "applied_to_join", "scouting_status", "live_streams", "diamonds", "live_hours", "avg_live_viewers", "invitation_type", "assigned_manager", "source_label", "lead_expiry", "captured_at"])
 
