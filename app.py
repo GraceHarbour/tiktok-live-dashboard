@@ -924,7 +924,7 @@ def main():
         .gh-scout-table th { padding: 1rem .9rem !important; font-size: 1.22rem !important; }
         .gh-scout-table td { padding: .95rem .9rem !important; line-height: 1.45 !important; }
         .gh-scout-table td:not(:first-child) { color: #ffe36a !important; font-size: 1.3rem !important; font-weight: 900 !important; letter-spacing: .01em; text-shadow: 0 0 10px rgba(245,197,66,.28); }
-        .gh-scout-table td:first-child { color: #ffffff !important; font-weight: 800 !important; }
+        .gh-scout-table td:first-child { color: #ffffff !important; font-weight: 800 !important; white-space: pre-line !important; min-width: 190px; }
         [data-testid="stMetricValue"] { font-size: clamp(4.6rem, 7vw, 6.4rem) !important; line-height: .98 !important; font-weight: 900 !important; letter-spacing: .01em; text-shadow: 0 0 24px rgba(245,197,66,.62); }
         .gh-data-panel { min-height: 470px; overflow: auto; border: 1px solid rgba(245,197,66,.55); border-radius: 14px; background: linear-gradient(145deg, rgba(18,48,109,.92), rgba(3,8,23,.96)); box-shadow: inset 0 0 28px rgba(0,0,0,.28); }
         .gh-data-panel table { width: 100%; border-collapse: collapse; color: #f5f8ff; font-size: 1.0rem; }
@@ -1468,6 +1468,14 @@ def main():
                 display_columns = ["username", "followers", "likes", "applied_to_join", "scouting_status", "live_streams", "diamonds", "live_hours", "avg_live_viewers", "invitation_type", "assigned_manager", "source_label", "lead_expiry", "captured_at"]
                 labels = {"username":"Creator", "followers":"Followers", "likes":"Likes", "applied_to_join":"Applied", "scouting_status":"Scouting status", "live_streams":"LIVE streams", "diamonds":"Diamonds", "live_hours":"LIVE hours", "avg_live_viewers":"Avg. LIVE viewers", "invitation_type":"Invitation type", "assigned_manager":"Manager", "source_label":"Source", "lead_expiry":"Lead expires", "captured_at":"Last refreshed"}
                 display_frame = view_rows[[column for column in display_columns if column in view_rows.columns]].rename(columns=labels)
+                if all(column in display_frame.columns for column in ["Creator", "Followers", "Likes"]):
+                    follower_values = pd.to_numeric(display_frame["Followers"], errors="coerce").fillna(0)
+                    like_values = pd.to_numeric(display_frame["Likes"], errors="coerce").fillna(0)
+                    display_frame["Creator"] = [
+                        f"{name}\n{followers:,.0f} followers\n{likes:,.0f} likes"
+                        for name, followers, likes in zip(display_frame["Creator"], follower_values, like_values)
+                    ]
+                    display_frame = display_frame.drop(columns=["Followers", "Likes"])
                 st.markdown('<div class="gh-scout-table">' + display_frame.to_html(index=False, escape=True) + '</div>', unsafe_allow_html=True)
 
             applied_scouting_tab, invitation_scouting_tab = st.tabs(["⚡ Applied — Quick Response", "Invitations"])
