@@ -894,6 +894,10 @@ def main():
         [data-testid="stTextInput"] input { color: #ffffff !important; font-weight: 700 !important; }
         [data-testid="stTextInput"] input::placeholder { color: #dceaff !important; opacity: 1 !important; }
         [data-testid="stSelectbox"] [role="combobox"], [data-testid="stSelectbox"] [role="combobox"] * { color: #ffffff !important; font-weight: 800 !important; }
+        /* Main dashboard selector: keep Agency/manager selection unmistakably visible. */
+        .st-key-dashboard_manager_filter label, .st-key-dashboard_manager_filter label * { color: #fff4b0 !important; opacity: 1 !important; font-size: 1.25rem !important; font-weight: 900 !important; text-shadow: 0 1px 8px #000; }
+        .st-key-dashboard_manager_filter [data-baseweb="select"] > div { background: #12376f !important; border: 2px solid #ffd95a !important; }
+        .st-key-dashboard_manager_filter [data-baseweb="select"] [role="combobox"], .st-key-dashboard_manager_filter [data-baseweb="select"] [role="combobox"] * { color: #ffffff !important; font-size: 1.2rem !important; font-weight: 900 !important; }
         </style>
         """,
         unsafe_allow_html=True,
