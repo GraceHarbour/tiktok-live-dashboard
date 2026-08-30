@@ -1465,7 +1465,8 @@ def main():
                 search_scout = st.text_input("Search creators", key=f"scouting_search_{source_key}")
                 if search_scout:
                     view_rows = view_rows[view_rows["username"].fillna("").astype(str).str.contains(search_scout, case=False, na=False)]
-                display_columns = ["username", "followers", "likes", "applied_to_join", "scouting_status", "live_streams", "diamonds", "live_hours", "avg_live_viewers", "invitation_type", "assigned_manager", "source_label", "lead_expiry", "captured_at"]
+                display_columns = ["username", "followers", "likes", "applied_to_join", "scouting_status", "live_streams", "diamonds", "live_hours", "avg_live_viewers", "1479
+        ", "assigned_manager", "source_label", "lead_expiry", "captured_at"]
                 labels = {"username":"Creator", "followers":"Followers", "likes":"Likes", "applied_to_join":"Applied", "scouting_status":"Scouting status", "live_streams":"LIVE streams", "diamonds":"Diamonds", "live_hours":"LIVE hours", "avg_live_viewers":"Avg. LIVE viewers", "invitation_type":"Invitation type", "assigned_manager":"Manager", "source_label":"Source", "lead_expiry":"Lead expires", "captured_at":"Last refreshed"}
                 display_frame = view_rows[[column for column in display_columns if column in view_rows.columns]].rename(columns=labels)
                 if all(column in display_frame.columns for column in ["Creator", "Followers", "Likes"]):
@@ -1476,6 +1477,15 @@ def main():
                         for name, followers, likes in zip(display_frame["Creator"], follower_values, like_values)
                     ]
                     display_frame = display_frame.drop(columns=["Followers", "Likes"])
+                                if source_key == "scouting_applied" and "Applied" in display_frame.columns:
+                application_types = view_rows.loc[display_frame.index, "invitation_type"].fillna("").astype(str) if "invitation_type" in view_rows.columns else pd.Series("", index=display_frame.index)
+                display_frame["Applied"] = ["Yes\n" + (value.strip() or "Not available") for value in application_types]
+            if "LIVE streams" in display_frame.columns and "Diamonds" in display_frame.columns:
+                stream_values = pd.to_numeric(display_frame["LIVE streams"], errors="coerce").fillna(0)
+                diamond_values = pd.to_numeric(display_frame["Diamonds"], errors="coerce").fillna(0)
+                last_30_days = [f"{streams:,.0f} LIVE streams\n{diamonds:,.0f} Diamonds" for streams, diamonds in zip(stream_values, diamond_values)]
+                display_frame = display_frame.drop(columns=["LIVE streams", "Diamonds"])
+                display_frame.insert(min(2, len(display_frame.columns)), "Last 30 days", last_30_days)
                 st.markdown('<div class="gh-scout-table">' + display_frame.to_html(index=False, escape=True) + '</div>', unsafe_allow_html=True)
 
             applied_scouting_tab, invitation_scouting_tab = st.tabs(["⚡ Applied — Quick Response", "Invitations"])
