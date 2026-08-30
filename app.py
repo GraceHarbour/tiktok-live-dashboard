@@ -1360,7 +1360,7 @@ def main():
                     })
                     render_read_table(focus_display)
 
-                        one, two, three, four = st.columns(4)
+            one, two, three, four = st.columns(4)
             one.metric("Creator Stability — evaluated", f"{len(stability_rows):,}")
             two.metric("New creators this month", f"{new_count:,}")
             three.metric("Creators quit", f"{quit_count:,}")
