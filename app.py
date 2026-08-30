@@ -1420,6 +1420,18 @@ def main():
         else:
             scouting["assigned_manager"] = scouting["assigned_manager"].fillna("Unassigned").astype(str).str.strip().replace("", "Unassigned")
             scouting["source"] = scouting["source"].fillna("").astype(str)
+            scouting["_event_at"] = pd.to_datetime(scouting["captured_at"], errors="coerce", utc=True)
+            scouting_now = pd.Timestamp.now(tz="UTC")
+            applied_recent = (scouting["source"] == "scouting_applied") & (scouting["_event_at"] >= scouting_now - pd.Timedelta(days=5))
+            invited_recent = (scouting["source"] == "scouting_invited") & (scouting["_event_at"] >= scouting_now - pd.Timedelta(days=5))
+            invited_ten_days = (scouting["source"] == "scouting_invited") & (scouting["_event_at"] >= scouting_now - pd.Timedelta(days=10))
+            accepted_recent = invited_ten_days & scouting["scouting_status"].fillna("").astype(str).str.contains("accepted", case=False, na=False)
+            not_accepted_recent = invited_ten_days & ~scouting["scouting_status"].fillna("").astype(str).str.contains("accepted", case=False, na=False)
+            applied_box, invited_box, accepted_box, pending_box = st.columns(4)
+            applied_box.metric("Applied — last 5 days", f"{int(applied_recent.sum()):,}")
+            invited_box.metric("Invited — last 5 days", f"{int(invited_recent.sum()):,}")
+            accepted_box.metric("Accepted — last 10 days", f"{int(accepted_recent.sum()):,}")
+            pending_box.metric("Not accepted — last 10 days", f"{int(not_accepted_recent.sum()):,}")
 
             def render_scouting_source(source_key, heading):
                 source_rows = scouting[scouting["source"] == source_key].copy()
