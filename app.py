@@ -1143,14 +1143,16 @@ def main():
                         focus_graduation_color = "#ff5c7a"
                         focus_graduation_status = "Below 10%"
 
-                    # Updated by the Goals reader from Manage creators -> All creators.
-                    # The current verified source count is the safe fallback until
-                    # the next scheduled reader update stores active_creators.
-                    focus_creator_total = monthly_metric_value(monthly_metrics, "active_creators", 257)
+                    # The combined maintenance/rank-up rate is based on the creators
+                    # evaluated in the current Goal Management dataset. The live
+                    # Manage Creators count remains a separate operational metric.
+                    focus_creator_total = len(dashboard_creators)
+                    focus_active_creator_total = monthly_metric_value(monthly_metrics, "active_creators", 257)
                     focus_creator_half_goal = (focus_creator_total + 1) // 2
                     focus_maintaining_or_ranked = dashboard_maintained | dashboard_ranked
                     focus_maintaining_or_ranked_count = int(focus_maintaining_or_ranked.sum())
                     focus_maintaining_or_ranked_pct = (focus_maintaining_or_ranked_count / focus_creator_total * 100) if focus_creator_total else 0.0
+                    focus_maintaining_needed = max(focus_creator_half_goal - focus_maintaining_or_ranked_count, 0)
 
                     def percentage_status(rate):
                         if rate >= 50:
@@ -1184,8 +1186,8 @@ def main():
                     focus_card(focus_four, "Maintenance Level", f"{focus_maintenance_rate:.2f}%", focus_maintenance_color, f"{focus_maintenance_status} • Green at 50%")
                     focus_card(focus_five, "Current Graduation Rate", f"{focus_graduation_rate:.2f}%", focus_graduation_color, f"{focus_reached_count:,} current • 15% goal {focus_graduation_goal:,} • Need {focus_graduation_needed:,} more")
                     focus_six, focus_seven = st.columns(2)
-                    focus_card(focus_six, "Maintaining or Ranking Up", f"{focus_maintaining_or_ranked_pct:.2f}%", focus_combined_color, f"50% goal • {focus_maintaining_or_ranked_count:,} unique creators • Need {focus_creator_half_goal:,} of {focus_creator_total:,}")
-                    focus_card(focus_seven, "Active Creators", f"{focus_creator_total:,}", "#f5c542", "Live count from Manage creators • Updates with Goals")
+                    focus_card(focus_six, "Maintaining or Ranking Up", f"{focus_maintaining_or_ranked_pct:.2f}%", focus_combined_color, f"{focus_maintaining_or_ranked_count:,} of {focus_creator_total:,} • Need {focus_maintaining_needed:,} more • 50% goal ({focus_creator_half_goal:,})")
+                    focus_card(focus_seven, "Active Creators", f"{focus_active_creator_total:,}", "#f5c542", "Live count from Manage creators • Updates with Goals")
                     st.caption(
                         f"Diamond projection uses {focus_elapsed_reporting_days} of "
                         f"{focus_total_reporting_days} reporting days (8:00 PM ET month boundary). "
