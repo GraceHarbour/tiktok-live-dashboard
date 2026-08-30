@@ -1482,27 +1482,27 @@ def main():
                         for name, followers, likes in zip(display_frame["Creator"], follower_values, like_values)
                     ]
                     display_frame = display_frame.drop(columns=["Followers", "Likes"])
-            if source_key == "scouting_applied":
-                application_types = view_rows.loc[display_frame.index, "invitation_type"].fillna("").astype(str)
-                stream_values = pd.to_numeric(view_rows.loc[display_frame.index, "live_streams"], errors="coerce").fillna(0)
-                diamond_values = pd.to_numeric(view_rows.loc[display_frame.index, "diamonds"], errors="coerce").fillna(0)
-                hour_values = pd.to_numeric(view_rows.loc[display_frame.index, "live_hours"], errors="coerce").fillna(0)
-                viewer_values = pd.to_numeric(view_rows.loc[display_frame.index, "avg_live_viewers"], errors="coerce").fillna(0)
-                display_frame = pd.DataFrame({
-                    "Creator": display_frame["Creator"],
-                    "Applied": ["Yes\n" + (value.strip() or "Not available") for value in application_types],
-                    "Last 30 days": [f"{streams:,.0f} LIVE streams • {hours:g} h\n{diamonds:,.0f} Diamonds • {viewers:,.0f} Avg. LIVE viewers" for streams, hours, diamonds, viewers in zip(stream_values, hour_values, diamond_values, viewer_values)],
-                    "Assigned to": view_rows.loc[display_frame.index, "assigned_manager"].fillna("Unassigned").astype(str),
-                }, index=display_frame.index)
-            else:
-                display_frame = pd.DataFrame({
-                    "Creator": display_frame["Creator"],
-                    "Scouting status": view_rows.loc[display_frame.index, "scouting_status"].fillna("").astype(str),
-                    "Invitation type": view_rows.loc[display_frame.index, "invitation_type"].fillna("").astype(str),
-                    "Assigned to": view_rows.loc[display_frame.index, "assigned_manager"].fillna("Unassigned").astype(str),
-                    "Expires": view_rows.loc[display_frame.index, "lead_expiry"].fillna("No expiry").astype(str),
-                }, index=display_frame.index)
-            st.markdown("<div class='gh-scout-table'>" + display_frame.to_html(index=False, escape=True) + "</div>", unsafe_allow_html=True)
+                if source_key == "scouting_applied":
+                    application_types = view_rows.loc[display_frame.index, "invitation_type"].fillna("").astype(str)
+                    stream_values = pd.to_numeric(view_rows.loc[display_frame.index, "live_streams"], errors="coerce").fillna(0)
+                    diamond_values = pd.to_numeric(view_rows.loc[display_frame.index, "diamonds"], errors="coerce").fillna(0)
+                    hour_values = pd.to_numeric(view_rows.loc[display_frame.index, "live_hours"], errors="coerce").fillna(0)
+                    viewer_values = pd.to_numeric(view_rows.loc[display_frame.index, "avg_live_viewers"], errors="coerce").fillna(0)
+                    display_frame = pd.DataFrame({
+                        "Creator": display_frame["Creator"],
+                        "Applied": ["Yes\n" + (value.strip() or "Not available") for value in application_types],
+                        "Last 30 days": [f"{streams:,.0f} LIVE streams • {hours:g} h\n{diamonds:,.0f} Diamonds • {viewers:,.0f} Avg. LIVE viewers" for streams, hours, diamonds, viewers in zip(stream_values, hour_values, diamond_values, viewer_values)],
+                        "Assigned to": view_rows.loc[display_frame.index, "assigned_manager"].fillna("Unassigned").astype(str),
+                    }, index=display_frame.index)
+                else:
+                    display_frame = pd.DataFrame({
+                        "Creator": display_frame["Creator"],
+                        "Scouting status": view_rows.loc[display_frame.index, "scouting_status"].fillna("").astype(str),
+                        "Invitation type": view_rows.loc[display_frame.index, "invitation_type"].fillna("").astype(str),
+                        "Assigned to": view_rows.loc[display_frame.index, "assigned_manager"].fillna("Unassigned").astype(str),
+                        "Expires": view_rows.loc[display_frame.index, "lead_expiry"].fillna("No expiry").astype(str),
+                    }, index=display_frame.index)
+                st.markdown("<div class='gh-scout-table'>" + display_frame.to_html(index=False, escape=True) + "</div>", unsafe_allow_html=True)
 
             applied_scouting_tab, invitation_scouting_tab = st.tabs(["⚡ Applied — Quick Response", "Invitations"])
             with applied_scouting_tab:
