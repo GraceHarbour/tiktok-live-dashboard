@@ -22,6 +22,8 @@ SOURCE_URLS = {
     "creators": "https://live-backstage.tiktok.com/portal/anchor/list",
     "goals": "https://live-backstage.tiktok.com/portal/administration/term-target-management?tab=agent&month={month}",
     "business_essentials": "https://live-backstage.tiktok.com/portal/revenue/business-essentials",
+    "scouting_applied": "https://live-backstage.tiktok.com/portal/anchor/scout-creators",
+    "scouting_invited": "https://live-backstage.tiktok.com/portal/anchor/scout-creators?leadStage=3",
 }
 
 
@@ -266,6 +268,11 @@ def capture_grid(page, source: str, goal_view: str, visible_text: str) -> dict[s
             "Creator", "Diamonds", "Valid go LIVE days", "Valid LIVE duration",
             "Bonus contribution", "Tier", "Activeness",
         ]
+    if source == "scouting_applied":
+        headers = ["Creator", "Applied to join", "Last 30 days data", "Assigned to", "Source", "Leads expire in", "Leads added", "Action"]
+    elif source == "scouting_invited":
+        headers = ["Creator", "Scouting status", "Last 30 days data", "Invitation type", "Assigned to", "Source", "Leads expire in", "Invited at", "Action"]
+
     def read_current_page() -> list[list[str]]:
         current_rows: list[list[str]] = []
         for row in grid.locator('[role="row"], tr, [class*="row"], [class*="Row"]').all():
@@ -296,8 +303,8 @@ def capture_grid(page, source: str, goal_view: str, visible_text: str) -> dict[s
     # edit, export, or portal-changing control. If Backstage changes its
     # pagination markup, this safely keeps the first visible page instead of
     # guessing at a control.
-    if source == "goals" and goal_view == "creators":
-        for _ in range(99):
+    if source in {"goals", "scouting_applied", "scouting_invited"} and (source != "goals" or goal_view == "creators"):
+        for _ in range(199):
             next_button = None
             for selector in (
                 "button[aria-label*='next' i]",
