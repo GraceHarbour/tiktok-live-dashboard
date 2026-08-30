@@ -1049,6 +1049,19 @@ def main():
             dashboard_ranked = dashboard_tier.str.contains("ranked up|ranking up", na=False) | dashboard_rank.str.contains("rank up|ranked up", na=False)
             dashboard_not_maintained = dashboard_tier.str.contains("not maintained|not maintain", na=False) | dashboard_rank.str.contains("not maintained|not maintain", na=False)
             dashboard_new_creators = monthly_metric_value(monthly_metrics, "new_creators", int(numeric_series(dashboard_managers, "new_creators").sum()) if not dashboard_managers.empty else 0)
+            if dashboard_choice == "Agency":
+                with st.container(border=True):
+                    st.subheader("Agency Focus Goals")
+                    focus_total_goal = monthly_metric_value(monthly_metrics, "total_diamond_goal", 0)
+                    focus_minimum_goal = monthly_metric_value(monthly_metrics, "minimum_diamond_goal", 0)
+                    focus_prior_diamonds = monthly_metric_value(monthly_metrics, "prior_month_diamonds", 0)
+                    focus_one, focus_two, focus_three, focus_four = st.columns(4)
+                    focus_one.metric("Total Diamond Goal", f"{focus_total_goal:,}")
+                    focus_two.metric("Minimum Diamond Goal", f"{focus_minimum_goal:,}")
+                    focus_three.metric("Prior Month Diamonds", f"{focus_prior_diamonds:,}")
+                    focus_four.metric("Graduation Focus", "15% minimum")
+                    st.caption("Agency-wide monthly focus goals. These cards are hidden in manager views.")
+
             st.subheader("Goal Management overview")
             a, b, c, d = st.columns(4)
             a.metric("Creators", f"{len(dashboard_creators):,}")
