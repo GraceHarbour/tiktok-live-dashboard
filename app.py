@@ -453,6 +453,16 @@ def numeric_series(frame, column):
 
 
 
+def monthly_metric_value(metrics, name, default=0):
+    if metrics.empty or "metric_name" not in metrics.columns or "metric_value" not in metrics.columns:
+        return default
+    matching = metrics[metrics["metric_name"].fillna("").astype(str).str.casefold() == str(name).casefold()]
+    if matching.empty:
+        return default
+    return int(pd.to_numeric(matching["metric_value"], errors="coerce").fillna(default).iloc[-1])
+
+
+
 
 
 
@@ -900,7 +910,7 @@ def main():
             dashboard_maintained = dashboard_tier.str.contains("maintained|maintain", na=False) | dashboard_rank.str.contains("maintain", na=False)
             dashboard_ranked = dashboard_tier.str.contains("ranked up|ranking up", na=False) | dashboard_rank.str.contains("rank up|ranked up", na=False)
             dashboard_not_maintained = dashboard_tier.str.contains("not maintained|not maintain", na=False) | dashboard_rank.str.contains("not maintained|not maintain", na=False)
-            dashboard_new_creators = int(numeric_series(dashboard_managers, "new_creators").sum()) if not dashboard_managers.empty else 0
+            dashboard_new_creators = monthly_metric_value(monthly_metrics, "new_creators", int(numeric_series(dashboard_managers, "new_creators").sum()) if not dashboard_managers.empty else 0)
             st.subheader("Goal Management overview")
             a, b, c, d = st.columns(4)
             a.metric("Creators", f"{len(dashboard_creators):,}")
@@ -1001,7 +1011,7 @@ def main():
             maintained = int((tier_text.str.contains("maintain") | rank_text.str.contains("maintain")).sum())
             above_200k = int((visible_diamonds >= 200000).sum())
             selected_manager_rows = managers if goal_manager_choice == "All managers" else managers[managers["_manager"] == goal_manager_choice]
-            new_creators = int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0
+            new_creators = monthly_metric_value(monthly_metrics, "new_creators", int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0)
             not_maintained_text = tier_text.str.contains("not maintained") | rank_text.str.contains("not maintained")
             
             ranked_mask = tier_text.str.contains("rank") | rank_text.str.contains("rank")
@@ -1011,7 +1021,7 @@ def main():
             not_maintained_mask = not_maintained_text | ~(ranked_mask | maintained_mask)
             above_200k = int((visible_diamonds >= 200000).sum())
             selected_manager_rows = managers if goal_manager_choice == "All managers" else managers[managers["_manager"] == goal_manager_choice]
-            new_creators = int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0
+            new_creators = monthly_metric_value(monthly_metrics, "new_creators", int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0)
 
             first, second, third, fourth = st.columns(4)
             first.metric("Creators", f"{len(visible):,}")
