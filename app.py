@@ -949,12 +949,17 @@ def main():
             tier_source = creators.get("tier_status", pd.Series("", index=creators.index)).fillna("").astype(str)
             tier_levels = (tier_source.str.extract(r"(?i)(tier\s*\d+)")[0].dropna().str.replace(r"\s+", " ", regex=True).str.title().drop_duplicates().sort_values().tolist())
             goal_tier_choice = goal_filter_right.selectbox("Tier level", ["All tiers", *tier_levels], key="goal_management_tier_filter")
+            goal_creator_search = st.text_input("Search creators", placeholder="Type a creator name or username", key="goal_management_creator_search").strip()
             visible = creators.copy()
             if goal_manager_choice != "All managers":
                 visible = visible[visible["_manager"] == goal_manager_choice].copy()
             if goal_tier_choice != "All tiers":
                 visible_tiers = (visible.get("tier_status", pd.Series("", index=visible.index)).fillna("").astype(str).str.extract(r"(?i)(tier\s*\d+)")[0].fillna("").str.replace(r"\s+", " ", regex=True).str.title())
                 visible = visible[visible_tiers == goal_tier_choice].copy()
+            if goal_creator_search:
+                searchable_creator = visible.get("username", pd.Series("", index=visible.index)).fillna("").astype(str)
+                searchable_creator = searchable_creator + " " + visible.get("creator_id", pd.Series("", index=visible.index)).fillna("").astype(str)
+                visible = visible[searchable_creator.str.contains(re.escape(goal_creator_search), case=False, na=False)].copy()
             visible_diamonds = numeric_series(visible, "diamonds")
             tier_text = visible.get("tier_status", pd.Series("", index=visible.index)).fillna("").astype(str).str.lower()
             rank_text = visible.get("rank_up_progress", pd.Series("", index=visible.index)).fillna("").astype(str).str.lower()
