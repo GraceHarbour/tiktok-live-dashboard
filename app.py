@@ -1043,7 +1043,7 @@ def main():
             k.metric("Quit rate", f"{(dashboard_quit / len(dashboard_stability) * 100) if len(dashboard_stability) else 0:.2f}%")
             l, m, n, o = st.columns(4)
             l.metric("Reached graduation", f"{dashboard_reached_count:,}")
-            m.metric("Graduation rate", f"{(dashboard_reached_count / len(dashboard_graduation) * 100) if len(dashboard_graduation) else 0:.2f}%")
+            m.metric("Graduation rate", f"{(dashboard_reached_count / len(dashboard_graduation) * 100) if len(dashboard_graduation) else 0:.2f}%", delta="Goal: 15% minimum", delta_color="normal")
             n.metric("Premium Invite Graduates", f"{dashboard_reward_completed:,} / {len(dashboard_reward):,}")
             o.metric("Creators with Extra Reward", f"{len(dashboard_reward):,}")
 
