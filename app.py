@@ -1484,28 +1484,67 @@ def main():
                     st.error("The access list could not be updated. Please try again.")
 
             st.subheader("Current access")
+            st.caption("Change a role, remove access, or restore a previously removed account. Changes are saved immediately.")
             active_people = access_view[access_view["active"]].copy() if not access_view.empty else pd.DataFrame()
+            role_labels = {"member": "User — view dashboard", "admin": "Administrator — manage access", "owner": "Owner — full control"}
+            manageable_roles = ["member", "admin"] + (["owner"] if actor_role == "owner" else [])
             if active_people.empty:
                 st.info("No active approved accounts are listed yet.")
             else:
                 for _, person in active_people.sort_values(["role", "email"]).iterrows():
-                    left, middle, right = st.columns([4, 2, 2])
-                    left.write(str(person["email"]))
-                    middle.write(str(person["role"]).title())
-                    is_self = str(person["email"]) == signed_in_email
+                    person_email = str(person["email"])
+                    person_role = str(person["role"]).casefold()
+                    left, middle, save_col, remove_col = st.columns([4, 3, 1.2, 1.2])
+                    left.write(person_email)
+                    is_self = person_email == signed_in_email
                     if is_self:
-                        right.caption("Current account")
-                    elif right.button("Remove", key=f"remove_access_{person['email']}"):
-                        try:
-                            deactivate_access_person(str(person["email"]))
-                            st.rerun()
-                        except Exception:
-                            st.error("That account could not be removed. Please try again.")
+                        middle.write("Owner — current account")
+                        save_col.caption("Protected")
+                        remove_col.caption("Current account")
+                    else:
+                        selected_role = middle.selectbox(
+                            "Role",
+                            manageable_roles,
+                            index=manageable_roles.index(person_role) if person_role in manageable_roles else 0,
+                            format_func=lambda role: role_labels[role],
+                            key=f"access_role_{person_email}",
+                            label_visibility="collapsed",
+                        )
+                        if save_col.button("Save", key=f"save_access_{person_email}"):
+                            try:
+                                save_access_person(person_email, selected_role)
+                                st.success(f"Updated {person_email}.")
+                                st.rerun()
+                            except Exception:
+                                st.error("That account could not be updated. Please try again.")
+                        if remove_col.button("Remove", key=f"remove_access_{person_email}"):
+                            try:
+                                deactivate_access_person(person_email)
+                                st.rerun()
+                            except Exception:
+                                st.error("That account could not be removed. Please try again.")
 
             inactive_people = access_view[~access_view["active"]].copy() if not access_view.empty else pd.DataFrame()
             if not inactive_people.empty:
                 with st.expander("Removed accounts"):
-                    render_read_table(inactive_people[["email", "role", "updated_at"]])
+                    st.caption("Restore an account when it should have dashboard access again.")
+                    for _, person in inactive_people.sort_values(["role", "email"]).iterrows():
+                        removed_email = str(person["email"])
+                        restore_left, restore_role, restore_action = st.columns([4, 3, 1.5])
+                        restore_left.write(removed_email)
+                        restore_choice = restore_role.selectbox(
+                            "Role", manageable_roles,
+                            index=manageable_roles.index(str(person["role"]).casefold()) if str(person["role"]).casefold() in manageable_roles else 0,
+                            format_func=lambda role: role_labels[role],
+                            key=f"restore_role_{removed_email}", label_visibility="collapsed",
+                        )
+                        if restore_action.button("Restore", key=f"restore_access_{removed_email}"):
+                            try:
+                                save_access_person(removed_email, restore_choice)
+                                st.success(f"Restored {removed_email}.")
+                                st.rerun()
+                            except Exception:
+                                st.error("That account could not be restored. Please try again.")
 
 
 if __name__ == "__main__":
