@@ -808,7 +808,7 @@ def render_read_table(frame: pd.DataFrame, *, height: int | None = None) -> None
     visible = frame.copy().fillna("")
     max_height = f"max-height: {height}px;" if height else "max-height: 760px;"
     html_table = visible.to_html(index=False, escape=True, classes="gh-data-table")
-    st.markdown(f'<div class="gh-data-panel" style="{max_height}">{html_table}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="gh-data-panel" tabindex="0" aria-label="Scrollable creator data table" style="{max_height}">{html_table}</div>', unsafe_allow_html=True)
 
 
 def main():
@@ -882,6 +882,13 @@ def main():
         .gh-data-panel tr:nth-child(even) td { background: rgba(42,75,140,.24); }
         .gh-data-panel td:not(:first-child) { color: #ffe36a; font-size: 1.25rem; font-weight: 900; text-shadow: 0 0 10px rgba(245,197,66,.24); }
         .gh-data-panel td:first-child { color: #ffffff; font-size: 1.16rem; font-weight: 800; }
+        .gh-data-panel { scrollbar-color: #ffd95a #071a3a; scrollbar-width: auto; }
+        .gh-data-panel::-webkit-scrollbar { width: 18px; height: 18px; }
+        .gh-data-panel::-webkit-scrollbar-track { background: #071a3a; border-left: 1px solid rgba(245,197,66,.42); }
+        .gh-data-panel::-webkit-scrollbar-thumb { background: linear-gradient(#ffe889,#b87d13); border: 3px solid #071a3a; border-radius: 12px; min-height: 54px; }
+        .gh-data-panel::-webkit-scrollbar-thumb:hover { background: #fff2a8; }
+        .gh-data-panel:focus { outline: 3px solid #ffe889; outline-offset: 3px; }
+        .gh-data-panel td { cursor: pointer; }
         </style>
         """,
         unsafe_allow_html=True,
