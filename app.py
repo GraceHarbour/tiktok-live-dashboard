@@ -863,7 +863,7 @@ def main():
         [data-testid="stMarkdownContainer"] hr { border-color: rgba(245,197,66,.32) !important; }
 
         .stApp, [data-testid="stMarkdownContainer"], [data-testid="stDataFrame"], [data-testid="stDataFrame"] *, [data-testid="stFileUploader"], [data-testid="stFileUploader"] *, [data-baseweb="select"], [data-baseweb="select"] *, [data-testid="stTextInput"] input, [data-testid="stButton"] button { font-size: 1.06rem !important; }
-        [data-testid="stMetricLabel"] { font-size: 1.12rem !important; }
+        [data-testid="stMetricLabel"] { font-size: 1.02rem !important; }
         [data-testid="stMetricValue"] { font-size: 2.15rem !important; }
         /* Creator data boxes: larger numeric values, roomier rows, and a usable read area. */
         [data-testid="stDataFrame"] { min-height: 520px !important; padding: .65rem !important; }
@@ -874,7 +874,7 @@ def main():
         .gh-scout-table td { padding: .95rem .9rem !important; line-height: 1.45 !important; }
         .gh-scout-table td:not(:first-child) { color: #ffe36a !important; font-size: 1.3rem !important; font-weight: 900 !important; letter-spacing: .01em; text-shadow: 0 0 10px rgba(245,197,66,.28); }
         .gh-scout-table td:first-child { color: #ffffff !important; font-weight: 800 !important; }
-        [data-testid="stMetricValue"] { font-size: clamp(3.6rem, 5.5vw, 5rem) !important; line-height: 1.05 !important; font-weight: 900 !important; letter-spacing: .015em; text-shadow: 0 0 18px rgba(245,197,66,.48); }
+        [data-testid="stMetricValue"] { font-size: clamp(4.6rem, 7vw, 6.4rem) !important; line-height: .98 !important; font-weight: 900 !important; letter-spacing: .01em; text-shadow: 0 0 24px rgba(245,197,66,.62); }
         .gh-data-panel { min-height: 470px; overflow: auto; border: 1px solid rgba(245,197,66,.55); border-radius: 14px; background: linear-gradient(145deg, rgba(18,48,109,.92), rgba(3,8,23,.96)); box-shadow: inset 0 0 28px rgba(0,0,0,.28); }
         .gh-data-panel table { width: 100%; border-collapse: collapse; color: #f5f8ff; font-size: 1.12rem; }
         .gh-data-panel th { position: sticky; top: 0; z-index: 1; padding: 1rem .9rem; text-align: left; background: #12376f; color: #fff3ad; font-size: 1.16rem; font-weight: 900; white-space: nowrap; border-bottom: 2px solid rgba(245,197,66,.55); }
