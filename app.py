@@ -800,6 +800,17 @@ def save_shared_prior_month(file_name, sheet_name, columns, frame):
 
 
 
+def render_read_table(frame: pd.DataFrame, *, height: int | None = None) -> None:
+    """Render dashboard data as a high-contrast, readable table instead of Streamlit's white grid."""
+    if frame is None or frame.empty:
+        st.info("No records match this view.")
+        return
+    visible = frame.copy().fillna("")
+    max_height = f"max-height: {height}px;" if height else "max-height: 760px;"
+    html_table = visible.to_html(index=False, escape=True, classes="gh-data-table")
+    st.markdown(f'<div class="gh-data-panel" style="{max_height}">{html_table}</div>', unsafe_allow_html=True)
+
+
 def main():
     st.markdown(
         """
@@ -863,6 +874,14 @@ def main():
         .gh-scout-table td { padding: .95rem .9rem !important; line-height: 1.45 !important; }
         .gh-scout-table td:not(:first-child) { color: #ffe36a !important; font-size: 1.3rem !important; font-weight: 900 !important; letter-spacing: .01em; text-shadow: 0 0 10px rgba(245,197,66,.28); }
         .gh-scout-table td:first-child { color: #ffffff !important; font-weight: 800 !important; }
+        [data-testid="stMetricValue"] { font-size: 2.8rem !important; font-weight: 900 !important; letter-spacing: .015em; text-shadow: 0 0 14px rgba(245,197,66,.35); }
+        .gh-data-panel { min-height: 470px; overflow: auto; border: 1px solid rgba(245,197,66,.55); border-radius: 14px; background: linear-gradient(145deg, rgba(18,48,109,.92), rgba(3,8,23,.96)); box-shadow: inset 0 0 28px rgba(0,0,0,.28); }
+        .gh-data-panel table { width: 100%; border-collapse: collapse; color: #f5f8ff; font-size: 1.12rem; }
+        .gh-data-panel th { position: sticky; top: 0; z-index: 1; padding: 1rem .9rem; text-align: left; background: #12376f; color: #fff3ad; font-size: 1.16rem; font-weight: 900; white-space: nowrap; border-bottom: 2px solid rgba(245,197,66,.55); }
+        .gh-data-panel td { padding: 1rem .9rem; line-height: 1.45; border-top: 1px solid rgba(245,197,66,.18); vertical-align: top; }
+        .gh-data-panel tr:nth-child(even) td { background: rgba(42,75,140,.24); }
+        .gh-data-panel td:not(:first-child) { color: #ffe36a; font-size: 1.25rem; font-weight: 900; text-shadow: 0 0 10px rgba(245,197,66,.24); }
+        .gh-data-panel td:first-child { color: #ffffff; font-size: 1.16rem; font-weight: 800; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -1101,11 +1120,7 @@ def main():
                     if frame.empty:
                         st.caption(empty_message)
                     else:
-                        st.dataframe(
-                            creator_goal_display(frame, include_manager=include_manager),
-                            use_container_width=True,
-                            hide_index=True,
-                        )
+                        render_read_table(creator_goal_display(frame, include_manager=include_manager))
 
             selection_label = "all managers" if goal_manager_choice == "All managers" else goal_manager_choice
             st.caption(f"Showing every current Goal Management field for {selection_label}.")
@@ -1154,7 +1169,7 @@ def main():
                 else:
                     display_frame = shared_frame
                     st.caption("This published file has no Manager column to filter yet.")
-                st.dataframe(display_frame[shared_columns], use_container_width=True, hide_index=True, height=720)
+                render_read_table(display_frame[shared_columns], height=720)
             else:
                 st.info("The shared file has no selected display columns yet.")
         else:
@@ -1180,7 +1195,7 @@ def main():
                 if uploaded_manager_column and uploaded_manager_column not in selected_columns:
                     selected_columns.append(uploaded_manager_column)
                 if selected_columns:
-                    st.dataframe(prior_data[selected_columns], use_container_width=True, hide_index=True)
+                    render_read_table(prior_data[selected_columns])
                     if st.button("Publish shared prior-month view", type="primary"):
                         save_shared_prior_month(prior_file.name, selected_sheet, selected_columns, prior_data[selected_columns])
                         load_shared_prior_month.clear()
@@ -1258,7 +1273,7 @@ def main():
                 section_rows = visible_business[section_series == section_name].copy()
                 with st.container(border=True):
                     st.markdown(f"### {section_name}")
-                    st.dataframe(section_rows.drop(columns=["Section"], errors="ignore"), use_container_width=True, hide_index=True)
+                    render_read_table(section_rows.drop(columns=["Section"], errors="ignore"))
 
     with maintenance_tab:
         st.subheader("Maintenance Rate")
@@ -1314,7 +1329,7 @@ def main():
                     "Status": status,
                 })
 
-            st.dataframe(pd.DataFrame(clean_rows), use_container_width=True, hide_index=True, height=720)
+            render_read_table(pd.DataFrame(clean_rows), height=720)
         else:
             st.info("Maintenance source pages have not supplied a complete read yet. The dashboard remains online, and these boxes will populate automatically as soon as the scheduled maintenance reader imports its next complete run.")
 
@@ -1369,7 +1384,7 @@ def main():
                         .agg(Creators=("username", "count"), LIVE_streams=("live_streams", "sum"), Diamonds=("diamonds", "sum"))
                         .reset_index().rename(columns={"assigned_manager": "Manager", "LIVE_streams": "LIVE streams"})
                         .sort_values(["Creators", "Manager"], ascending=[False, True]))
-                    st.dataframe(manager_summary, use_container_width=True, hide_index=True)
+                    render_read_table(manager_summary)
                 st.markdown(f"#### {scouting_view}")
                 search_scout = st.text_input("Search creators", key=f"scouting_search_{source_key}")
                 if search_scout:
@@ -1471,7 +1486,7 @@ def main():
             inactive_people = access_view[~access_view["active"]].copy() if not access_view.empty else pd.DataFrame()
             if not inactive_people.empty:
                 with st.expander("Removed accounts"):
-                    st.dataframe(inactive_people[["email", "role", "updated_at"]], use_container_width=True, hide_index=True)
+                    render_read_table(inactive_people[["email", "role", "updated_at"]])
 
 
 if __name__ == "__main__":
