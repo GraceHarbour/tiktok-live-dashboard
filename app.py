@@ -856,6 +856,11 @@ def main():
         [data-testid="stMetricValue"] { font-size: 2.15rem !important; }
         [data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [role="columnheader"] * { font-size: 1.1rem !important; font-weight: 800 !important; }
         [data-testid="stDataFrame"] [role="gridcell"], [data-testid="stDataFrame"] [role="gridcell"] * { font-size: 1.02rem !important; }
+
+        [data-testid="stMetric"] { min-height: 154px !important; padding: 1.35rem 1.25rem !important; display: flex !important; flex-direction: column !important; justify-content: center !important; }
+        [data-testid="stMetricLabel"] { margin-bottom: .55rem !important; }
+        .gh-scout-hero { padding: 1.65rem 1.75rem !important; min-height: 126px; }
+        [data-testid="stExpander"], [data-testid="stForm"], [data-testid="stFileUploader"], [data-testid="stAlert"] { padding: 1.2rem !important; min-height: 88px; }
         </style>
         """,
         unsafe_allow_html=True,
