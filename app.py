@@ -871,6 +871,19 @@ def render_read_table(frame: pd.DataFrame, *, height: int | None = None) -> None
     st.markdown(f'<div class="gh-data-panel" tabindex="0" aria-label="Scrollable creator data table" style="{max_height}">{html_table}</div>', unsafe_allow_html=True)
 
 
+def download_frame_csv(frame: pd.DataFrame, label: str, file_name: str, key: str) -> None:
+    """Download exactly the rows and columns shown in the current filtered data box."""
+    export = frame.copy().fillna("")
+    st.download_button(
+        label,
+        data=export.to_csv(index=False).encode("utf-8-sig"),
+        file_name=file_name,
+        mime="text/csv",
+        key=key,
+        use_container_width=False,
+    )
+
+
 def main():
     st.markdown(
         """
@@ -937,6 +950,7 @@ def main():
         .react-aria-ComboBox button svg, .react-aria-ComboBox button svg path { color: #ffffff !important; fill: #ffffff !important; }
         .react-aria-ComboBox button svg path:first-child { fill: none !important; }
         [data-testid="stButton"] button { background: linear-gradient(135deg,#133b80,#512d92) !important; color: #fff6c9 !important; border: 1px solid rgba(245,197,66,.62) !important; font-weight: 800 !important; }
+        [data-testid="stDownloadButton"] button { background: linear-gradient(135deg,#0b3474,#1555a5) !important; color: #ffffff !important; border: 1px solid rgba(245,197,66,.62) !important; font-weight: 900 !important; }
         [data-testid="stButton"] button:hover { border-color: #ffe892 !important; box-shadow: 0 0 15px rgba(245,197,66,.35) !important; }
         [data-testid="stMarkdownContainer"] hr { border-color: rgba(245,197,66,.32) !important; }
 
@@ -1416,7 +1430,10 @@ def main():
                     if frame.empty:
                         st.caption(empty_message)
                     else:
-                        render_read_table(creator_goal_display(frame, include_manager=include_manager))
+                        goal_export = creator_goal_display(frame, include_manager=include_manager)
+                        goal_slug = re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-")
+                        download_frame_csv(goal_export, f"Download {title}", f"goal-management-{goal_slug}.csv", f"goal_download_{goal_slug}")
+                        render_read_table(goal_export)
 
             selection_label = "all managers" if goal_manager_choice == "All managers" else goal_manager_choice
             st.caption(f"Showing every current Goal Management field for {selection_label}.")
@@ -1613,7 +1630,10 @@ def main():
                 section_rows = visible_business[section_series == section_name].copy()
                 with st.container(border=True):
                     st.markdown(f"### {section_name}")
-                    render_read_table(section_rows.drop(columns=["Section"], errors="ignore"))
+                    business_export = section_rows.drop(columns=["Section"], errors="ignore")
+                    business_slug = re.sub(r"[^a-z0-9]+", "-", section_name.casefold()).strip("-")
+                    download_frame_csv(business_export, f"Download {section_name}", f"business-essentials-{business_slug}.csv", f"business_download_{business_slug}")
+                    render_read_table(business_export)
 
     with maintenance_tab:
         st.subheader("Maintenance Rate")
