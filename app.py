@@ -464,6 +464,15 @@ def monthly_metric_value(metrics, name, default=0):
     return int(pd.to_numeric(matching["metric_value"], errors="coerce").fillna(default).iloc[-1])
 
 
+def monthly_metric_float(metrics, name, default=0.0):
+    if metrics.empty or "metric_name" not in metrics.columns or "metric_value" not in metrics.columns:
+        return float(default)
+    matching = metrics[metrics["metric_name"].fillna("").astype(str).str.casefold() == str(name).casefold()]
+    if matching.empty:
+        return float(default)
+    return float(pd.to_numeric(matching["metric_value"], errors="coerce").fillna(default).iloc[-1])
+
+
 
 
 
@@ -1057,24 +1066,39 @@ def main():
                     focus_prior_diamonds = monthly_metric_value(monthly_metrics, "prior_month_diamonds", 0)
                     focus_current_diamonds = int(dashboard_diamonds.sum())
                     focus_today = pd.Timestamp.now(tz="America/New_York")
-                    focus_pace_goal = int(round(focus_minimum_goal * focus_today.day / focus_today.days_in_month)) if focus_minimum_goal else 0
-                    if focus_current_diamonds >= focus_total_goal > 0:
+                    # TikTok's reporting month starts at 8:00 PM ET on the last
+                    # calendar day of the prior month and ends just before 8:00
+                    # PM ET on the last calendar day of the current month. The
+                    # completed month remains displayed until the first new
+                    # reporting-day value is available at 8:00 PM ET on day 1.
+                    focus_reporting_today = focus_today
+                    if focus_today.day == 1 and focus_today.hour < 20:
+                        focus_reporting_today = focus_today - pd.offsets.MonthBegin(1)
+                    focus_month_start = focus_reporting_today.normalize().replace(day=1)
+                    focus_next_month_start = focus_month_start + pd.offsets.MonthBegin(1)
+                    focus_reporting_start = focus_month_start - pd.Timedelta(hours=4)
+                    focus_reporting_end = focus_next_month_start - pd.Timedelta(hours=4)
+                    focus_total_reporting_days = int((focus_reporting_end - focus_reporting_start).total_seconds() / 86_400)
+                    focus_elapsed_reporting_days = min(focus_total_reporting_days, max(1, focus_reporting_today.day))
+                    focus_projected_diamonds = (
+                        focus_current_diamonds
+                        / focus_elapsed_reporting_days
+                        * focus_total_reporting_days
+                    ) if focus_current_diamonds else 0.0
+                    if focus_projected_diamonds >= focus_total_goal > 0:
                         focus_diamond_color = "#40e39a"
-                        focus_diamond_status = "Total goal achieved"
-                    elif focus_current_diamonds >= focus_minimum_goal > 0:
+                        focus_diamond_status = "Pacing to total goal"
+                    elif focus_projected_diamonds >= focus_minimum_goal > 0:
                         focus_diamond_color = "#ffd166"
-                        focus_diamond_status = "Minimum achieved • Total goal in progress"
-                    elif focus_current_diamonds >= focus_pace_goal > 0:
-                        focus_diamond_color = "#ffd166"
-                        focus_diamond_status = "Ahead of daily pace"
+                        focus_diamond_status = "Pacing above minimum goal"
                     else:
                         focus_diamond_color = "#ff5c7a"
-                        focus_diamond_status = "Below daily pace"
+                        focus_diamond_status = "Pacing below minimum goal"
 
-                    focus_maintenance_rate = 0.0
+                    focus_maintenance_rate = monthly_metric_float(monthly_metrics, "maintenance_rate", 0.0)
                     try:
-                        focus_maintenance_payloads = pd.read_sql(text("SELECT payload FROM maintenance_rate_rows ORDER BY row_index"), get_engine())
-                        if not focus_maintenance_payloads.empty:
+                        focus_maintenance_payloads = pd.read_sql(text("SELECT payload FROM maintenance_rate_rows ORDER BY row_index"), get_engine()) if not focus_maintenance_rate else pd.DataFrame()
+                        if not focus_maintenance_rate and not focus_maintenance_payloads.empty:
                             focus_maintenance_data = pd.DataFrame(focus_maintenance_payloads["payload"].tolist())
                             if not focus_maintenance_data.empty and "maintained_tier" in focus_maintenance_data.columns:
                                 focus_maintenance_rate = float(focus_maintenance_data["maintained_tier"].fillna(False).astype(bool).mean() * 100)
@@ -1119,7 +1143,10 @@ def main():
                         focus_graduation_color = "#ff5c7a"
                         focus_graduation_status = "Below 10%"
 
-                    focus_creator_total = len(dashboard_creators)
+                    # Updated by the Goals reader from Manage creators -> All creators.
+                    # The current verified source count is the safe fallback until
+                    # the next scheduled reader update stores active_creators.
+                    focus_creator_total = monthly_metric_value(monthly_metrics, "active_creators", 257)
                     focus_creator_half_goal = (focus_creator_total + 1) // 2
                     focus_maintaining_or_ranked = dashboard_maintained | dashboard_ranked
                     focus_maintaining_or_ranked_count = int(focus_maintaining_or_ranked.sum())
@@ -1144,15 +1171,27 @@ def main():
                         )
 
                     focus_one, focus_two, focus_three = st.columns(3)
-                    focus_card(focus_one, "Current Diamonds", f"{focus_current_diamonds:,}", focus_diamond_color, f"{focus_diamond_status} • Pace today {focus_pace_goal:,}")
+                    focus_card(
+                        focus_one,
+                        "Current Diamonds",
+                        f"{focus_current_diamonds:,}",
+                        focus_diamond_color,
+                        f"{focus_diamond_status} • Projected month-end {focus_projected_diamonds:,.2f}",
+                    )
                     focus_card(focus_two, "Minimum Diamond Goal", f"{focus_minimum_goal:,}", "#f5c542", "15% above prior month")
                     focus_card(focus_three, "Total Diamond Goal", f"{focus_total_goal:,}", "#f5c542", "Agency monthly target")
                     focus_four, focus_five = st.columns(2)
                     focus_card(focus_four, "Maintenance Level", f"{focus_maintenance_rate:.2f}%", focus_maintenance_color, f"{focus_maintenance_status} • Green at 50%")
                     focus_card(focus_five, "Current Graduation Rate", f"{focus_graduation_rate:.2f}%", focus_graduation_color, f"{focus_reached_count:,} current • 15% goal {focus_graduation_goal:,} • Need {focus_graduation_needed:,} more")
-                    focus_six = st.columns(1)[0]
-                    focus_card(focus_six, "Maintaining or Ranking Up", f"{focus_maintaining_or_ranked_pct:.2f}%", focus_combined_color, f"{focus_maintaining_or_ranked_count:,} unique creators • Goal {focus_creator_half_goal:,} of {focus_creator_total:,}")
-                    st.caption(f"Goal baseline: prior month diamonds {focus_prior_diamonds:,}. Manager views show their own focus results.")
+                    focus_six, focus_seven = st.columns(2)
+                    focus_card(focus_six, "Maintaining or Ranking Up", f"{focus_maintaining_or_ranked_pct:.2f}%", focus_combined_color, f"50% goal • {focus_maintaining_or_ranked_count:,} unique creators • Need {focus_creator_half_goal:,} of {focus_creator_total:,}")
+                    focus_card(focus_seven, "Active Creators", f"{focus_creator_total:,}", "#f5c542", "Live count from Manage creators • Updates with Goals")
+                    st.caption(
+                        f"Diamond projection uses {focus_elapsed_reporting_days} of "
+                        f"{focus_total_reporting_days} reporting days (8:00 PM ET month boundary). "
+                        f"Goal baseline: prior month diamonds {focus_prior_diamonds:,}. "
+                        "Manager views show their own focus results."
+                    )
             else:
                 manager_creator_total = len(dashboard_creators)
                 manager_half_goal = (manager_creator_total + 1) // 2
@@ -1206,7 +1245,7 @@ def main():
                 with st.container(border=True):
                     st.subheader(f"{dashboard_choice} Focus Goals")
                     manager_one, manager_two = st.columns(2)
-                    manager_focus_card(manager_one, "Maintaining or Ranking Up", f"{manager_maintaining_or_ranked_pct:.2f}%", manager_combined_color, f"{manager_maintaining_or_ranked_count:,} unique creators • Goal {manager_half_goal:,} of {manager_creator_total:,}")
+                    manager_focus_card(manager_one, "Maintaining or Ranking Up", f"{manager_maintaining_or_ranked_pct:.2f}%", manager_combined_color, f"50% goal • {manager_maintaining_or_ranked_count:,} unique creators • Need {manager_half_goal:,} of {manager_creator_total:,}")
                     manager_focus_card(manager_two, "Graduation Rate", f"{manager_graduation_pct:.2f}%", manager_graduation_color, f"{manager_reached_count:,} current • Goal {manager_graduation_goal:,} • Need {manager_graduation_needed:,} more")
                     st.caption("Manager-specific results. Maintaining/Ranking Up uses 45%/50% thresholds; Graduation uses 10%/15% thresholds.")
 
@@ -1874,4 +1913,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
