@@ -839,6 +839,17 @@ def main():
         .gh-scout-table th { color: #fff1a5; background: rgba(21,61,117,.85); text-align: left; padding: .7rem .55rem; white-space: nowrap; }
         .gh-scout-table td { border-top: 1px solid rgba(245,197,66,.18); padding: .55rem; vertical-align: top; }
         .gh-scout-table tr:nth-child(even) td { background: rgba(31,58,110,.20); }
+
+        [data-testid="stExpander"], [data-testid="stFileUploader"], [data-testid="stForm"], [data-testid="stAlert"] { background: linear-gradient(145deg,rgba(18,48,109,.72),rgba(4,12,31,.92)) !important; border: 1px solid rgba(245,197,66,.32) !important; border-radius: 12px !important; color: #f5f8ff !important; }
+        [data-testid="stFileUploader"] section { background: rgba(3,8,23,.75) !important; border: 1px dashed rgba(245,197,66,.52) !important; }
+        [data-testid="stFileUploader"] small, [data-testid="stAlert"] * { color: #eef4ff !important; }
+        [data-testid="stDataFrame"] { background: #071a3a !important; border: 1px solid rgba(245,197,66,.48) !important; border-radius: 12px !important; padding: .15rem !important; }
+        [data-testid="stDataFrame"] > div, [data-testid="stDataFrame"] [role="grid"], [data-testid="stDataFrame"] canvas { background-color: #071a3a !important; }
+        [data-baseweb="select"] > div, [data-baseweb="input"] > div, [data-testid="stTextInput"] input { background: #071a3a !important; color: #fff !important; border-color: rgba(245,197,66,.48) !important; }
+        [data-baseweb="select"] * { color: #fff !important; }
+        [data-testid="stButton"] button { background: linear-gradient(135deg,#133b80,#512d92) !important; color: #fff6c9 !important; border: 1px solid rgba(245,197,66,.62) !important; font-weight: 800 !important; }
+        [data-testid="stButton"] button:hover { border-color: #ffe892 !important; box-shadow: 0 0 15px rgba(245,197,66,.35) !important; }
+        [data-testid="stMarkdownContainer"] hr { border-color: rgba(245,197,66,.32) !important; }
         </style>
         """,
         unsafe_allow_html=True,
