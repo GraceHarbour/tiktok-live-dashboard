@@ -1,4 +1,4 @@
-import base64
+
 import io
 import json
 import os
@@ -1469,7 +1469,7 @@ def main():
                 display_frame = view_rows[[column for column in display_columns if column in view_rows.columns]].rename(columns=labels)
                 st.markdown('<div class="gh-scout-table">' + display_frame.to_html(index=False, escape=True) + '</div>', unsafe_allow_html=True)
 
-            applied_scouting_tab, invitation_scouting_tab = st.tabs(["Applied", "Invitations"])
+            applied_scouting_tab, invitation_scouting_tab = st.tabs(["⚡ Applied — Quick Response", "Invitations"])
             with applied_scouting_tab:
                 render_scouting_source("scouting_applied", "Applied")
             with invitation_scouting_tab:
