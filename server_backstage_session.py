@@ -177,6 +177,11 @@ def main() -> int:
                     page.wait_for_timeout(1_000)
                 if not creator_grid_ready:
                     raise RuntimeError("The Backstage Creator table did not finish loading before capture.")
+            if args.source.startswith("scouting_"):
+                for _ in range(45):
+                    if page.locator('[role="row"]').count() and "Showing" in page.locator("body").inner_text():
+                        break
+                    page.wait_for_timeout(1_000)
             page.wait_for_timeout(1000)
             visible_text = page.locator("body").inner_text(timeout=15_000)
 
