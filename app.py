@@ -950,7 +950,13 @@ def main():
         .st-key-dashboard_manager_filter [data-baseweb="select"] [role="combobox"], .st-key-dashboard_manager_filter [data-baseweb="select"] [role="combobox"] * { color: #ffffff !important; font-size: 1.2rem !important; font-weight: 900 !important; }
         /* The number itself inside each dashboard summary card. */
         [data-testid="stMetricValue"], [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] div, [data-testid="stMetricValue"] span, [data-testid="stMetricValue"] p { font-size: clamp(2.2rem, 3.1vw, 2.7rem) !important; line-height: 1.05 !important; color: #ffe36a !important; font-weight: 900 !important; text-shadow: 0 0 12px rgba(245,197,66,.42) !important; }
-        [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * { font-size: 1rem !important; opacity: .88 !important; }
+        955
+
+                /* Keep colored data cards; restore normal typography. */
+        .stApp, [data-testid="stMarkdownContainer"], [data-testid="stDataFrame"] * { font-size: 1rem !important; }
+        [data-testid="stMetricValue"], [data-testid="stMetricValue"] * { font-size: 2rem !important; line-height: 1.08 !important; }
+        [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * { font-size: .9rem !important; font-weight: 700 !important; }
+        [data-testid="stDataFrame"] [role="columnheader"] *, [data-testid="stDataFrame"] [role="gridcell"] *, .gh-data-panel table, .gh-data-panel th, .gh-data-panel td, .gh-scout-table, .gh-scout-table th, .gh-scout-table td { font-size: 1rem !important; line-height: 1.3 !important; }
         </style>
         """,
         unsafe_allow_html=True,
