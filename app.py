@@ -1303,6 +1303,25 @@ def main():
                 manager_choices = sorted(name for name in source_rows["assigned_manager"].unique() if name)
                 scouting_view = st.selectbox("Scouting page", ["Agency overview", *manager_choices], key=f"scouting_manager_{source_key}")
                 view_rows = source_rows if scouting_view == "Agency overview" else source_rows[source_rows["assigned_manager"] == scouting_view].copy()
+                scouting_photo_keys = {
+                    "bluecollarsquad00@gmail.com": "chersade",
+                    "ladykmo@outlook.com": "ladykmo",
+                    "leslieclark615@yahoo.com": "leslieclark",
+                    "jamiegoodin1967@protonmail.com": "pap",
+                    "amazinggraceof3@gmail.com": "amazinggrace",
+                    "hello@blacksheepcreations.com": "joedickerson",
+                    "steenieg33@gmail.com": "glittersunfun",
+                    "tiktoktonip@gmail.com": "tonipeters",
+                    "keeley.ehrenreich@gmail.com": "lacie",
+                    "ariana.segal13@gmail.com": "ariana",
+                }
+                selected_photo_key = "agency" if scouting_view == "Agency overview" else scouting_photo_keys.get(scouting_view.casefold(), "".join(char for char in scouting_view.casefold() if char.isalnum()))
+                selected_photo_name = manager_logo_files.get(selected_photo_key)
+                selected_photo_path = (Path(__file__).resolve().parent / "assets" / "agency-logo.png") if selected_photo_key == "agency" else (Path(__file__).resolve().parent / "assets" / "manager-logos" / selected_photo_name if selected_photo_name else None)
+                if selected_photo_path and selected_photo_path.exists():
+                    photo_left, photo_center, photo_right = st.columns([1, 1, 1])
+                    with photo_center:
+                        st.image(str(selected_photo_path), width=180)
                 total_col, live_col, diamond_col, manager_col = st.columns(4)
                 total_col.metric("Creators", f"{len(view_rows):,}")
                 live_col.metric("LIVE streams", f'{int(pd.to_numeric(view_rows["live_streams"], errors="coerce").fillna(0).sum()):,}')
