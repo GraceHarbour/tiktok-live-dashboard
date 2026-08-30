@@ -854,13 +854,13 @@ def main():
         .stApp, [data-testid="stMarkdownContainer"], [data-testid="stDataFrame"], [data-testid="stDataFrame"] *, [data-testid="stFileUploader"], [data-testid="stFileUploader"] *, [data-baseweb="select"], [data-baseweb="select"] *, [data-testid="stTextInput"] input, [data-testid="stButton"] button { font-size: 1.06rem !important; }
         [data-testid="stMetricLabel"] { font-size: 1.12rem !important; }
         [data-testid="stMetricValue"] { font-size: 2.15rem !important; }
-        [data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [role="columnheader"] * { font-size: 1.1rem !important; font-weight: 800 !important; }
-        [data-testid="stDataFrame"] [role="gridcell"], [data-testid="stDataFrame"] [role="gridcell"] * { font-size: 1.02rem !important; }
-
-        [data-testid="stMetric"] { min-height: 154px !important; padding: 1.35rem 1.25rem !important; display: flex !important; flex-direction: column !important; justify-content: center !important; }
-        [data-testid="stMetricLabel"] { margin-bottom: .55rem !important; }
-        .gh-scout-hero { padding: 1.65rem 1.75rem !important; min-height: 126px; }
-        [data-testid="stExpander"], [data-testid="stForm"], [data-testid="stFileUploader"], [data-testid="stAlert"] { padding: 1.2rem !important; min-height: 88px; }
+        /* Creator data boxes: larger numeric values, roomier rows, and a usable read area. */
+        [data-testid="stDataFrame"] { min-height: 520px !important; padding: .65rem !important; }
+        [data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [role="columnheader"] * { font-size: 1.2rem !important; font-weight: 800 !important; }
+        [data-testid="stDataFrame"] [role="gridcell"], [data-testid="stDataFrame"] [role="gridcell"] * { font-size: 1.18rem !important; line-height: 1.45 !important; }
+        .gh-scout-table { font-size: 1.18rem !important; }
+        .gh-scout-table th { padding: 1rem .9rem !important; font-size: 1.22rem !important; }
+        .gh-scout-table td { padding: .95rem .9rem !important; line-height: 1.45 !important; }
         </style>
         """,
         unsafe_allow_html=True,
