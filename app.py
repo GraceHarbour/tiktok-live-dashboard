@@ -926,12 +926,12 @@ def main():
         .gh-scout-table td:first-child { color: #ffffff !important; font-weight: 800 !important; }
         [data-testid="stMetricValue"] { font-size: clamp(4.6rem, 7vw, 6.4rem) !important; line-height: .98 !important; font-weight: 900 !important; letter-spacing: .01em; text-shadow: 0 0 24px rgba(245,197,66,.62); }
         .gh-data-panel { min-height: 470px; overflow: auto; border: 1px solid rgba(245,197,66,.55); border-radius: 14px; background: linear-gradient(145deg, rgba(18,48,109,.92), rgba(3,8,23,.96)); box-shadow: inset 0 0 28px rgba(0,0,0,.28); }
-        .gh-data-panel table { width: 100%; border-collapse: collapse; color: #f5f8ff; font-size: 1.12rem; }
-        .gh-data-panel th { position: sticky; top: 0; z-index: 1; padding: 1rem .9rem; text-align: left; background: #12376f; color: #fff3ad; font-size: 1.16rem; font-weight: 900; white-space: nowrap; border-bottom: 2px solid rgba(245,197,66,.55); }
+        .gh-data-panel table { width: 100%; border-collapse: collapse; color: #f5f8ff; font-size: 1.0rem; }
+        .gh-data-panel th { position: sticky; top: 0; z-index: 1; padding: 1rem .9rem; text-align: left; background: #12376f; color: #fff3ad; font-size: 1.06rem; font-weight: 900; white-space: nowrap; border-bottom: 2px solid rgba(245,197,66,.55); }
         .gh-data-panel td { padding: 1rem .9rem; line-height: 1.45; border-top: 1px solid rgba(245,197,66,.18); vertical-align: top; }
         .gh-data-panel tr:nth-child(even) td { background: rgba(42,75,140,.24); }
-        .gh-data-panel td:not(:first-child) { color: #ffe36a; font-size: 1.25rem; font-weight: 900; text-shadow: 0 0 10px rgba(245,197,66,.24); }
-        .gh-data-panel td:first-child { color: #ffffff; font-size: 1.16rem; font-weight: 800; }
+        .gh-data-panel td:not(:first-child) { color: #ffe36a; font-size: 1.08rem; font-weight: 800; text-shadow: 0 0 10px rgba(245,197,66,.24); }
+        .gh-data-panel td:first-child { color: #ffffff; font-size: 1.04rem; font-weight: 750; }
         .gh-data-panel { scrollbar-color: #ffd95a #071a3a; scrollbar-width: auto; }
         .gh-data-panel::-webkit-scrollbar { width: 18px; height: 18px; }
         .gh-data-panel::-webkit-scrollbar-track { background: #071a3a; border-left: 1px solid rgba(245,197,66,.42); }
@@ -949,7 +949,7 @@ def main():
         .st-key-dashboard_manager_filter [data-baseweb="select"] > div { background: #12376f !important; border: 2px solid #ffd95a !important; }
         .st-key-dashboard_manager_filter [data-baseweb="select"] [role="combobox"], .st-key-dashboard_manager_filter [data-baseweb="select"] [role="combobox"] * { color: #ffffff !important; font-size: 1.2rem !important; font-weight: 900 !important; }
         /* The number itself inside each dashboard summary card. */
-        [data-testid="stMetricValue"], [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] div, [data-testid="stMetricValue"] span, [data-testid="stMetricValue"] p { font-size: clamp(2.45rem, 3.5vw, 3.05rem) !important; line-height: 1.05 !important; color: #ffe36a !important; font-weight: 900 !important; text-shadow: 0 0 12px rgba(245,197,66,.42) !important; }
+        [data-testid="stMetricValue"], [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] div, [data-testid="stMetricValue"] span, [data-testid="stMetricValue"] p { font-size: clamp(2.2rem, 3.1vw, 2.7rem) !important; line-height: 1.05 !important; color: #ffe36a !important; font-weight: 900 !important; text-shadow: 0 0 12px rgba(245,197,66,.42) !important; }
         [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * { font-size: 1rem !important; opacity: .88 !important; }
         </style>
         """,
