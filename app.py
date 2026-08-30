@@ -918,6 +918,19 @@ def main():
         [data-testid="stDataFrame"] > div, [data-testid="stDataFrame"] [role="grid"], [data-testid="stDataFrame"] canvas { background-color: #071a3a !important; }
         [data-baseweb="select"] > div, [data-baseweb="input"] > div, [data-testid="stTextInput"] input { background: #071a3a !important; color: #fff !important; border-color: rgba(245,197,66,.48) !important; }
         [data-baseweb="select"] * { color: #fff !important; }
+        [data-testid="stTextInput"] div[data-baseweb="base-input"], [data-testid="stTextInput"] input,
+        [data-testid="stSelectbox"] div[data-baseweb="select"] > div { background-color: #0b3474 !important; color: #ffffff !important; }
+        [data-testid="stTextInput"] input:focus, [data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within { border-color: #ffe36a !important; box-shadow: 0 0 0 2px rgba(255,227,106,.42) !important; }
+        [data-baseweb="popover"], [data-baseweb="popover"] > div,
+        [data-baseweb="menu"], [role="listbox"] { background: #071f4f !important; color: #ffffff !important; }
+        [role="option"], [role="option"] *, [data-baseweb="menu"] li, [data-baseweb="menu"] li * { color: #ffffff !important; background-color: #071f4f !important; opacity: 1 !important; }
+        [role="option"]:hover, [role="option"][aria-selected="true"], [role="option"][aria-selected="true"] * { background-color: #1555a5 !important; color: #ffffff !important; font-weight: 900 !important; }
+        [data-testid="stSelectbox"] svg, [data-testid="stMultiSelect"] svg,
+        [data-baseweb="select"] svg, [data-baseweb="select"] [role="button"] svg { fill: #ffffff !important; color: #ffffff !important; }
+        [data-testid="stMultiSelect"] [data-baseweb="select"] > div,
+        [data-testid="stMultiSelect"] [data-baseweb="tag"] { background-color: #0b3474 !important; color: #ffffff !important; border-color: rgba(245,197,66,.48) !important; }
+        [data-testid="stMultiSelect"] [data-baseweb="tag"] * { color: #ffffff !important; fill: #ffffff !important; }
+        [data-testid="stSelectbox"] input, [data-testid="stMultiSelect"] input { color: #ffffff !important; caret-color: #ffffff !important; }
         [data-testid="stButton"] button { background: linear-gradient(135deg,#133b80,#512d92) !important; color: #fff6c9 !important; border: 1px solid rgba(245,197,66,.62) !important; font-weight: 800 !important; }
         [data-testid="stButton"] button:hover { border-color: #ffe892 !important; box-shadow: 0 0 15px rgba(245,197,66,.35) !important; }
         [data-testid="stMarkdownContainer"] hr { border-color: rgba(245,197,66,.32) !important; }
