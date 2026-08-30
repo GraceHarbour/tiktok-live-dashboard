@@ -850,6 +850,12 @@ def main():
         [data-testid="stButton"] button { background: linear-gradient(135deg,#133b80,#512d92) !important; color: #fff6c9 !important; border: 1px solid rgba(245,197,66,.62) !important; font-weight: 800 !important; }
         [data-testid="stButton"] button:hover { border-color: #ffe892 !important; box-shadow: 0 0 15px rgba(245,197,66,.35) !important; }
         [data-testid="stMarkdownContainer"] hr { border-color: rgba(245,197,66,.32) !important; }
+
+        .stApp, [data-testid="stMarkdownContainer"], [data-testid="stDataFrame"], [data-testid="stDataFrame"] *, [data-testid="stFileUploader"], [data-testid="stFileUploader"] *, [data-baseweb="select"], [data-baseweb="select"] *, [data-testid="stTextInput"] input, [data-testid="stButton"] button { font-size: 1.06rem !important; }
+        [data-testid="stMetricLabel"] { font-size: 1.12rem !important; }
+        [data-testid="stMetricValue"] { font-size: 2.15rem !important; }
+        [data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [role="columnheader"] * { font-size: 1.1rem !important; font-weight: 800 !important; }
+        [data-testid="stDataFrame"] [role="gridcell"], [data-testid="stDataFrame"] [role="gridcell"] * { font-size: 1.02rem !important; }
         </style>
         """,
         unsafe_allow_html=True,
