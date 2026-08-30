@@ -1055,12 +1055,158 @@ def main():
                     focus_total_goal = monthly_metric_value(monthly_metrics, "total_diamond_goal", 0)
                     focus_minimum_goal = monthly_metric_value(monthly_metrics, "minimum_diamond_goal", 0)
                     focus_prior_diamonds = monthly_metric_value(monthly_metrics, "prior_month_diamonds", 0)
-                    focus_one, focus_two, focus_three, focus_four = st.columns(4)
-                    focus_one.metric("Total Diamond Goal", f"{focus_total_goal:,}")
-                    focus_two.metric("Minimum Diamond Goal", f"{focus_minimum_goal:,}")
-                    focus_three.metric("Prior Month Diamonds", f"{focus_prior_diamonds:,}")
-                    focus_four.metric("Graduation Focus", "15% minimum")
-                    st.caption("Agency-wide monthly focus goals. These cards are hidden in manager views.")
+                    focus_current_diamonds = int(dashboard_diamonds.sum())
+                    focus_today = pd.Timestamp.now(tz="America/New_York")
+                    focus_pace_goal = int(round(focus_minimum_goal * focus_today.day / focus_today.days_in_month)) if focus_minimum_goal else 0
+                    if focus_current_diamonds >= focus_minimum_goal > 0:
+                        focus_diamond_color = "#40e39a"
+                        focus_diamond_status = "Minimum achieved"
+                    elif focus_current_diamonds >= focus_pace_goal > 0:
+                        focus_diamond_color = "#ffd166"
+                        focus_diamond_status = "Ahead of daily pace"
+                    else:
+                        focus_diamond_color = "#ff5c7a"
+                        focus_diamond_status = "Below daily pace"
+
+                    focus_maintenance_rate = 0.0
+                    try:
+                        focus_maintenance_payloads = pd.read_sql(text("SELECT payload FROM maintenance_rate_rows ORDER BY row_index"), get_engine())
+                        if not focus_maintenance_payloads.empty:
+                            focus_maintenance_data = pd.DataFrame(focus_maintenance_payloads["payload"].tolist())
+                            if not focus_maintenance_data.empty and "maintained_tier" in focus_maintenance_data.columns:
+                                focus_maintenance_rate = float(focus_maintenance_data["maintained_tier"].fillna(False).astype(bool).mean() * 100)
+                    except Exception:
+                        focus_maintenance_rate = 0.0
+                    if focus_maintenance_rate >= 50:
+                        focus_maintenance_color = "#40e39a"
+                        focus_maintenance_status = "Goal achieved"
+                    elif focus_maintenance_rate >= 45:
+                        focus_maintenance_color = "#ffd166"
+                        focus_maintenance_status = "Close to goal"
+                    else:
+                        focus_maintenance_color = "#ff5c7a"
+                        focus_maintenance_status = "Below 45%"
+
+                    focus_graduation_rate = 0.0
+                    focus_reached_count = 0
+                    focus_graduation_total = 0
+                    if not business.empty:
+                        focus_business_sections = business.get("Section", pd.Series("", index=business.index)).astype(str)
+                        focus_graduation_rows = business[
+                            focus_business_sections.str.contains("Creator Graduation", case=False, na=False)
+                            & focus_business_sections.str.contains("Evaluated", case=False, na=False)
+                        ]
+                        focus_reached_rows = business[focus_business_sections.str.contains("Reached graduation", case=False, na=False)]
+                        focus_reached_count = int(
+                            focus_reached_rows.get("Reached graduation", pd.Series(dtype="object"))
+                            .astype(str).str.casefold().eq("yes").sum()
+                        )
+                        focus_graduation_total = len(focus_graduation_rows)
+                        if focus_graduation_total:
+                            focus_graduation_rate = focus_reached_count / focus_graduation_total * 100
+                    focus_graduation_goal = (focus_graduation_total + 1) // 2
+                    focus_graduation_needed = max(0, focus_graduation_goal - focus_reached_count)
+                    if focus_graduation_rate >= 50:
+                        focus_graduation_color = "#40e39a"
+                        focus_graduation_status = "Goal achieved"
+                    elif focus_graduation_rate >= 45:
+                        focus_graduation_color = "#ffd166"
+                        focus_graduation_status = "Close to goal"
+                    else:
+                        focus_graduation_color = "#ff5c7a"
+                        focus_graduation_status = "Below 45%"
+
+                    focus_creator_total = len(dashboard_creators)
+                    focus_creator_half_goal = (focus_creator_total + 1) // 2
+                    focus_maintained_count = int(dashboard_maintained.sum())
+                    focus_ranked_count = int(dashboard_ranked.sum())
+                    focus_maintained_pct = (focus_maintained_count / focus_creator_total * 100) if focus_creator_total else 0.0
+                    focus_ranked_pct = (focus_ranked_count / focus_creator_total * 100) if focus_creator_total else 0.0
+
+                    def percentage_status(rate):
+                        if rate >= 50:
+                            return "#40e39a", "Goal achieved"
+                        if rate >= 45:
+                            return "#ffd166", "Close to goal"
+                        return "#ff5c7a", "Below 45%"
+
+                    focus_maintained_color, focus_maintained_status = percentage_status(focus_maintained_pct)
+                    focus_ranked_color, focus_ranked_status = percentage_status(focus_ranked_pct)
+
+                    def focus_card(column, label, value, color="#f5c542", detail=""):
+                        column.markdown(
+                            f"<div style='min-height:132px;padding:16px 18px;border-radius:14px;border:1px solid rgba(245,197,66,.32);background:linear-gradient(145deg,rgba(20,29,65,.96),rgba(7,11,30,.96));box-shadow:0 8px 22px rgba(0,0,0,.22)'>"
+                            f"<div style='font-size:.84rem;font-weight:750;letter-spacing:.04em;color:#dce5ff'>{label}</div>"
+                            f"<div style='font-size:2rem;line-height:1.15;margin-top:8px;font-weight:900;color:{color}'>{value}</div>"
+                            f"<div style='margin-top:8px;font-size:.76rem;color:#aebde3'>{detail}</div></div>",
+                            unsafe_allow_html=True,
+                        )
+
+                    focus_one, focus_two, focus_three = st.columns(3)
+                    focus_card(focus_one, "Current Diamonds", f"{focus_current_diamonds:,}", focus_diamond_color, f"{focus_diamond_status} • Pace today {focus_pace_goal:,}")
+                    focus_card(focus_two, "Minimum Diamond Goal", f"{focus_minimum_goal:,}", "#f5c542", "15% above prior month")
+                    focus_card(focus_three, "Total Diamond Goal", f"{focus_total_goal:,}", "#f5c542", "Agency monthly target")
+                    focus_four, focus_five = st.columns(2)
+                    focus_card(focus_four, "Maintenance Level", f"{focus_maintenance_rate:.2f}%", focus_maintenance_color, f"{focus_maintenance_status} • Green at 50%")
+                    focus_card(focus_five, "Current Graduation Rate", f"{focus_graduation_rate:.2f}%", focus_graduation_color, f"{focus_reached_count:,} current • Goal {focus_graduation_goal:,} • Need {focus_graduation_needed:,} more")
+                    focus_six, focus_seven = st.columns(2)
+                    focus_card(focus_six, "Maintaining Tier", f"{focus_maintained_pct:.2f}%", focus_maintained_color, f"{focus_maintained_count:,} current • Goal {focus_creator_half_goal:,} of {focus_creator_total:,}")
+                    focus_card(focus_seven, "Ranking Up", f"{focus_ranked_pct:.2f}%", focus_ranked_color, f"{focus_ranked_count:,} current • Goal {focus_creator_half_goal:,} of {focus_creator_total:,}")
+                    st.caption(f"Goal baseline: prior month diamonds {focus_prior_diamonds:,}. Manager views show their own focus results.")
+            else:
+                manager_creator_total = len(dashboard_creators)
+                manager_half_goal = (manager_creator_total + 1) // 2
+                manager_maintained_count = int(dashboard_maintained.sum())
+                manager_ranked_count = int(dashboard_ranked.sum())
+                manager_maintained_pct = (manager_maintained_count / manager_creator_total * 100) if manager_creator_total else 0.0
+                manager_ranked_pct = (manager_ranked_count / manager_creator_total * 100) if manager_creator_total else 0.0
+
+                manager_business = business.copy()
+                if not manager_business.empty and "Manager" in manager_business.columns:
+                    manager_business = manager_business[manager_business["Manager"].fillna("").astype(str) == dashboard_choice].copy()
+                elif not manager_business.empty:
+                    manager_business = manager_business.iloc[0:0].copy()
+                manager_sections = manager_business.get("Section", pd.Series("", index=manager_business.index)).astype(str)
+                manager_graduation_rows = manager_business[
+                    manager_sections.str.contains("Creator Graduation", case=False, na=False)
+                    & manager_sections.str.contains("Evaluated", case=False, na=False)
+                ]
+                manager_reached_rows = manager_business[manager_sections.str.contains("Reached graduation", case=False, na=False)]
+                manager_reached_count = int(
+                    manager_reached_rows.get("Reached graduation", pd.Series(dtype="object"))
+                    .astype(str).str.casefold().eq("yes").sum()
+                )
+                manager_graduation_total = len(manager_graduation_rows)
+                manager_graduation_goal = (manager_graduation_total + 1) // 2
+                manager_graduation_needed = max(0, manager_graduation_goal - manager_reached_count)
+                manager_graduation_pct = (manager_reached_count / manager_graduation_total * 100) if manager_graduation_total else 0.0
+
+                def manager_status(rate):
+                    if rate >= 50:
+                        return "#40e39a", "Goal achieved"
+                    if rate >= 45:
+                        return "#ffd166", "Close to goal"
+                    return "#ff5c7a", "Below 45%"
+
+                def manager_focus_card(column, label, value, color, detail):
+                    column.markdown(
+                        f"<div style='min-height:132px;padding:16px 18px;border-radius:14px;border:1px solid rgba(245,197,66,.32);background:linear-gradient(145deg,rgba(20,29,65,.96),rgba(7,11,30,.96));box-shadow:0 8px 22px rgba(0,0,0,.22)'>"
+                        f"<div style='font-size:.84rem;font-weight:750;letter-spacing:.04em;color:#dce5ff'>{label}</div>"
+                        f"<div style='font-size:2rem;line-height:1.15;margin-top:8px;font-weight:900;color:{color}'>{value}</div>"
+                        f"<div style='margin-top:8px;font-size:.76rem;color:#aebde3'>{detail}</div></div>",
+                        unsafe_allow_html=True,
+                    )
+
+                manager_maintained_color, manager_maintained_status = manager_status(manager_maintained_pct)
+                manager_ranked_color, manager_ranked_status = manager_status(manager_ranked_pct)
+                manager_graduation_color, manager_graduation_status = manager_status(manager_graduation_pct)
+                with st.container(border=True):
+                    st.subheader(f"{dashboard_choice} Focus Goals")
+                    manager_one, manager_two, manager_three = st.columns(3)
+                    manager_focus_card(manager_one, "Maintaining Tier", f"{manager_maintained_pct:.2f}%", manager_maintained_color, f"{manager_maintained_count:,} current • Goal {manager_half_goal:,} of {manager_creator_total:,}")
+                    manager_focus_card(manager_two, "Ranking Up", f"{manager_ranked_pct:.2f}%", manager_ranked_color, f"{manager_ranked_count:,} current • Goal {manager_half_goal:,} of {manager_creator_total:,}")
+                    manager_focus_card(manager_three, "Graduation Rate", f"{manager_graduation_pct:.2f}%", manager_graduation_color, f"{manager_reached_count:,} current • Goal {manager_graduation_goal:,} • Need {manager_graduation_needed:,} more")
+                    st.caption("Manager-specific results. Red is below 45%, yellow is 45–49.99%, and green is 50% or above.")
 
             st.subheader("Goal Management overview")
             a, b, c, d = st.columns(4)
@@ -1726,3 +1872,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
