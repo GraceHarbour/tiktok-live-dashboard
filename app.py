@@ -1287,42 +1287,47 @@ def main():
 
     with scouting_tab:
         st.subheader("Scouting")
-        st.caption("Agency pipeline and dedicated manager views. Reads refresh at :20 and :50 after each hour.")
+        st.caption("Two separate reads with dedicated Agency and manager views. Refreshes run at :20 and :50 after each hour.")
         scouting = load_scouting_records()
         if scouting.empty:
             st.info("The Scouting reader is being connected. This page will show the selected Backstage reads as soon as its first scheduled capture completes.")
         else:
             scouting["assigned_manager"] = scouting["assigned_manager"].fillna("Unassigned").astype(str).str.strip().replace("", "Unassigned")
-            scouting["source"] = scouting["source"].fillna("Scouting").astype(str)
-            managers_for_scouting = sorted(name for name in scouting["assigned_manager"].unique() if name)
-            scouting_view = st.selectbox("Scouting page", ["Agency overview", *managers_for_scouting], key="scouting_manager_page")
-            view_rows = scouting if scouting_view == "Agency overview" else scouting[scouting["assigned_manager"] == scouting_view].copy()
-            total_col, applied_col, invited_col, manager_col = st.columns(4)
-            total_col.metric("Creators", f"{len(view_rows):,}")
-            applied_col.metric("Applied to join", f'{int(view_rows["applied_to_join"].fillna(False).astype(bool).sum()):,}')
-            invited_col.metric("Invitation records", f'{int(view_rows["source"].str.contains("invited", case=False, na=False).sum()):,}')
-            manager_col.metric("Managers", f'{view_rows["assigned_manager"].nunique():,}')
-            if scouting_view == "Agency overview":
-                st.markdown("#### Manager pages")
-                manager_summary = (view_rows.groupby("assigned_manager", dropna=False)
-                    .agg(Creators=("username", "count"), Applied=("applied_to_join", "sum"), Invitations=("source", lambda values: values.astype(str).str.contains("invited", case=False).sum()), Diamonds=("diamonds", "sum"))
-                    .reset_index().rename(columns={"assigned_manager": "Manager"})
-                    .sort_values(["Creators", "Manager"], ascending=[False, True]))
-                st.dataframe(manager_summary, use_container_width=True, hide_index=True)
-            st.markdown(f"#### {scouting_view}")
-            search_scout = st.text_input("Search scouting creators", key="scouting_search")
-            if search_scout:
-                view_rows = view_rows[view_rows["username"].fillna("").astype(str).str.contains(search_scout, case=False, na=False)]
-            display_columns = ["username", "followers", "likes", "applied_to_join", "scouting_status", "live_streams", "diamonds", "live_hours", "avg_live_viewers", "invitation_type", "assigned_manager", "source_label", "lead_expiry", "captured_at"]
-            labels = {"username":"Creator", "followers":"Followers", "likes":"Likes", "applied_to_join":"Applied", "scouting_status":"Scouting status", "live_streams":"LIVE streams", "diamonds":"Diamonds", "live_hours":"LIVE hours", "avg_live_viewers":"Avg. LIVE viewers", "invitation_type":"Invitation type", "assigned_manager":"Manager", "source_label":"Source", "lead_expiry":"Lead expires", "captured_at":"Last refreshed"}
-            st.dataframe(view_rows[[column for column in display_columns if column in view_rows.columns]].rename(columns=labels), use_container_width=True, hide_index=True, height=620)
+            scouting["source"] = scouting["source"].fillna("").astype(str)
 
+            def render_scouting_source(source_key, heading):
+                source_rows = scouting[scouting["source"] == source_key].copy()
+                if source_rows.empty:
+                    st.info(f"{heading} has not completed its first verified read yet.")
+                    return
+                manager_choices = sorted(name for name in source_rows["assigned_manager"].unique() if name)
+                scouting_view = st.selectbox("Scouting page", ["Agency overview", *manager_choices], key=f"scouting_manager_{source_key}")
+                view_rows = source_rows if scouting_view == "Agency overview" else source_rows[source_rows["assigned_manager"] == scouting_view].copy()
+                total_col, live_col, diamond_col, manager_col = st.columns(4)
+                total_col.metric("Creators", f"{len(view_rows):,}")
+                live_col.metric("LIVE streams", f'{int(pd.to_numeric(view_rows["live_streams"], errors="coerce").fillna(0).sum()):,}')
+                diamond_col.metric("Diamonds", f'{int(pd.to_numeric(view_rows["diamonds"], errors="coerce").fillna(0).sum()):,}')
+                manager_col.metric("Managers", f'{view_rows["assigned_manager"].nunique():,}')
+                if scouting_view == "Agency overview":
+                    st.markdown("#### Manager pages")
+                    manager_summary = (view_rows.groupby("assigned_manager", dropna=False)
+                        .agg(Creators=("username", "count"), LIVE_streams=("live_streams", "sum"), Diamonds=("diamonds", "sum"))
+                        .reset_index().rename(columns={"assigned_manager": "Manager", "LIVE_streams": "LIVE streams"})
+                        .sort_values(["Creators", "Manager"], ascending=[False, True]))
+                    st.dataframe(manager_summary, use_container_width=True, hide_index=True)
+                st.markdown(f"#### {scouting_view}")
+                search_scout = st.text_input("Search creators", key=f"scouting_search_{source_key}")
+                if search_scout:
+                    view_rows = view_rows[view_rows["username"].fillna("").astype(str).str.contains(search_scout, case=False, na=False)]
+                display_columns = ["username", "followers", "likes", "applied_to_join", "scouting_status", "live_streams", "diamonds", "live_hours", "avg_live_viewers", "invitation_type", "assigned_manager", "source_label", "lead_expiry", "captured_at"]
+                labels = {"username":"Creator", "followers":"Followers", "likes":"Likes", "applied_to_join":"Applied", "scouting_status":"Scouting status", "live_streams":"LIVE streams", "diamonds":"Diamonds", "live_hours":"LIVE hours", "avg_live_viewers":"Avg. LIVE viewers", "invitation_type":"Invitation type", "assigned_manager":"Manager", "source_label":"Source", "lead_expiry":"Lead expires", "captured_at":"Last refreshed"}
+                st.dataframe(view_rows[[column for column in display_columns if column in view_rows.columns]].rename(columns=labels), use_container_width=True, hide_index=True, height=620)
 
-
-
-
-
-
+            applied_scouting_tab, invitation_scouting_tab = st.tabs(["Applied", "Invitations"])
+            with applied_scouting_tab:
+                render_scouting_source("scouting_applied", "Applied")
+            with invitation_scouting_tab:
+                render_scouting_source("scouting_invited", "Invitations")
 
     with tier_guide_tab:
         st.subheader("Tier & Level Guide")
