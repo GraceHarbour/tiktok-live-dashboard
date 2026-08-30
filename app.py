@@ -931,6 +931,11 @@ def main():
         [data-testid="stMultiSelect"] [data-baseweb="tag"] { background-color: #0b3474 !important; color: #ffffff !important; border-color: rgba(245,197,66,.48) !important; }
         [data-testid="stMultiSelect"] [data-baseweb="tag"] * { color: #ffffff !important; fill: #ffffff !important; }
         [data-testid="stSelectbox"] input, [data-testid="stMultiSelect"] input { color: #ffffff !important; caret-color: #ffffff !important; }
+        .react-aria-ComboBox [role="group"] { background: #0b3474 !important; color: #ffffff !important; border: 1px solid rgba(245,197,66,.48) !important; border-radius: 8px !important; }
+        .react-aria-ComboBox [role="group"]:focus-within { border-color: #ffe36a !important; box-shadow: 0 0 0 2px rgba(255,227,106,.42) !important; }
+        .react-aria-ComboBox input, .react-aria-ComboBox button { background: transparent !important; color: #ffffff !important; caret-color: #ffffff !important; }
+        .react-aria-ComboBox button svg, .react-aria-ComboBox button svg path { color: #ffffff !important; fill: #ffffff !important; }
+        .react-aria-ComboBox button svg path:first-child { fill: none !important; }
         [data-testid="stButton"] button { background: linear-gradient(135deg,#133b80,#512d92) !important; color: #fff6c9 !important; border: 1px solid rgba(245,197,66,.62) !important; font-weight: 800 !important; }
         [data-testid="stButton"] button:hover { border-color: #ffe892 !important; box-shadow: 0 0 15px rgba(245,197,66,.35) !important; }
         [data-testid="stMarkdownContainer"] hr { border-color: rgba(245,197,66,.32) !important; }
