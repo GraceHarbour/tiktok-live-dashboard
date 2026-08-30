@@ -3,6 +3,7 @@ import io
 import json
 import os
 import re
+import requests
 
 
 
@@ -541,6 +542,55 @@ def google_signed_in_email() -> str:
     if ":" in signed_in:
         signed_in = signed_in.split(":", 1)[1]
     return signed_in.casefold()
+
+
+def _google_access_token() -> str:
+    response = requests.get(
+        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+        headers={"Metadata-Flavor": "Google"}, timeout=2,
+    )
+    response.raise_for_status()
+    return str(response.json()["access_token"])
+
+
+def google_iap_access_members() -> set[str]:
+    """Read the actual project-level IAP access binding used by this dashboard."""
+    project = os.getenv("GOOGLE_CLOUD_PROJECT", "project-9ae1c2b9-2eb2-4f7f-8e8")
+    token = _google_access_token()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    response = requests.post(f"https://cloudresourcemanager.googleapis.com/v1/projects/{project}:getIamPolicy", headers=headers, json={}, timeout=10)
+    response.raise_for_status()
+    return {
+        member.split(":", 1)[1].casefold()
+        for binding in response.json().get("bindings", [])
+        if binding.get("role") == "roles/iap.httpsResourceAccessor"
+        for member in binding.get("members", [])
+        if member.startswith("user:")
+    }
+
+
+def set_google_iap_access(email: str, enabled: bool) -> None:
+    project = os.getenv("GOOGLE_CLOUD_PROJECT", "project-9ae1c2b9-2eb2-4f7f-8e8")
+    normalized = email.strip().casefold()
+    token = _google_access_token()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    policy_url = f"https://cloudresourcemanager.googleapis.com/v1/projects/{project}:getIamPolicy"
+    policy_response = requests.post(policy_url, headers=headers, json={}, timeout=10)
+    policy_response.raise_for_status()
+    policy = policy_response.json()
+    binding = next((item for item in policy.setdefault("bindings", []) if item.get("role") == "roles/iap.httpsResourceAccessor"), None)
+    if binding is None:
+        binding = {"role": "roles/iap.httpsResourceAccessor", "members": []}
+        policy["bindings"].append(binding)
+    members = {str(member) for member in binding.get("members", [])}
+    member = f"user:{normalized}"
+    if enabled:
+        members.add(member)
+    else:
+        members.discard(member)
+    binding["members"] = sorted(members)
+    update = requests.post(f"https://cloudresourcemanager.googleapis.com/v1/projects/{project}:setIamPolicy", headers=headers, json={"policy": policy}, timeout=10)
+    update.raise_for_status()
 
 
 def save_access_person(email: str, role: str) -> None:
@@ -1458,6 +1508,18 @@ def main():
             access_view["email"] = access_view["email"].fillna("").astype(str).str.casefold()
             access_view["role"] = access_view["role"].fillna("member").astype(str).str.casefold()
             access_view["active"] = access_view["active"].fillna(False).astype(bool)
+        try:
+            live_google_access = google_iap_access_members()
+            iap_access_error = ""
+        except Exception as error:
+            live_google_access = set()
+            iap_access_error = str(error)
+        if live_google_access:
+            known_emails = set(access_view["email"]) if not access_view.empty else set()
+            missing_emails = sorted(live_google_access - known_emails)
+            if missing_emails:
+                access_view = pd.concat([access_view, pd.DataFrame([{"email": email, "role": "member", "active": True, "added_at": "", "updated_at": ""} for email in missing_emails])], ignore_index=True)
+            access_view.loc[access_view["email"].isin(live_google_access), "active"] = True
         actor_row = access_view[(access_view["email"] == signed_in_email) & access_view["active"]] if signed_in_email and not access_view.empty else pd.DataFrame()
         actor_role = str(actor_row.iloc[0]["role"]) if not actor_row.empty else ""
         can_manage_access = actor_role in {"owner", "admin"}
@@ -1475,6 +1537,7 @@ def main():
                 add_submit = st.form_submit_button("Add or restore access", type="primary")
             if add_submit:
                 try:
+                    set_google_iap_access(add_email, True)
                     save_access_person(add_email, add_role)
                     st.success(f"Access saved for {add_email.strip().casefold()}.")
                     st.rerun()
@@ -1519,6 +1582,8 @@ def main():
                                 st.error("That account could not be updated. Please try again.")
                         if remove_col.button("Remove", key=f"remove_access_{person_email}"):
                             try:
+                                set_google_iap_access(person_email, False)
+                                set_google_iap_access(person_email, False)
                                 deactivate_access_person(person_email)
                                 st.rerun()
                             except Exception:
@@ -1540,6 +1605,8 @@ def main():
                         )
                         if restore_action.button("Restore", key=f"restore_access_{removed_email}"):
                             try:
+                                set_google_iap_access(removed_email, True)
+                                set_google_iap_access(removed_email, True)
                                 save_access_person(removed_email, restore_choice)
                                 st.success(f"Restored {removed_email}.")
                                 st.rerun()
