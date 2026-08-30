@@ -177,6 +177,30 @@ def main() -> int:
                     page.wait_for_timeout(1_000)
                 if not creator_grid_ready:
                     raise RuntimeError("The Backstage Creator table did not finish loading before capture.")
+            if args.source == "scouting_applied":
+                # Reset the three required read-only view controls on every run:
+                # no manager filter, Applied checked, and list view selected.
+                applied_filter = page.get_by_role("checkbox", name="Applied")
+                for _ in range(30):
+                    if applied_filter.count():
+                        break
+                    page.wait_for_timeout(500)
+                if applied_filter.count() and not applied_filter.is_checked():
+                    applied_filter.check()
+
+                assigned_filter = page.locator('[role="combobox"]').filter(has_text="Assigned to").first
+                if assigned_filter.count():
+                    assigned_filter.click()
+                    clear_icon = page.get_by_role("img", name="clear")
+                    if clear_icon.count():
+                        clear_icon.first.click()
+                    page.keyboard.press("Escape")
+
+                view_radios = page.get_by_role("radio")
+                if view_radios.count() >= 2:
+                    view_radios.nth(1).click()
+                page.wait_for_timeout(1_500)
+
             if args.source.startswith("scouting_"):
                 for _ in range(45):
                     if page.locator('[role="row"]').count() and "Showing" in page.locator("body").inner_text():
@@ -403,4 +427,3 @@ def publish_snapshot(snapshot: dict[str, object], *, url: str, secret: str, iap_
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
