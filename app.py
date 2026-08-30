@@ -1337,13 +1337,13 @@ def main():
             focus_candidates = focus_candidates.sort_values(["_daily_goal", "_diamonds_remaining", "_current_diamonds"], ascending=[True, True, False])
 
             with st.container(border=True):
-                st.subheader("Focus List — 15% Graduation Goal")
+                st.header("Graduation Focus Push List — 15% Goal")
                 focus_one, focus_two, focus_three, focus_four = st.columns(4)
                 focus_one.metric("Evaluated base", f"{evaluated_base:,}")
                 focus_two.metric("Graduated", f"{reached_count:,} / {graduation_target:,}")
                 focus_three.metric("Graduation rate", f"{(reached_count / len(graduation_rows) * 100) if len(graduation_rows) else 0:.2f}%")
                 focus_four.metric("Focus creators needed", f"{focus_needed:,}")
-                st.caption(f"Goal: at least 15% of max(165, evaluated creators). Daily goals use the {days_remaining} remaining calendar day(s), including today.")
+                st.markdown(f"### Priority graduation push: Focus on these {focus_needed:,} creator(s) first. Daily diamond goals use the {days_remaining} remaining calendar day(s), including today.")
                 if focus_needed == 0:
                     st.success("The 15% graduation goal is currently met.")
                 elif focus_candidates.empty:
