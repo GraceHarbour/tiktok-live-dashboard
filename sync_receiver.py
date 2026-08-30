@@ -145,6 +145,68 @@ def creator_frames(payload: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFra
     return creators, pd.DataFrame(manager_rows)
 
 
+def compact_number(value: object) -> float:
+    raw = first_line(value).replace(",", "")
+    match = re.search(r"(-?[\d.]+)\s*([KMB]?)", raw, flags=re.I)
+    if not match:
+        return 0.0
+    multiplier = {"K": 1000, "M": 1000000, "B": 1000000000}.get(match.group(2).upper(), 1)
+    return float(match.group(1)) * multiplier
+
+
+def scouting_frames(payload: dict[str, object]) -> list[dict[str, object]]:
+    source = str(payload.get("source") or "")
+    rows = payload.get("rows", [])
+    if source not in {"scouting_applied", "scouting_invited"} or not isinstance(rows, list):
+        raise ValueError("Unsupported Scouting snapshot.")
+    captured_at = str(payload.get("captured_at") or "")
+    records = []
+    for raw in rows:
+        if not isinstance(raw, list) or not raw:
+            continue
+        cells = [str(cell or "").strip() for cell in raw]
+        creator = first_line(cells[0])
+        if not creator or creator.casefold() in {"creator", "creators"}:
+            continue
+        profile = cells[0]
+        def field(pattern: str, text_value: str = profile) -> float:
+            match = re.search(pattern, text_value, re.I)
+            return compact_number(match.group(1)) if match else 0.0
+        metrics = cells[2] if len(cells) > 2 else ""
+        invited = source == "scouting_invited"
+        assigned_index = 4 if invited else 3
+        source_index = 5 if invited else 4
+        expiry_index = 6 if invited else 5
+        records.append({
+            "source": source, "username": creator,
+            "followers": field(r"([\d.,]+[KMB]?)\s+followers"),
+            "likes": field(r"([\d.,]+[KMB]?)\s+likes"),
+            "applied_to_join": (first_line(cells[1]).casefold() == "yes") if len(cells) > 1 and not invited else False,
+            "scouting_status": first_line(cells[1]) if invited and len(cells) > 1 else "",
+            "live_streams": field(r"([\d.,]+[KMB]?)\s+LIVE streams?", metrics),
+            "diamonds": field(r"([\d.,]+[KMB]?)\s+Diamonds", metrics),
+            "live_hours": field(r"([\d.]+)\s+h", metrics),
+            "avg_live_viewers": field(r"([\d.,]+[KMB]?)\s+Avg\. LIVE viewers", metrics),
+            "invitation_type": first_line(cells[3]) if invited and len(cells) > 3 else "",
+            "assigned_manager": first_line(cells[assigned_index]) if len(cells) > assigned_index else "Unassigned",
+            "source_label": first_line(cells[source_index]) if len(cells) > source_index else "",
+            "lead_expiry": first_line(cells[expiry_index]) if len(cells) > expiry_index else "",
+            "captured_at": captured_at,
+        })
+    if not records:
+        raise ValueError("Scouting snapshot did not contain usable rows.")
+    return records
+
+
+def replace_scouting_records(engine, payload: dict[str, object]) -> int:
+    records = scouting_frames(payload)
+    source = str(payload["source"])
+    with engine.begin() as connection:
+        connection.execute(text("DELETE FROM scouting_records WHERE source = :source"), {"source": source})
+        connection.execute(text("INSERT INTO scouting_records (source, username, followers, likes, applied_to_join, scouting_status, live_streams, diamonds, live_hours, avg_live_viewers, invitation_type, assigned_manager, source_label, lead_expiry, captured_at) VALUES (:source, :username, :followers, :likes, :applied_to_join, :scouting_status, :live_streams, :diamonds, :live_hours, :avg_live_viewers, :invitation_type, :assigned_manager, :source_label, :lead_expiry, :captured_at)"), records)
+    return len(records)
+
+
 class Receiver(BaseHTTPRequestHandler):
     def _send(self, status: int, payload: dict[str, object]) -> None:
         body = json.dumps(payload).encode()
@@ -166,9 +228,13 @@ class Receiver(BaseHTTPRequestHandler):
             payload = json.loads(raw)
             if not isinstance(payload, dict):
                 raise ValueError("Snapshot must be an object.")
-            creators, managers = creator_frames(payload)
-            replace_dashboard_data(database_engine(), creators, managers, "authorized-backstage-snapshot")
-            self._send(200, {"saved": True, "creator_rows": int(len(creators))})
+            if str(payload.get("source") or "").startswith("scouting_"):
+                rows = replace_scouting_records(database_engine(), payload)
+                self._send(200, {"saved": True, "scouting_rows": rows})
+            else:
+                creators, managers = creator_frames(payload)
+                replace_dashboard_data(database_engine(), creators, managers, "authorized-backstage-snapshot")
+                self._send(200, {"saved": True, "creator_rows": int(len(creators))})
         except Exception as error:
             self._send(400, {"saved": False, "error": str(error)})
 
