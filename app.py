@@ -1166,7 +1166,7 @@ def main():
                             f"<div style='min-height:132px;padding:16px 18px;border-radius:14px;border:1px solid rgba(245,197,66,.32);background:linear-gradient(145deg,rgba(20,29,65,.96),rgba(7,11,30,.96));box-shadow:0 8px 22px rgba(0,0,0,.22)'>"
                             f"<div style='font-size:.84rem;font-weight:750;letter-spacing:.04em;color:#dce5ff'>{label}</div>"
                             f"<div style='font-size:2rem;line-height:1.15;margin-top:8px;font-weight:900;color:{color}'>{value}</div>"
-                            f"<div style='margin-top:8px;font-size:.76rem;color:#aebde3'>{detail}</div></div>",
+                            f"<div style='margin-top:9px;font-size:1rem;line-height:1.35;font-weight:750;color:#dce5ff'>{detail}</div></div>",
                             unsafe_allow_html=True,
                         )
 
@@ -1231,7 +1231,7 @@ def main():
                         f"<div style='min-height:132px;padding:16px 18px;border-radius:14px;border:1px solid rgba(245,197,66,.32);background:linear-gradient(145deg,rgba(20,29,65,.96),rgba(7,11,30,.96));box-shadow:0 8px 22px rgba(0,0,0,.22)'>"
                         f"<div style='font-size:.84rem;font-weight:750;letter-spacing:.04em;color:#dce5ff'>{label}</div>"
                         f"<div style='font-size:2rem;line-height:1.15;margin-top:8px;font-weight:900;color:{color}'>{value}</div>"
-                        f"<div style='margin-top:8px;font-size:.76rem;color:#aebde3'>{detail}</div></div>",
+                        f"<div style='margin-top:9px;font-size:1rem;line-height:1.35;font-weight:750;color:#dce5ff'>{detail}</div></div>",
                         unsafe_allow_html=True,
                     )
 
