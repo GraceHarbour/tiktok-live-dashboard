@@ -1316,7 +1316,51 @@ def main():
             graduation_pages = graduation_rows["Source page"].nunique() if "Source page" in graduation_rows.columns else 0
             reward_pages = reward_rows["Source page"].nunique() if "Source page" in reward_rows.columns else 0
 
-            one, two, three, four = st.columns(4)
+            # Agency graduation focus list: hold a 165-creator minimum base, then follow the live evaluated count.
+            evaluated_base = max(165, len(graduation_rows))
+            graduation_target = (evaluated_base * 15 + 99) // 100
+            focus_needed = max(0, graduation_target - reached_count)
+            today_et = pd.Timestamp.now(tz="America/New_York")
+            days_remaining = max(1, int(today_et.days_in_month - today_et.day + 1))
+            progress_text = graduation_rows.get("Graduation progress", pd.Series("", index=graduation_rows.index)).fillna("").astype(str)
+            current_diamonds = pd.to_numeric(
+                progress_text.str.replace(",", "", regex=False).str.extract(r"(\d+)\s*/")[0],
+                errors="coerce",
+            ).fillna(0).astype("int64")
+            already_graduated = current_diamonds.ge(200_000) | progress_text.str.contains("met target", case=False, na=False)
+            focus_candidates = graduation_rows.loc[~already_graduated].copy()
+            focus_candidates["_current_diamonds"] = current_diamonds.loc[focus_candidates.index]
+            focus_candidates["_diamonds_remaining"] = (200_000 - focus_candidates["_current_diamonds"]).clip(lower=0)
+            focus_candidates["_daily_goal"] = ((focus_candidates["_diamonds_remaining"] + days_remaining - 1) // days_remaining).astype("int64")
+            quit_text = focus_candidates.get("Quit on", pd.Series("", index=focus_candidates.index)).fillna("").astype(str).str.strip()
+            focus_candidates = focus_candidates[quit_text.isin(["", "-", "—", "None", "nan"])].copy()
+            focus_candidates = focus_candidates.sort_values(["_daily_goal", "_diamonds_remaining", "_current_diamonds"], ascending=[True, True, False])
+
+            with st.container(border=True):
+                st.subheader("Focus List — 15% Graduation Goal")
+                focus_one, focus_two, focus_three, focus_four = st.columns(4)
+                focus_one.metric("Evaluated base", f"{evaluated_base:,}")
+                focus_two.metric("Graduated", f"{reached_count:,} / {graduation_target:,}")
+                focus_three.metric("Graduation rate", f"{(reached_count / len(graduation_rows) * 100) if len(graduation_rows) else 0:.2f}%")
+                focus_four.metric("Focus creators needed", f"{focus_needed:,}")
+                st.caption(f"Goal: at least 15% of max(165, evaluated creators). Daily goals use the {days_remaining} remaining calendar day(s), including today.")
+                if focus_needed == 0:
+                    st.success("The 15% graduation goal is currently met.")
+                elif focus_candidates.empty:
+                    st.info("No active non-graduated creators are available for the focus list.")
+                else:
+                    focus_rows = focus_candidates.head(focus_needed)
+                    focus_display = pd.DataFrame({
+                        "Creator": focus_rows.get("Creator", pd.Series("", index=focus_rows.index)),
+                        "Manager": focus_rows.get("Manager", pd.Series("", index=focus_rows.index)),
+                        "Current diamonds": focus_rows["_current_diamonds"].map(lambda value: f"{int(value):,}"),
+                        "Diamonds to 200K": focus_rows["_diamonds_remaining"].map(lambda value: f"{int(value):,}"),
+                        "Days remaining": days_remaining,
+                        "Daily diamond goal": focus_rows["_daily_goal"].map(lambda value: f"{int(value):,}"),
+                    })
+                    render_read_table(focus_display)
+
+                        one, two, three, four = st.columns(4)
             one.metric("Creator Stability — evaluated", f"{len(stability_rows):,}")
             two.metric("New creators this month", f"{new_count:,}")
             three.metric("Creators quit", f"{quit_count:,}")
