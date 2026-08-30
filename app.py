@@ -861,6 +861,8 @@ def main():
         .gh-scout-table { font-size: 1.18rem !important; }
         .gh-scout-table th { padding: 1rem .9rem !important; font-size: 1.22rem !important; }
         .gh-scout-table td { padding: .95rem .9rem !important; line-height: 1.45 !important; }
+        .gh-scout-table td:not(:first-child) { color: #ffe36a !important; font-size: 1.3rem !important; font-weight: 900 !important; letter-spacing: .01em; text-shadow: 0 0 10px rgba(245,197,66,.28); }
+        .gh-scout-table td:first-child { color: #ffffff !important; font-weight: 800 !important; }
         </style>
         """,
         unsafe_allow_html=True,
