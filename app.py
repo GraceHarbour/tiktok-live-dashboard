@@ -889,6 +889,11 @@ def main():
         .gh-data-panel::-webkit-scrollbar-thumb:hover { background: #fff2a8; }
         .gh-data-panel:focus { outline: 3px solid #ffe889; outline-offset: 3px; }
         .gh-data-panel td { cursor: pointer; }
+        /* Goal Management controls: make Manager and Search labels readable on the dark layout. */
+        [data-testid="stTextInput"] label, [data-testid="stTextInput"] label *, [data-testid="stSelectbox"] label, [data-testid="stSelectbox"] label *, [data-testid="stWidgetLabel"], [data-testid="stWidgetLabel"] * { color: #fff4b0 !important; opacity: 1 !important; font-size: 1.18rem !important; font-weight: 900 !important; text-shadow: 0 1px 7px #000; }
+        [data-testid="stTextInput"] input { color: #ffffff !important; font-weight: 700 !important; }
+        [data-testid="stTextInput"] input::placeholder { color: #dceaff !important; opacity: 1 !important; }
+        [data-testid="stSelectbox"] [role="combobox"], [data-testid="stSelectbox"] [role="combobox"] * { color: #ffffff !important; font-weight: 800 !important; }
         </style>
         """,
         unsafe_allow_html=True,
