@@ -1979,6 +1979,11 @@ def main():
                 "Development pipeline": ("#b9d9f5", "Not a current-month push. Develop these creators for the next reporting cycle."),
             }
             grouped_cards = {name: [] for name in group_styles}
+            frame = frame.copy()
+            frame["_diamond_sort"] = frame.get("Current / goal", pd.Series("0", index=frame.index)).fillna("0").astype(str).map(
+                lambda value: int(re.sub(r"[^0-9]", "", value.split("/")[0]) or 0)
+            )
+            frame = frame.sort_values(["_diamond_sort", "Creator"], ascending=[False, True])
             visible_fields = [column for column in frame.columns if not str(column).startswith("_") and column not in {"Creator", "Manager", "Priority", "Manager action"}]
             for _, row in frame.iterrows():
                 creator = html_escape(str(row.get("Creator", "") or "Unknown creator"))
