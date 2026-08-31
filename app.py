@@ -2205,6 +2205,30 @@ def main():
                 result_a.metric("People shown", len(filtered_event_results))
                 result_b.metric("Total diamonds earned", f"{total_battle_diamonds:,}")
                 result_c.metric("Snapshots", f"{'Start' if not start_snapshot.empty else 'Waiting'} / {'End' if not end_snapshot.empty else 'Waiting'}")
+                st.markdown("#### People and Live Diamond Counts")
+                if filtered_event_results.empty:
+                    st.info("No tracked people match the current search and manager filters.")
+                else:
+                    event_card_rows = filtered_event_results.reset_index(drop=True)
+                    for card_start in range(0, len(event_card_rows), 4):
+                        card_columns = st.columns(4)
+                        for card_offset, card_column in enumerate(card_columns):
+                            card_index = card_start + card_offset
+                            if card_index >= len(event_card_rows):
+                                continue
+                            card_row = event_card_rows.iloc[card_index]
+                            earned_value = int(pd.to_numeric(card_row.get("Total diamonds earned"), errors="coerce") or 0)
+                            current_value = int(pd.to_numeric(card_row.get("Current / ending diamonds"), errors="coerce") or 0)
+                            with card_column:
+                                st.metric(
+                                    str(card_row.get("Creator", "Creator")),
+                                    f"{earned_value:,}",
+                                    help="Diamonds earned during this event so far.",
+                                )
+                                st.caption(
+                                    f"{str(card_row.get('Manager', 'Unassigned')) or 'Unassigned'} · "
+                                    f"Current diamonds: {current_value:,}"
+                                )
                 render_read_table(filtered_event_results, height=min(650, 100 + len(filtered_event_results) * 38))
                 st.download_button(
                     "Download event results",
