@@ -990,6 +990,7 @@ def download_frame_csv(frame: pd.DataFrame, label: str, file_name: str, key: str
         file_name=file_name,
         mime="text/csv",
         key=key,
+        on_click="ignore",
         use_container_width=False,
     )
 
