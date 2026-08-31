@@ -1845,25 +1845,16 @@ def main():
         battle_agency_wins_needed = max(0, battle_agency_target - battle_combined_wins)
 
         st.markdown("### Battle Command Center")
-        one, two, three, four, five, six = st.columns(6)
-        with one:
-            with st.container(border=True):
-                st.metric("Maintenance achieved", f"{maintenance_achieved:,}")
-        with two:
-            with st.container(border=True):
-                st.metric("Maintenance on pace", f"{maintenance_on_pace:,}")
-        with three:
-            with st.container(border=True):
-                st.metric("Maintenance needs help", f"{maintenance_help:,}")
-        with four:
-            with st.container(border=True):
-                st.metric("Graduation on pace", f"{graduation_on_pace:,}")
-        with five:
-            with st.container(border=True):
-                st.metric("Graduation wins needed", f"{battle_wins_needed:,}")
-        with six:
-            with st.container(border=True):
-                st.metric("Agency wins to 50%", f"{battle_agency_wins_needed:,}")
+        st.markdown(f"""
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:8px 0 14px 0;">
+          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance achieved</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_achieved:,}</div></div>
+          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_on_pace:,}</div></div>
+          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needs help</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{maintenance_help:,}</div></div>
+          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{graduation_on_pace:,}</div></div>
+          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation wins needed</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_wins_needed:,}</div></div>
+          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Agency wins to 50%</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_agency_wins_needed:,}</div></div>
+        </div>
+        """, unsafe_allow_html=True)
         st.caption(f"Pacing uses {battle_elapsed_days} elapsed day(s) and {battle_days_remaining} day(s) remaining in the current month.")
 
         battle_view = st.radio("Battle list", ["Maintenance", "Graduation"], horizontal=True, key="battle_focus_view")
