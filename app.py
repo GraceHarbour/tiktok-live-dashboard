@@ -2,6 +2,7 @@ import base64
 
 import io
 import json
+from html import escape as html_escape
 import os
 import re
 import requests
@@ -1857,6 +1858,46 @@ def main():
         """, unsafe_allow_html=True)
         st.caption(f"Pacing uses {battle_elapsed_days} elapsed day(s) and {battle_days_remaining} day(s) remaining in the current month.")
 
+        def render_battle_creator_cards(frame):
+            cards = []
+            visible_fields = [column for column in frame.columns if not str(column).startswith("_") and column not in {"Creator", "Manager", "Priority", "Manager action"}]
+            for _, row in frame.iterrows():
+                creator = html_escape(str(row.get("Creator", "") or "Unknown creator"))
+                manager = html_escape(str(row.get("Manager", "") or "Unassigned"))
+                priority = html_escape(str(row.get("Priority", "") or "Review"))
+                action = html_escape(str(row.get("Manager action", "") or "Review creator"))
+                priority_color = "#63e6be" if priority == "Achieved" else ("#6ee7ff" if priority == "On pace" else "#ffcf5a")
+                fields = []
+                for field in visible_fields:
+                    value = row.get(field, "")
+                    if pd.isna(value):
+                        value = ""
+                    fields.append(
+                        f'<div style="background:#163f69;border:1px solid #4f86b7;border-radius:9px;padding:10px 12px;min-height:68px;">'
+                        f'<div style="color:#b9d9f5;font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;">{html_escape(str(field))}</div>'
+                        f'<div style="color:#ffffff;font-size:1.12rem;font-weight:900;margin-top:5px;overflow-wrap:anywhere;">{html_escape(str(value))}</div>'
+                        f'</div>'
+                    )
+                cards.append(
+                    f'<section style="background:#0c2844;border:2px solid #4f86b7;border-radius:14px;padding:16px;box-shadow:0 8px 20px rgba(0,0,0,.24);">'
+                    f'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px;">'
+                    f'<div><div style="color:#ffffff;font-size:1.35rem;font-weight:900;">{creator}</div>'
+                    f'<div style="color:#b9d9f5;font-size:.92rem;margin-top:2px;">Manager: <strong style="color:#ffffff;">{manager}</strong></div></div>'
+                    f'<div style="color:{priority_color};border:1px solid {priority_color};border-radius:999px;padding:5px 10px;font-weight:900;white-space:nowrap;">{priority}</div>'
+                    f'</div>'
+                    f'<div style="background:#102f4f;border-left:4px solid {priority_color};border-radius:8px;padding:9px 12px;margin-bottom:12px;">'
+                    f'<span style="color:#b9d9f5;font-weight:800;">Manager action: </span><strong style="color:#ffffff;">{action}</strong></div>'
+                    f'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;">{"".join(fields)}</div>'
+                    f'</section>'
+                )
+            st.markdown(
+                '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(390px,1fr));gap:16px;margin:10px 0 18px 0;">'
+                + "".join(cards)
+                + '</div>',
+                unsafe_allow_html=True,
+            )
+
+
         battle_view = st.radio("Battle list", ["Maintenance", "Graduation"], horizontal=True, key="battle_focus_view")
         if battle_view == "Maintenance":
             st.markdown("### Maintenance Battle List")
@@ -1865,7 +1906,7 @@ def main():
             else:
                 battle_order = pd.Categorical(maintenance_battle["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
                 maintenance_battle = maintenance_battle.assign(_order=battle_order).sort_values(["_order", "_pace_gap"], ascending=[True, False]).drop(columns=["_order", "_pace_gap"])
-                render_read_table(maintenance_battle, height=720)
+                render_battle_creator_cards(maintenance_battle)
         else:
             st.markdown("### Graduation Battle List")
             st.caption(f"{battle_reached_count:,} graduated toward a {battle_graduation_target:,} creator target. {graduation_help:,} active creator(s) currently project below 200K.")
@@ -1887,7 +1928,7 @@ def main():
                 })
                 graduation_order = pd.Categorical(graduation_display["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
                 graduation_display = graduation_display.assign(_order=graduation_order, _gap=battle_active["_pace_gap"].values).sort_values(["_order", "_gap"], ascending=[True, False]).drop(columns=["_order", "_gap"])
-                render_read_table(graduation_display, height=720)
+                render_battle_creator_cards(graduation_display)
 
 
     with scouting_tab:
