@@ -2217,8 +2217,10 @@ def main():
                             if card_index >= len(event_card_rows):
                                 continue
                             card_row = event_card_rows.iloc[card_index]
-                            earned_value = int(pd.to_numeric(card_row.get("Total diamonds earned"), errors="coerce") or 0)
-                            current_value = int(pd.to_numeric(card_row.get("Current / ending diamonds"), errors="coerce") or 0)
+                            earned_raw = pd.to_numeric(card_row.get("Total diamonds earned"), errors="coerce")
+                            current_raw = pd.to_numeric(card_row.get("Current / ending diamonds"), errors="coerce")
+                            earned_value = int(earned_raw) if pd.notna(earned_raw) else 0
+                            current_value = int(current_raw) if pd.notna(current_raw) else 0
                             with card_column:
                                 st.metric(
                                     str(card_row.get("Creator", "Creator")),
