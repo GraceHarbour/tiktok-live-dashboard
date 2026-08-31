@@ -650,8 +650,14 @@ def load_monthly_metrics():
 @st.cache_data(ttl=90)
 def load_scouting_records():
     try:
-        with get_engine().connect() as connection:
-            return pd.read_sql(text("SELECT source, username, followers, likes, applied_to_join, scouting_status, live_streams, diamonds, live_hours, avg_live_viewers, invitation_type, assigned_manager, source_label, lead_expiry, captured_at FROM scouting_records ORDER BY source, ctid"), connection)
+        try:
+            with get_engine().connect() as connection:
+                return pd.read_sql(text("SELECT source, username, source_order, followers, likes, applied_to_join, scouting_status, live_streams, diamonds, live_hours, avg_live_viewers, invitation_type, assigned_manager, source_label, lead_expiry, captured_at FROM scouting_records ORDER BY source, source_order NULLS LAST, ctid"), connection)
+        except Exception:
+            # Use a fresh connection because PostgreSQL marks the first
+            # transaction failed when an older schema lacks source_order.
+            with get_engine().connect() as connection:
+                return pd.read_sql(text("SELECT source, username, followers, likes, applied_to_join, scouting_status, live_streams, diamonds, live_hours, avg_live_viewers, invitation_type, assigned_manager, source_label, lead_expiry, captured_at FROM scouting_records ORDER BY source, ctid"), connection)
     except Exception:
         return pd.DataFrame(columns=["source", "username", "followers", "likes", "applied_to_join", "scouting_status", "live_streams", "diamonds", "live_hours", "avg_live_viewers", "invitation_type", "assigned_manager", "source_label", "lead_expiry", "captured_at"])
 
