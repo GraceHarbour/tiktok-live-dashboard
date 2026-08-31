@@ -191,14 +191,28 @@ def main() -> int:
                 assigned_filter = page.locator('[role="combobox"]').filter(has_text="Assigned to").first
                 if assigned_filter.count():
                     assigned_filter.click()
-                    clear_icon = page.get_by_role("img", name="clear")
+                    # Scope the clear icon to Assigned to. Other filters can
+                    # expose their own clear icon and leave a manager selected.
+                    clear_icon = assigned_filter.get_by_role("img", name="clear")
                     if clear_icon.count():
-                        clear_icon.first.click()
+                        clear_icon.click()
                     page.keyboard.press("Escape")
+
+                # Clearing Assigned to re-renders the filter controls, so
+                # confirm Applied remains selected before reading the grid.
+                applied_filter = page.get_by_role("checkbox", name="Applied")
+                if applied_filter.count() and not applied_filter.is_checked():
+                    applied_filter.check()
 
                 view_radios = page.get_by_role("radio")
                 if view_radios.count() >= 2:
                     view_radios.nth(1).click()
+                    page.wait_for_timeout(750)
+                    view_radios = page.get_by_role("radio")
+                    if view_radios.count() < 2 or not view_radios.nth(1).is_checked():
+                        raise RuntimeError("TikTok scouting List view could not be selected.")
+                else:
+                    raise RuntimeError("TikTok scouting List view control is unavailable.")
                 page.wait_for_timeout(1_500)
 
             if args.source.startswith("scouting_"):
@@ -206,7 +220,7 @@ def main() -> int:
                     if page.locator('[role="row"]').count() and "Showing" in page.locator("body").inner_text():
                         break
                     page.wait_for_timeout(1_000)
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(2000)
             visible_text = page.locator("body").inner_text(timeout=15_000)
 
             if args.save:
@@ -369,6 +383,18 @@ def capture_grid(page, source: str, goal_view: str, visible_text: str) -> dict[s
             if changed_rows is None:
                 break
             add_rows(changed_rows)
+
+    # Never publish a partial scouting snapshot. TikTok reports the filtered
+    # total in the pagination summary; retaining the prior complete snapshot is
+    # safer than replacing it when pagination or a filter silently fails.
+    if source in {"scouting_applied", "scouting_invited"}:
+        total_match = re.search(r"Showing\s+\d+\s*-\s*\d+\s+of\s+([\d,]+)", visible_text, re.I)
+        if total_match:
+            expected_total = int(total_match.group(1).replace(",", ""))
+            if len(rows) < expected_total:
+                raise RuntimeError(
+                    f"Scouting capture was incomplete: captured {len(rows)} of {expected_total} rows."
+                )
     return {
         "source": source,
         "view": goal_view if source == "goals" else None,
