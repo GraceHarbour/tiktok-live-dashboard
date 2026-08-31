@@ -510,6 +510,46 @@ def save_event_participants(event_id, selected_creator_ids, creator_frame):
             )
 
 
+def add_event_participants(event_id, selected_creator_ids, creator_frame):
+    now_value = pd.Timestamp.now(tz="UTC").isoformat()
+    lookup = creator_frame.set_index("creator_id", drop=False) if not creator_frame.empty else pd.DataFrame()
+    with get_engine().begin() as connection:
+        for creator_id in selected_creator_ids:
+            if creator_id not in lookup.index:
+                continue
+            row = lookup.loc[creator_id]
+            if isinstance(row, pd.DataFrame):
+                row = row.iloc[0]
+            connection.execute(
+                text(
+                    "INSERT INTO community_event_participants "
+                    "(event_id, creator_id, username, manager, added_at) "
+                    "VALUES (:event_id, :creator_id, :username, :manager, :added_at) "
+                    "ON CONFLICT (event_id, creator_id) DO UPDATE SET "
+                    "username = EXCLUDED.username, manager = EXCLUDED.manager"
+                ),
+                {
+                    "event_id": event_id,
+                    "creator_id": str(creator_id),
+                    "username": str(row.get("username", "")),
+                    "manager": str(row.get("manager_name", row.get("manager", ""))),
+                    "added_at": now_value,
+                },
+            )
+
+
+def remove_event_participants(event_id, selected_creator_ids):
+    with get_engine().begin() as connection:
+        for creator_id in selected_creator_ids:
+            connection.execute(
+                text(
+                    "DELETE FROM community_event_participants "
+                    "WHERE event_id = :event_id AND creator_id = :creator_id"
+                ),
+                {"event_id": event_id, "creator_id": str(creator_id)},
+            )
+
+
 def numeric_series(frame, column):
     if column not in frame.columns:
         return pd.Series(0, index=frame.index, dtype="float64")
@@ -2163,9 +2203,9 @@ def main():
             add_column, remove_column = st.columns(2)
             with add_column:
                 if st.button("Add selected people", type="primary", key=f"add_event_creators_{selected_event_id}", use_container_width=True):
-                    updated_ids = list(dict.fromkeys(current_ids + people_to_add))
-                    save_event_participants(selected_event_id, updated_ids, creator_choices)
-                    st.success(f"Added {len(people_to_add)} creator(s). {len(updated_ids)} people are now tracked.")
+                    add_event_participants(selected_event_id, people_to_add, creator_choices)
+                    updated_total = len(set(current_ids).union(people_to_add))
+                    st.success(f"Added {len(people_to_add)} creator(s). {updated_total} people are now tracked.")
                     st.rerun()
             with remove_column:
                 people_to_remove = st.multiselect(
@@ -2176,9 +2216,9 @@ def main():
                     placeholder="Choose people to remove",
                 )
                 if st.button("Remove selected people", key=f"remove_event_creators_{selected_event_id}", use_container_width=True):
-                    updated_ids = [creator_id for creator_id in current_ids if creator_id not in people_to_remove]
-                    save_event_participants(selected_event_id, updated_ids, creator_choices)
-                    st.success(f"Removed {len(people_to_remove)} creator(s). {len(updated_ids)} people remain tracked.")
+                    remove_event_participants(selected_event_id, people_to_remove)
+                    updated_total = max(0, len(current_ids) - len(set(people_to_remove)))
+                    st.success(f"Removed {len(people_to_remove)} creator(s). {updated_total} people remain tracked.")
                     st.rerun()
 
             participants = load_event_participants(selected_event_id)
