@@ -2152,19 +2152,34 @@ def main():
                     people_manager_values.astype(str) == people_manager_filter,
                     "creator_id",
                 ].astype(str).tolist()
-            available_ids = list(dict.fromkeys(current_ids + filtered_choice_ids))
-            default_ids = [creator_id for creator_id in current_ids if creator_id in creator_label_map]
-            selected_creator_ids = st.multiselect(
-                "Search and select creators",
-                available_ids,
-                default=default_ids,
+            addable_ids = [creator_id for creator_id in filtered_choice_ids if creator_id not in current_ids]
+            people_to_add = st.multiselect(
+                "Select people to add",
+                addable_ids,
                 format_func=lambda value: creator_label_map.get(value, value),
-                key=f"event_creators_{selected_event_id}",
+                key=f"event_people_add_{selected_event_id}_{people_manager_filter}",
+                placeholder="Search and select one or more creators",
             )
-            if st.button("Update people being tracked", type="primary", key=f"save_event_creators_{selected_event_id}"):
-                save_event_participants(selected_event_id, selected_creator_ids, creator_choices)
-                st.success(f"Saved {len(selected_creator_ids)} tracked creator(s).")
-                st.rerun()
+            add_column, remove_column = st.columns(2)
+            with add_column:
+                if st.button("Add selected people", type="primary", key=f"add_event_creators_{selected_event_id}", use_container_width=True):
+                    updated_ids = list(dict.fromkeys(current_ids + people_to_add))
+                    save_event_participants(selected_event_id, updated_ids, creator_choices)
+                    st.success(f"Added {len(people_to_add)} creator(s). {len(updated_ids)} people are now tracked.")
+                    st.rerun()
+            with remove_column:
+                people_to_remove = st.multiselect(
+                    "Select tracked people to remove",
+                    current_ids,
+                    format_func=lambda value: creator_label_map.get(value, value),
+                    key=f"event_people_remove_{selected_event_id}",
+                    placeholder="Choose people to remove",
+                )
+                if st.button("Remove selected people", key=f"remove_event_creators_{selected_event_id}", use_container_width=True):
+                    updated_ids = [creator_id for creator_id in current_ids if creator_id not in people_to_remove]
+                    save_event_participants(selected_event_id, updated_ids, creator_choices)
+                    st.success(f"Removed {len(people_to_remove)} creator(s). {len(updated_ids)} people remain tracked.")
+                    st.rerun()
 
             participants = load_event_participants(selected_event_id)
             st.markdown(f"### People Being Tracked ({len(participants)})")
