@@ -269,6 +269,9 @@ def ensure_schema():
         "CREATE TABLE IF NOT EXISTS goal_managers (manager TEXT PRIMARY KEY, manager_name TEXT, role TEXT, group_name TEXT, diamonds INTEGER, diamond_goal INTEGER, new_creators INTEGER, new_creator_goal INTEGER, managed_creators INTEGER)",
         "CREATE TABLE IF NOT EXISTS data_updates (updated_at TEXT, source_file TEXT, creator_rows INTEGER)",
         "CREATE TABLE IF NOT EXISTS collector_runs (started_at TEXT, finished_at TEXT, status TEXT, detail TEXT, creator_rows INTEGER)",
+        "CREATE TABLE IF NOT EXISTS community_events (event_id TEXT PRIMARY KEY, event_name TEXT NOT NULL, start_at TEXT NOT NULL, end_at TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS community_event_participants (event_id TEXT NOT NULL, creator_id TEXT NOT NULL, username TEXT, manager TEXT, added_at TEXT NOT NULL, PRIMARY KEY (event_id, creator_id))",
+        "CREATE TABLE IF NOT EXISTS community_event_snapshots (event_id TEXT NOT NULL, phase TEXT NOT NULL, creator_id TEXT NOT NULL, username TEXT, manager TEXT, diamonds INTEGER NOT NULL, captured_at TEXT NOT NULL, PRIMARY KEY (event_id, phase, creator_id))",
     ]
     with get_engine().begin() as connection:
         for statement in statements:
@@ -447,6 +450,64 @@ def load_goal_creators():
 
 
 
+
+
+
+def load_community_events():
+    with get_engine().connect() as connection:
+        return pd.read_sql(text("SELECT * FROM community_events ORDER BY start_at DESC"), connection)
+
+
+def load_event_participants(event_id):
+    with get_engine().connect() as connection:
+        return pd.read_sql(
+            text("SELECT * FROM community_event_participants WHERE event_id = :event_id ORDER BY username"),
+            connection,
+            params={"event_id": event_id},
+        )
+
+
+def load_event_snapshots(event_id):
+    with get_engine().connect() as connection:
+        return pd.read_sql(
+            text("SELECT * FROM community_event_snapshots WHERE event_id = :event_id"),
+            connection,
+            params={"event_id": event_id},
+        )
+
+
+def create_community_event(event_name, start_at, end_at):
+    event_id = f"event-{pd.Timestamp.now(tz='UTC').value}"
+    created_at = pd.Timestamp.now(tz="UTC").isoformat()
+    with get_engine().begin() as connection:
+        connection.execute(
+            text("INSERT INTO community_events (event_id, event_name, start_at, end_at, status, created_at) VALUES (:event_id, :event_name, :start_at, :end_at, 'scheduled', :created_at)"),
+            {"event_id": event_id, "event_name": event_name, "start_at": start_at, "end_at": end_at, "created_at": created_at},
+        )
+    return event_id
+
+
+def save_event_participants(event_id, selected_creator_ids, creator_frame):
+    now_value = pd.Timestamp.now(tz="UTC").isoformat()
+    lookup = creator_frame.set_index("creator_id", drop=False) if not creator_frame.empty else pd.DataFrame()
+    with get_engine().begin() as connection:
+        connection.execute(text("DELETE FROM community_event_participants WHERE event_id = :event_id"), {"event_id": event_id})
+        for creator_id in selected_creator_ids:
+            if creator_id not in lookup.index:
+                continue
+            row = lookup.loc[creator_id]
+            if isinstance(row, pd.DataFrame):
+                row = row.iloc[0]
+            connection.execute(
+                text("INSERT INTO community_event_participants (event_id, creator_id, username, manager, added_at) VALUES (:event_id, :creator_id, :username, :manager, :added_at)"),
+                {
+                    "event_id": event_id,
+                    "creator_id": str(creator_id),
+                    "username": str(row.get("username", "")),
+                    "manager": str(row.get("manager_name", row.get("manager", ""))),
+                    "added_at": now_value,
+                },
+            )
 
 
 def numeric_series(frame, column):
@@ -1063,12 +1124,13 @@ def main():
 
 
 
-    manager_tab, goals_tab, business_tab, maintenance_tab, battle_tab, scouting_tab, prior_month_tab, tier_guide_tab, access_tab = st.tabs([
+    manager_tab, goals_tab, business_tab, maintenance_tab, battle_tab, event_tab, scouting_tab, prior_month_tab, tier_guide_tab, access_tab = st.tabs([
         "Dashboard",
         "Goal Management",
         "Business Essentials",
         "Maintenance Rate",
         "Creator Focus",
+        "Event Tool",
         "Scouting",
         "Goal Management Prior Month",
         "Tier & Level Guide",
@@ -1959,6 +2021,136 @@ def main():
                 graduation_order = pd.Categorical(graduation_display["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
                 graduation_display = graduation_display.assign(_order=graduation_order, _gap=battle_active["_pace_gap"].values).sort_values(["_order", "_gap"], ascending=[True, False]).drop(columns=["_order", "_gap"])
                 render_battle_creator_cards(graduation_display, "Graduation")
+
+
+
+    with event_tab:
+        st.subheader("Event Tool")
+        st.caption("Schedule community events on quarter-hour boundaries, select the creators to track, and automatically measure diamonds from the complete Goal reads saved at the start and end.")
+
+        event_left, event_right = st.columns([1, 1.25])
+        eastern_now = pd.Timestamp.now(tz="America/New_York")
+        next_slot = eastern_now.ceil("15min")
+        with event_left:
+            st.markdown("### Schedule an event")
+            with st.form("community_event_form", clear_on_submit=True):
+                event_name = st.text_input("Event name", placeholder="Monday Community Battle")
+                start_date = st.date_input("Start date", value=next_slot.date())
+                start_time = st.time_input("Start time (ET)", value=next_slot.time().replace(second=0, microsecond=0), step=900)
+                end_default = next_slot + pd.Timedelta(hours=2, minutes=30)
+                end_date = st.date_input("End date", value=end_default.date())
+                end_time = st.time_input("End time (ET)", value=end_default.time().replace(second=0, microsecond=0), step=900)
+                event_submit = st.form_submit_button("Save event", type="primary", use_container_width=True)
+            if event_submit:
+                start_local = pd.Timestamp(f"{start_date} {start_time}").tz_localize("America/New_York")
+                end_local = pd.Timestamp(f"{end_date} {end_time}").tz_localize("America/New_York")
+                if not event_name.strip():
+                    st.error("Enter an event name.")
+                elif start_local.minute not in {0, 15, 30, 45} or end_local.minute not in {0, 15, 30, 45}:
+                    st.error("Start and end times must use :00, :15, :30, or :45.")
+                elif end_local <= start_local:
+                    st.error("The end time must be after the start time.")
+                else:
+                    new_event_id = create_community_event(event_name.strip(), start_local.tz_convert("UTC").isoformat(), end_local.tz_convert("UTC").isoformat())
+                    st.session_state["selected_community_event"] = new_event_id
+                    st.success("Event scheduled. Complete Goal snapshots will save automatically at the start and end.")
+                    st.rerun()
+
+        events = load_community_events()
+        with event_right:
+            st.markdown("### Event schedule")
+            if events.empty:
+                st.info("No events are scheduled yet.")
+                selected_event_id = None
+            else:
+                event_labels = {}
+                for _, event_row in events.iterrows():
+                    event_start = pd.to_datetime(event_row["start_at"], utc=True).tz_convert("America/New_York")
+                    event_end = pd.to_datetime(event_row["end_at"], utc=True).tz_convert("America/New_York")
+                    event_labels[str(event_row["event_id"])] = f"{event_row['event_name']} • {event_start:%b %d, %Y %I:%M %p}–{event_end:%I:%M %p} ET"
+                event_ids = list(event_labels)
+                preferred_event = st.session_state.get("selected_community_event")
+                selected_index = event_ids.index(preferred_event) if preferred_event in event_ids else 0
+                selected_event_id = st.selectbox("Choose event", event_ids, index=selected_index, format_func=lambda value: event_labels[value], key="community_event_selector")
+                st.session_state["selected_community_event"] = selected_event_id
+
+        if selected_event_id:
+            selected_event = events[events["event_id"].astype(str) == str(selected_event_id)].iloc[0]
+            event_start_utc = pd.to_datetime(selected_event["start_at"], utc=True)
+            event_end_utc = pd.to_datetime(selected_event["end_at"], utc=True)
+            now_utc = pd.Timestamp.now(tz="UTC")
+            live_status = "Scheduled" if now_utc < event_start_utc else ("Live" if now_utc < event_end_utc else "Completed")
+            status_color = "#6ee7ff" if live_status == "Live" else ("#63e6be" if live_status == "Completed" else "#ffcf5a")
+            st.markdown(
+                f'<div style="background:#0a223b;border:2px solid {status_color};border-radius:14px;padding:14px 16px;margin:14px 0;">'
+                f'<div style="color:#ffffff;font-size:1.35rem;font-weight:900;">{html_escape(str(selected_event["event_name"]))}</div>'
+                f'<div style="color:{status_color};font-weight:900;margin-top:3px;">{live_status}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+            creator_choices = creators.copy()
+            if "creator_id" not in creator_choices.columns:
+                creator_choices["creator_id"] = creator_choices.get("username", pd.Series("", index=creator_choices.index)).astype(str)
+            creator_choices["creator_id"] = creator_choices["creator_id"].astype(str)
+            creator_choices["username"] = creator_choices.get("username", pd.Series("", index=creator_choices.index)).fillna("").astype(str)
+            creator_choices["event_manager"] = creator_choices.get("manager_name", creator_choices.get("manager", pd.Series("", index=creator_choices.index))).fillna("").astype(str)
+            creator_choices = creator_choices.drop_duplicates("creator_id").sort_values("username")
+            current_participants = load_event_participants(selected_event_id)
+            current_ids = current_participants.get("creator_id", pd.Series(dtype="object")).astype(str).tolist()
+            creator_label_map = {
+                str(row["creator_id"]): f"{row['username']} • {row['event_manager'] or 'Unassigned'}"
+                for _, row in creator_choices.iterrows()
+            }
+            available_ids = list(creator_label_map)
+            default_ids = [creator_id for creator_id in current_ids if creator_id in creator_label_map]
+            st.markdown("### Select creators")
+            selected_creator_ids = st.multiselect(
+                "Search and select creators",
+                available_ids,
+                default=default_ids,
+                format_func=lambda value: creator_label_map.get(value, value),
+                key=f"event_creators_{selected_event_id}",
+            )
+            if st.button("Save tracked creators", type="primary", key=f"save_event_creators_{selected_event_id}"):
+                save_event_participants(selected_event_id, selected_creator_ids, creator_choices)
+                st.success(f"Saved {len(selected_creator_ids)} tracked creator(s).")
+                st.rerun()
+
+            participants = load_event_participants(selected_event_id)
+            st.markdown(f"### People Being Tracked ({len(participants)})")
+            if participants.empty:
+                st.info("Select creators above, then save the tracking list.")
+            else:
+                tracked_display = participants[["username", "manager"]].rename(columns={"username": "Creator", "manager": "Manager"})
+                render_read_table(tracked_display, height=min(520, 80 + len(tracked_display) * 36))
+
+                snapshots = load_event_snapshots(selected_event_id)
+                start_snapshot = snapshots[snapshots["phase"].astype(str) == "start"][["creator_id", "diamonds"]].rename(columns={"diamonds": "Starting diamonds"}) if not snapshots.empty else pd.DataFrame(columns=["creator_id", "Starting diamonds"])
+                end_snapshot = snapshots[snapshots["phase"].astype(str) == "end"][["creator_id", "diamonds"]].rename(columns={"diamonds": "Ending diamonds"}) if not snapshots.empty else pd.DataFrame(columns=["creator_id", "Ending diamonds"])
+                current_goal = creator_choices[["creator_id", "diamonds"]].copy() if "diamonds" in creator_choices.columns else pd.DataFrame(columns=["creator_id", "diamonds"])
+                current_goal = current_goal.rename(columns={"diamonds": "Current diamonds"})
+                results = participants[["creator_id", "username", "manager"]].merge(start_snapshot, on="creator_id", how="left").merge(end_snapshot, on="creator_id", how="left").merge(current_goal, on="creator_id", how="left")
+                results["Starting diamonds"] = pd.to_numeric(results["Starting diamonds"], errors="coerce")
+                results["Current diamonds"] = pd.to_numeric(results["Current diamonds"], errors="coerce")
+                results["Ending diamonds"] = pd.to_numeric(results["Ending diamonds"], errors="coerce")
+                results["Measured diamonds"] = results["Ending diamonds"].fillna(results["Current diamonds"])
+                results["Battle diamonds"] = (results["Measured diamonds"] - results["Starting diamonds"]).clip(lower=0)
+                results_display = results.rename(columns={"username": "Creator", "manager": "Manager"})
+                results_display = results_display[["Creator", "Manager", "Starting diamonds", "Measured diamonds", "Battle diamonds"]].sort_values("Battle diamonds", ascending=False)
+                st.markdown("### Event Diamond Results")
+                total_battle_diamonds = int(results_display["Battle diamonds"].fillna(0).sum())
+                result_a, result_b, result_c = st.columns(3)
+                result_a.metric("Tracked creators", len(results_display))
+                result_b.metric("Battle diamonds", f"{total_battle_diamonds:,}")
+                result_c.metric("Snapshots", f"{'Start' if not start_snapshot.empty else 'Waiting'} / {'End' if not end_snapshot.empty else 'Waiting'}")
+                render_read_table(results_display, height=min(650, 100 + len(results_display) * 38))
+                st.download_button(
+                    "Download event results",
+                    results_display.to_csv(index=False).encode("utf-8"),
+                    file_name=f"{str(selected_event['event_name']).strip().replace(' ', '_')}_results.csv",
+                    mime="text/csv",
+                    key=f"download_event_{selected_event_id}",
+                )
 
 
     with scouting_tab:
