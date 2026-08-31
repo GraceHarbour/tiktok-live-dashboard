@@ -617,6 +617,7 @@ def save_access_person(email: str, role: str) -> None:
                   SET role = EXCLUDED.role, active = TRUE, updated_at = NOW()"""),
             {"email": normalized_email, "role": role},
         )
+    load_access_people.clear()
 
 
 def deactivate_access_person(email: str) -> None:
@@ -625,6 +626,7 @@ def deactivate_access_person(email: str) -> None:
             text("UPDATE dashboard_access_people SET active = FALSE, updated_at = NOW() WHERE email = :email"),
             {"email": email.strip().casefold()},
         )
+    load_access_people.clear()
 
 
 
@@ -1845,6 +1847,10 @@ def main():
         st.subheader("Access Management")
         st.caption("Approved Google accounts. Owners and administrators can add, restore, or deactivate access here.")
 
+        access_notice = st.session_state.pop("access_notice", "")
+        if access_notice:
+            st.success(access_notice)
+
         signed_in_email = google_signed_in_email()
         access_view = access_people.copy()
         if not access_view.empty:
@@ -1882,7 +1888,7 @@ def main():
                 try:
                     set_google_iap_access(add_email, True)
                     save_access_person(add_email, add_role)
-                    st.success(f"Access saved for {add_email.strip().casefold()}.")
+                    st.session_state["access_notice"] = f"Access saved for {add_email.strip().casefold()}."
                     st.rerun()
                 except ValueError as error:
                     st.error(str(error))
@@ -1919,15 +1925,15 @@ def main():
                         if save_col.button("Save", key=f"save_access_{person_email}"):
                             try:
                                 save_access_person(person_email, selected_role)
-                                st.success(f"Updated {person_email}.")
+                                st.session_state["access_notice"] = f"Updated {person_email}."
                                 st.rerun()
                             except Exception:
                                 st.error("That account could not be updated. Please try again.")
                         if remove_col.button("Remove", key=f"remove_access_{person_email}"):
                             try:
                                 set_google_iap_access(person_email, False)
-                                set_google_iap_access(person_email, False)
                                 deactivate_access_person(person_email)
+                                st.session_state["access_notice"] = f"Removed access for {person_email}."
                                 st.rerun()
                             except Exception:
                                 st.error("That account could not be removed. Please try again.")
@@ -1949,9 +1955,8 @@ def main():
                         if restore_action.button("Restore", key=f"restore_access_{removed_email}"):
                             try:
                                 set_google_iap_access(removed_email, True)
-                                set_google_iap_access(removed_email, True)
                                 save_access_person(removed_email, restore_choice)
-                                st.success(f"Restored {removed_email}.")
+                                st.session_state["access_notice"] = f"Restored {removed_email}."
                                 st.rerun()
                             except Exception:
                                 st.error("That account could not be restored. Please try again.")
