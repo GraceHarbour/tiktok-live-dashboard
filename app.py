@@ -1844,16 +1844,27 @@ def main():
         battle_agency_target = (len(creators) * 50 + 99) // 100 if len(creators) else 0
         battle_agency_wins_needed = max(0, battle_agency_target - battle_combined_wins)
 
-        with st.container(border=True):
-            st.markdown("### Battle Command Center")
-            one, two, three, four, five, six = st.columns(6)
-            one.metric("Maintenance achieved", f"{maintenance_achieved:,}")
-            two.metric("Maintenance on pace", f"{maintenance_on_pace:,}")
-            three.metric("Maintenance needs help", f"{maintenance_help:,}")
-            four.metric("Graduation on pace", f"{graduation_on_pace:,}")
-            five.metric("Graduation wins needed", f"{battle_wins_needed:,}")
-            six.metric("Agency wins to 50%", f"{battle_agency_wins_needed:,}")
-            st.caption(f"Pacing uses {battle_elapsed_days} elapsed day(s) and {battle_days_remaining} day(s) remaining in the current month.")
+        st.markdown("### Battle Command Center")
+        one, two, three, four, five, six = st.columns(6)
+        with one:
+            with st.container(border=True):
+                st.metric("Maintenance achieved", f"{maintenance_achieved:,}")
+        with two:
+            with st.container(border=True):
+                st.metric("Maintenance on pace", f"{maintenance_on_pace:,}")
+        with three:
+            with st.container(border=True):
+                st.metric("Maintenance needs help", f"{maintenance_help:,}")
+        with four:
+            with st.container(border=True):
+                st.metric("Graduation on pace", f"{graduation_on_pace:,}")
+        with five:
+            with st.container(border=True):
+                st.metric("Graduation wins needed", f"{battle_wins_needed:,}")
+        with six:
+            with st.container(border=True):
+                st.metric("Agency wins to 50%", f"{battle_agency_wins_needed:,}")
+        st.caption(f"Pacing uses {battle_elapsed_days} elapsed day(s) and {battle_days_remaining} day(s) remaining in the current month.")
 
         battle_view = st.radio("Battle list", ["Maintenance", "Graduation"], horizontal=True, key="battle_focus_view")
         if battle_view == "Maintenance":
