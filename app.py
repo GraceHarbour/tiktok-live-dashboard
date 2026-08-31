@@ -1068,7 +1068,7 @@ def main():
         "Goal Management",
         "Business Essentials",
         "Maintenance Rate",
-        "Battle Focus",
+        "Creator Focus",
         "Scouting",
         "Goal Management Prior Month",
         "Tier & Level Guide",
@@ -1706,7 +1706,7 @@ def main():
 
 
     with battle_tab:
-        st.subheader("Battle Focus")
+        st.subheader("Creator Focus")
         st.caption("Live action lists for creators who must maintain tier or reach graduation. Pacing updates automatically from the existing scheduled reads.")
         st.markdown("""
         <style>
@@ -1769,7 +1769,7 @@ def main():
                 maintained_value = bool(source_row.get("maintained_tier", False)) or bool(re.search(r"Ranked up|Maintained tier", raw, flags=re.IGNORECASE))
                 projected_value = int(round(current_value / battle_elapsed_days * battle_total_days))
                 remaining_value = max(0, target_value - current_value)
-                daily_needed = int((remaining_value + battle_days_remaining - 1) // battle_days_remaining)
+                daily_needed = int((remaining_value / battle_days_remaining) + 0.999999)
                 daily_actual = current_value / battle_elapsed_days
                 daily_gap = max(0, int(round(daily_needed - daily_actual)))
                 valid_days_match = re.search(r"(\d+)\s*d", raw, flags=re.IGNORECASE)
@@ -1814,7 +1814,7 @@ def main():
         battle_active["_current"] = battle_current.loc[battle_active.index]
         battle_active["_projected"] = (battle_active["_current"] / battle_elapsed_days * battle_total_days).round().astype("int64")
         battle_active["_remaining"] = (200_000 - battle_active["_current"]).clip(lower=0)
-        battle_active["_daily_needed"] = ((battle_active["_remaining"] + battle_days_remaining - 1) // battle_days_remaining).astype("int64")
+        battle_active["_daily_needed"] = (battle_active["_remaining"] / battle_days_remaining).apply(lambda value: int(value + 0.999999))
         battle_active["_daily_actual"] = battle_active["_current"] / battle_elapsed_days
         battle_active["_pace_gap"] = (battle_active["_daily_needed"] - battle_active["_daily_actual"]).clip(lower=0).round().astype("int64")
         battle_active["_priority"] = "Needs help"
@@ -1856,17 +1856,37 @@ def main():
           <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Agency wins to 50%</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_agency_wins_needed:,}</div></div>
         </div>
         """, unsafe_allow_html=True)
-        st.caption(f"Pacing uses {battle_elapsed_days} elapsed day(s) and {battle_days_remaining} day(s) remaining in the current month.")
+        st.caption(f"Pacing uses the 8:00 PM ET reporting boundary: {battle_elapsed_days:.2f} elapsed day(s) and {battle_days_remaining * 24:.1f} hour(s) remaining.")
 
-        def render_battle_creator_cards(frame):
-            cards = []
+
+        def render_battle_creator_cards(frame, battle_type):
+            group_styles = {
+                "Immediate push — reachable": ("#ffcf5a", "Creators close enough for a concentrated push before the reporting period closes."),
+                "Increase activity": ("#ff8a80", "Creators who can still benefit from additional LIVE time and diamonds."),
+                "Protect current pace": ("#6ee7ff", "Creators pacing to the requirement; keep their activity consistent."),
+                "Goal secured": ("#63e6be", "Creators who have already completed the requirement."),
+                "Development pipeline": ("#b9d9f5", "Not a current-month push. Develop these creators for the next reporting cycle."),
+            }
+            grouped_cards = {name: [] for name in group_styles}
             visible_fields = [column for column in frame.columns if not str(column).startswith("_") and column not in {"Creator", "Manager", "Priority", "Manager action"}]
             for _, row in frame.iterrows():
                 creator = html_escape(str(row.get("Creator", "") or "Unknown creator"))
                 manager = html_escape(str(row.get("Manager", "") or "Unassigned"))
-                priority = html_escape(str(row.get("Priority", "") or "Review"))
-                action = html_escape(str(row.get("Manager action", "") or "Review creator"))
-                priority_color = "#63e6be" if priority == "Achieved" else ("#6ee7ff" if priority == "On pace" else "#ffcf5a")
+                priority = str(row.get("Priority", "") or "Review")
+                action = str(row.get("Manager action", "") or "Review creator")
+                current_text = str(row.get("Current / goal", "0"))
+                current_value = int(re.sub(r"[^0-9]", "", current_text.split("/")[0]) or 0)
+                if priority == "Achieved":
+                    group_name = "Goal secured"
+                elif priority == "On pace":
+                    group_name = "Protect current pace"
+                elif battle_type == "Graduation" and (current_value < 100_000 or battle_days_remaining < 1 and current_value < 150_000):
+                    group_name = "Development pipeline"
+                elif action == "Push today — reachable" or battle_type == "Graduation":
+                    group_name = "Immediate push — reachable"
+                else:
+                    group_name = "Increase activity"
+                group_color = group_styles[group_name][0]
                 fields = []
                 for field in visible_fields:
                     value = row.get(field, "")
@@ -1874,28 +1894,29 @@ def main():
                         value = ""
                     fields.append(
                         f'<div style="background:#163f69;border:1px solid #4f86b7;border-radius:9px;padding:10px 12px;min-height:68px;">'
-                        f'<div style="color:#b9d9f5;font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;">{html_escape(str(field))}</div>'
-                        f'<div style="color:#ffffff;font-size:1.12rem;font-weight:900;margin-top:5px;overflow-wrap:anywhere;">{html_escape(str(value))}</div>'
-                        f'</div>'
+                        f'<div style="color:#b9d9f5;font-size:.78rem;font-weight:800;text-transform:uppercase;">{html_escape(str(field))}</div>'
+                        f'<div style="color:#ffffff;font-size:1.12rem;font-weight:900;margin-top:5px;">{html_escape(str(value))}</div></div>'
                     )
-                cards.append(
-                    f'<section style="background:#0c2844;border:2px solid #4f86b7;border-radius:14px;padding:16px;box-shadow:0 8px 20px rgba(0,0,0,.24);">'
-                    f'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px;">'
-                    f'<div><div style="color:#ffffff;font-size:1.35rem;font-weight:900;">{creator}</div>'
-                    f'<div style="color:#b9d9f5;font-size:.92rem;margin-top:2px;">Manager: <strong style="color:#ffffff;">{manager}</strong></div></div>'
-                    f'<div style="color:{priority_color};border:1px solid {priority_color};border-radius:999px;padding:5px 10px;font-weight:900;white-space:nowrap;">{priority}</div>'
-                    f'</div>'
-                    f'<div style="background:#102f4f;border-left:4px solid {priority_color};border-radius:8px;padding:9px 12px;margin-bottom:12px;">'
-                    f'<span style="color:#b9d9f5;font-weight:800;">Manager action: </span><strong style="color:#ffffff;">{action}</strong></div>'
-                    f'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;">{"".join(fields)}</div>'
-                    f'</section>'
+                grouped_cards[group_name].append(
+                    f'<article style="background:#102f4f;border-left:5px solid {group_color};border-radius:10px;padding:14px;">'
+                    f'<div style="display:flex;justify-content:space-between;gap:10px;"><div><div style="color:#ffffff;font-size:1.25rem;font-weight:900;">{creator}</div>'
+                    f'<div style="color:#b9d9f5;">Manager: <strong style="color:#ffffff;">{manager}</strong></div></div>'
+                    f'<strong style="color:{group_color};">{html_escape(priority)}</strong></div>'
+                    f'<div style="color:#ffffff;margin:9px 0;"><span style="color:#b9d9f5;font-weight:800;">Drive: </span>{html_escape(action)}</div>'
+                    f'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;">{"".join(fields)}</div></article>'
                 )
-            st.markdown(
-                '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(390px,1fr));gap:16px;margin:10px 0 18px 0;">'
-                + "".join(cards)
-                + '</div>',
-                unsafe_allow_html=True,
-            )
+            for group_name, (group_color, description) in group_styles.items():
+                cards = grouped_cards[group_name]
+                if not cards:
+                    continue
+                st.markdown(
+                    f'<div style="background:#0a223b;border:2px solid {group_color};border-radius:14px;padding:14px 16px;margin:18px 0 12px;">'
+                    f'<div style="color:{group_color};font-size:1.35rem;font-weight:900;">{html_escape(group_name)} <span style="color:#ffffff;">({len(cards)})</span></div>'
+                    f'<div style="color:#dbeeff;">{html_escape(description)}</div></div>'
+                    f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(390px,1fr));gap:14px;margin-bottom:20px;">'
+                    + "".join(cards) + '</div>',
+                    unsafe_allow_html=True,
+                )
 
 
         battle_view = st.radio("Battle list", ["Maintenance", "Graduation"], horizontal=True, key="battle_focus_view")
@@ -1906,7 +1927,7 @@ def main():
             else:
                 battle_order = pd.Categorical(maintenance_battle["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
                 maintenance_battle = maintenance_battle.assign(_order=battle_order).sort_values(["_order", "_pace_gap"], ascending=[True, False]).drop(columns=["_order", "_pace_gap"])
-                render_battle_creator_cards(maintenance_battle)
+                render_battle_creator_cards(maintenance_battle, "Maintenance")
         else:
             st.markdown("### Graduation Battle List")
             st.caption(f"{battle_reached_count:,} graduated toward a {battle_graduation_target:,} creator target. {graduation_help:,} active creator(s) currently project below 200K.")
@@ -1928,7 +1949,7 @@ def main():
                 })
                 graduation_order = pd.Categorical(graduation_display["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
                 graduation_display = graduation_display.assign(_order=graduation_order, _gap=battle_active["_pace_gap"].values).sort_values(["_order", "_gap"], ascending=[True, False]).drop(columns=["_order", "_gap"])
-                render_battle_creator_cards(graduation_display)
+                render_battle_creator_cards(graduation_display, "Graduation")
 
 
     with scouting_tab:
