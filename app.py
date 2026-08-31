@@ -1094,9 +1094,10 @@ def main():
             dashboard_diamonds = numeric_series(dashboard_creators, "diamonds")
             dashboard_tier = dashboard_creators.get("tier_status", pd.Series("", index=dashboard_creators.index)).fillna("").astype(str).str.lower()
             dashboard_rank = dashboard_creators.get("rank_up_progress", pd.Series("", index=dashboard_creators.index)).fillna("").astype(str).str.lower()
-            dashboard_maintained = dashboard_tier.str.contains("maintained|maintain", na=False) | dashboard_rank.str.contains("maintain", na=False)
-            dashboard_ranked = dashboard_tier.str.contains("ranked up|ranking up", na=False) | dashboard_rank.str.contains("rank up|ranked up", na=False)
-            dashboard_not_maintained = dashboard_tier.str.contains("not maintained|not maintain", na=False) | dashboard_rank.str.contains("not maintained|not maintain", na=False)
+            dashboard_not_maintained_text = dashboard_tier.str.contains("not maintained|not maintain", na=False) | dashboard_rank.str.contains("not maintained|not maintain", na=False)
+            dashboard_ranked = dashboard_tier.str.contains("ranked up|ranking up|rank up", na=False) | dashboard_rank.str.contains("rank up|ranked up|ranking up", na=False)
+            dashboard_maintained = ~dashboard_ranked & ~dashboard_not_maintained_text & (dashboard_tier.str.contains("maintained|maintain", na=False) | dashboard_rank.str.contains("maintain", na=False))
+            dashboard_not_maintained = dashboard_not_maintained_text | ~(dashboard_ranked | dashboard_maintained)
             dashboard_new_creators = monthly_metric_value(monthly_metrics, "new_creators", int(numeric_series(dashboard_managers, "new_creators").sum()) if not dashboard_managers.empty else 0)
             if dashboard_choice == "Agency":
                 with st.container(border=True):
