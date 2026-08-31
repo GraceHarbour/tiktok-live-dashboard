@@ -2133,10 +2133,27 @@ def main():
                 str(row["creator_id"]): f"{row['username']} • {row['event_manager'] or 'Unassigned'}"
                 for _, row in creator_choices.iterrows()
             }
-            available_ids = list(creator_label_map)
-            default_ids = [creator_id for creator_id in current_ids if creator_id in creator_label_map]
+            people_manager_values = creator_choices["event_manager"].replace("", "Unassigned")
+            people_manager_options = ["All managers"] + sorted(
+                manager for manager in people_manager_values.dropna().astype(str).unique()
+                if manager.strip()
+            )
             st.markdown("### Add or Remove People")
             st.caption("This list stays editable before and during the event. Add walk-ins or remove people, then save the updated tracking list.")
+            people_manager_filter = st.selectbox(
+                "Filter people by manager",
+                people_manager_options,
+                key=f"event_people_manager_{selected_event_id}",
+            )
+            if people_manager_filter == "All managers":
+                filtered_choice_ids = creator_choices["creator_id"].astype(str).tolist()
+            else:
+                filtered_choice_ids = creator_choices.loc[
+                    people_manager_values.astype(str) == people_manager_filter,
+                    "creator_id",
+                ].astype(str).tolist()
+            available_ids = list(dict.fromkeys(current_ids + filtered_choice_ids))
+            default_ids = [creator_id for creator_id in current_ids if creator_id in creator_label_map]
             selected_creator_ids = st.multiselect(
                 "Search and select creators",
                 available_ids,
