@@ -2031,6 +2031,17 @@ def main():
         event_left, event_right = st.columns([1, 1.25])
         eastern_now = pd.Timestamp.now(tz="America/New_York")
         next_slot = eastern_now.ceil("15min")
+        event_creator_choices = creators.copy()
+        if "creator_id" not in event_creator_choices.columns:
+            event_creator_choices["creator_id"] = event_creator_choices.get("username", pd.Series("", index=event_creator_choices.index)).astype(str)
+        event_creator_choices["creator_id"] = event_creator_choices["creator_id"].astype(str)
+        event_creator_choices["username"] = event_creator_choices.get("username", pd.Series("", index=event_creator_choices.index)).fillna("").astype(str)
+        event_creator_choices["event_manager"] = event_creator_choices.get("manager_name", event_creator_choices.get("manager", pd.Series("", index=event_creator_choices.index))).fillna("").astype(str)
+        event_creator_choices = event_creator_choices.drop_duplicates("creator_id").sort_values("username")
+        initial_creator_labels = {
+            str(row["creator_id"]): f"{row['username']} • {row['event_manager'] or 'Unassigned'}"
+            for _, row in event_creator_choices.iterrows()
+        }
         with event_left:
             st.markdown("### Schedule an event")
             with st.form("community_event_form", clear_on_submit=True):
@@ -2040,7 +2051,13 @@ def main():
                 end_default = next_slot + pd.Timedelta(hours=2, minutes=30)
                 end_date = st.date_input("End date", value=end_default.date())
                 end_time = st.time_input("End time (ET)", value=end_default.time().replace(second=0, microsecond=0), step=900)
-                event_submit = st.form_submit_button("Save event", type="primary", use_container_width=True)
+                initial_creator_ids = st.multiselect(
+                    "People to track",
+                    list(initial_creator_labels),
+                    format_func=lambda value: initial_creator_labels.get(value, value),
+                    help="Search for and add the creators participating in this event.",
+                )
+                event_submit = st.form_submit_button("Save event and people", type="primary", use_container_width=True)
             if event_submit:
                 start_local = pd.Timestamp(f"{start_date} {start_time}").tz_localize("America/New_York")
                 end_local = pd.Timestamp(f"{end_date} {end_time}").tz_localize("America/New_York")
@@ -2052,8 +2069,9 @@ def main():
                     st.error("The end time must be after the start time.")
                 else:
                     new_event_id = create_community_event(event_name.strip(), start_local.tz_convert("UTC").isoformat(), end_local.tz_convert("UTC").isoformat())
+                    save_event_participants(new_event_id, initial_creator_ids, event_creator_choices)
                     st.session_state["selected_community_event"] = new_event_id
-                    st.success("Event scheduled. Complete Goal snapshots will save automatically at the start and end.")
+                    st.success(f"Event scheduled with {len(initial_creator_ids)} tracked creator(s). Complete Goal snapshots will save automatically.")
                     st.rerun()
 
         events = load_community_events()
