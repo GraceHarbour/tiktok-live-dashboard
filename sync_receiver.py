@@ -161,7 +161,7 @@ def scouting_frames(payload: dict[str, object]) -> list[dict[str, object]]:
         raise ValueError("Unsupported Scouting snapshot.")
     captured_at = str(payload.get("captured_at") or "")
     records = []
-    for raw in rows:
+    for source_order, raw in enumerate(rows):
         if not isinstance(raw, list) or not raw:
             continue
         cells = [str(cell or "").strip() for cell in raw]
@@ -179,6 +179,7 @@ def scouting_frames(payload: dict[str, object]) -> list[dict[str, object]]:
         expiry_index = 6 if invited else 5
         records.append({
             "source": source, "username": creator,
+            "source_order": source_order,
             "followers": field(r"([\d.,]+[KMB]?)\s+followers"),
             "likes": field(r"([\d.,]+[KMB]?)\s+likes"),
             "applied_to_join": (first_line(cells[1]).casefold() == "yes") if len(cells) > 1 and not invited else False,
@@ -202,8 +203,9 @@ def replace_scouting_records(engine, payload: dict[str, object]) -> int:
     records = scouting_frames(payload)
     source = str(payload["source"])
     with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE scouting_records ADD COLUMN IF NOT EXISTS source_order INTEGER"))
         connection.execute(text("DELETE FROM scouting_records WHERE source = :source"), {"source": source})
-        connection.execute(text("INSERT INTO scouting_records (source, username, followers, likes, applied_to_join, scouting_status, live_streams, diamonds, live_hours, avg_live_viewers, invitation_type, assigned_manager, source_label, lead_expiry, captured_at) VALUES (:source, :username, :followers, :likes, :applied_to_join, :scouting_status, :live_streams, :diamonds, :live_hours, :avg_live_viewers, :invitation_type, :assigned_manager, :source_label, :lead_expiry, :captured_at)"), records)
+        connection.execute(text("INSERT INTO scouting_records (source, username, source_order, followers, likes, applied_to_join, scouting_status, live_streams, diamonds, live_hours, avg_live_viewers, invitation_type, assigned_manager, source_label, lead_expiry, captured_at) VALUES (:source, :username, :source_order, :followers, :likes, :applied_to_join, :scouting_status, :live_streams, :diamonds, :live_hours, :avg_live_viewers, :invitation_type, :assigned_manager, :source_label, :lead_expiry, :captured_at)"), records)
     return len(records)
 
 
