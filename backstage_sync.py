@@ -42,7 +42,8 @@ def ensure_schema(engine):
         "CREATE TABLE IF NOT EXISTS manager_performance (manager TEXT PRIMARY KEY, active_creators INTEGER, live_streams INTEGER, valid_live_creators INTEGER, live_hours REAL, creators_under_15h_pct REAL, diamonds INTEGER, diamond_goal INTEGER, diamond_change_pct REAL, period_start TEXT, period_end TEXT)",
         "CREATE TABLE IF NOT EXISTS data_updates (updated_at TEXT, source_file TEXT, creator_rows INTEGER)",
         "CREATE TABLE IF NOT EXISTS collector_runs (started_at TEXT, finished_at TEXT, status TEXT, detail TEXT, creator_rows INTEGER)",
-        "CREATE TABLE IF NOT EXISTS scouting_records (source TEXT NOT NULL, username TEXT NOT NULL, followers DOUBLE PRECISION, likes DOUBLE PRECISION, applied_to_join BOOLEAN, scouting_status TEXT, live_streams DOUBLE PRECISION, diamonds DOUBLE PRECISION, live_hours DOUBLE PRECISION, avg_live_viewers DOUBLE PRECISION, invitation_type TEXT, assigned_manager TEXT, source_label TEXT, lead_expiry TEXT, captured_at TEXT, PRIMARY KEY (source, username))",
+        "CREATE TABLE IF NOT EXISTS scouting_records (source TEXT NOT NULL, username TEXT NOT NULL, source_order INTEGER, followers DOUBLE PRECISION, likes DOUBLE PRECISION, applied_to_join BOOLEAN, scouting_status TEXT, live_streams DOUBLE PRECISION, diamonds DOUBLE PRECISION, live_hours DOUBLE PRECISION, avg_live_viewers DOUBLE PRECISION, invitation_type TEXT, assigned_manager TEXT, source_label TEXT, lead_expiry TEXT, captured_at TEXT, PRIMARY KEY (source, username))",
+        "ALTER TABLE scouting_records ADD COLUMN IF NOT EXISTS source_order INTEGER",
     ]
     with engine.begin() as connection:
         for statement in statements:
