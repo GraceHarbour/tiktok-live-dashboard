@@ -2172,15 +2172,43 @@ def main():
                 results_display = results_display[["Creator", "Manager", "Starting diamonds", "Ending diamonds", "Total diamonds earned"]].rename(columns={"Ending diamonds": "Current / ending diamonds"}).sort_values("Total diamonds earned", ascending=False)
                 st.markdown("### Live Event Results")
                 st.caption("Starting diamonds are saved at the official event start. During a live event, current diamonds show the latest Goal total; after the event, the saved ending snapshot is used.")
+                filter_left, filter_right = st.columns([2, 1])
+                with filter_left:
+                    event_creator_search = st.text_input(
+                        "Search people",
+                        placeholder="Search by creator name",
+                        key=f"event_results_search_{selected_event_id}",
+                    )
+                with filter_right:
+                    event_manager_options = ["All managers"] + sorted(
+                        manager for manager in results_display["Manager"].fillna("Unassigned").astype(str).unique()
+                        if manager.strip()
+                    )
+                    event_manager_filter = st.selectbox(
+                        "Manager",
+                        event_manager_options,
+                        key=f"event_results_manager_{selected_event_id}",
+                    )
+                filtered_event_results = results_display.copy()
+                if event_creator_search.strip():
+                    filtered_event_results = filtered_event_results[
+                        filtered_event_results["Creator"].fillna("").astype(str).str.contains(
+                            event_creator_search.strip(), case=False, na=False
+                        )
+                    ]
+                if event_manager_filter != "All managers":
+                    filtered_event_results = filtered_event_results[
+                        filtered_event_results["Manager"].fillna("Unassigned").astype(str) == event_manager_filter
+                    ]
                 total_battle_diamonds = int(results_display["Total diamonds earned"].fillna(0).sum())
                 result_a, result_b, result_c = st.columns(3)
-                result_a.metric("Tracked creators", len(results_display))
+                result_a.metric("People shown", len(filtered_event_results))
                 result_b.metric("Total diamonds earned", f"{total_battle_diamonds:,}")
                 result_c.metric("Snapshots", f"{'Start' if not start_snapshot.empty else 'Waiting'} / {'End' if not end_snapshot.empty else 'Waiting'}")
-                render_read_table(results_display, height=min(650, 100 + len(results_display) * 38))
+                render_read_table(filtered_event_results, height=min(650, 100 + len(filtered_event_results) * 38))
                 st.download_button(
                     "Download event results",
-                    results_display.to_csv(index=False).encode("utf-8"),
+                    filtered_event_results.to_csv(index=False).encode("utf-8"),
                     file_name=f"{str(selected_event['event_name']).strip().replace(' ', '_')}_results.csv",
                     mime="text/csv",
                     key=f"download_event_{selected_event_id}",
