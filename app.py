@@ -2046,11 +2046,25 @@ def main():
             st.markdown("### Schedule an event")
             with st.form("community_event_form", clear_on_submit=True):
                 event_name = st.text_input("Event name", placeholder="Monday Community Battle")
+                quarter_hour_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 15, 30, 45)]
+                format_event_time = lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0")
+                start_default_value = f"{next_slot.hour:02d}:{next_slot.minute:02d}"
                 start_date = st.date_input("Start date", value=next_slot.date())
-                start_time = st.time_input("Start time (ET)", value=next_slot.time().replace(second=0, microsecond=0), step=900)
+                start_time = st.selectbox(
+                    "Start time (ET)",
+                    quarter_hour_values,
+                    index=quarter_hour_values.index(start_default_value),
+                    format_func=format_event_time,
+                )
                 end_default = next_slot + pd.Timedelta(hours=2, minutes=30)
+                end_default_value = f"{end_default.hour:02d}:{end_default.minute:02d}"
                 end_date = st.date_input("End date", value=end_default.date())
-                end_time = st.time_input("End time (ET)", value=end_default.time().replace(second=0, microsecond=0), step=900)
+                end_time = st.selectbox(
+                    "End time (ET)",
+                    quarter_hour_values,
+                    index=quarter_hour_values.index(end_default_value),
+                    format_func=format_event_time,
+                )
                 initial_creator_ids = st.multiselect(
                     "People to track",
                     list(initial_creator_labels),
