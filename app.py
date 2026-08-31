@@ -1707,6 +1707,36 @@ def main():
     with battle_tab:
         st.subheader("Battle Focus")
         st.caption("Live action lists for creators who must maintain tier or reach graduation. Pacing updates automatically from the existing scheduled reads.")
+        st.markdown("""
+        <style>
+        div[data-testid="stRadio"] > label,
+        div[data-testid="stRadio"] > label p {
+            color: #ffffff !important;
+            font-weight: 800 !important;
+            font-size: 1.05rem !important;
+        }
+        div[data-testid="stRadio"] div[role="radiogroup"] {
+            gap: 0.75rem !important;
+        }
+        div[data-testid="stRadio"] div[role="radiogroup"] label {
+            background: #163a5f !important;
+            border: 2px solid #5f87ad !important;
+            border-radius: 0.65rem !important;
+            padding: 0.55rem 1.15rem !important;
+            min-width: 10rem !important;
+        }
+        div[data-testid="stRadio"] div[role="radiogroup"] label p {
+            color: #ffffff !important;
+            font-weight: 900 !important;
+            font-size: 1.1rem !important;
+        }
+        div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) {
+            background: #075ea8 !important;
+            border-color: #6ee7ff !important;
+            box-shadow: 0 0 0 2px rgba(110, 231, 255, 0.25) !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
         battle_today = pd.Timestamp.now(tz="America/New_York")
         battle_total_days = int(battle_today.days_in_month)
