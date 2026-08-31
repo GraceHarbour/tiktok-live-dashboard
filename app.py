@@ -1792,7 +1792,7 @@ def main():
                     viewer_values = pd.to_numeric(view_rows.loc[display_frame.index, "avg_live_viewers"], errors="coerce").fillna(0)
                     display_frame = pd.DataFrame({
                         "Creator": display_frame["Creator"],
-                        "Applied": ["Yes\n" + (value.strip() or "Not available") for value in application_types],
+                        "Applied": ["Yes" + (f"\n{value.strip()}" if value.strip() else "") for value in application_types],
                         "Last 30 days": [f"{streams:,.0f} LIVE streams • {hours:g} h\n{diamonds:,.0f} Diamonds • {viewers:,.0f} Avg. LIVE viewers" for streams, hours, diamonds, viewers in zip(stream_values, hour_values, diamond_values, viewer_values)],
                         "Assigned to": view_rows.loc[display_frame.index, "assigned_manager"].fillna("Unassigned").astype(str),
                     }, index=display_frame.index)
