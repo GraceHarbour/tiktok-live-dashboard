@@ -1739,10 +1739,19 @@ def main():
         </style>
         """, unsafe_allow_html=True)
 
+
         battle_today = pd.Timestamp.now(tz="America/New_York")
-        battle_total_days = int(battle_today.days_in_month)
-        battle_elapsed_days = max(1, int(battle_today.day))
-        battle_days_remaining = max(1, battle_total_days - battle_elapsed_days + 1)
+        battle_boundary_today = battle_today.normalize() + pd.Timedelta(hours=20)
+        if battle_today >= battle_boundary_today:
+            battle_cycle_start = battle_boundary_today
+            battle_cycle_end = battle_cycle_start + pd.offsets.MonthEnd(1)
+        else:
+            battle_cycle_end = battle_boundary_today
+            battle_cycle_start = battle_cycle_end - pd.offsets.MonthEnd(1)
+        battle_total_days = max((battle_cycle_end - battle_cycle_start).total_seconds() / 86_400, 1 / 1_440)
+        battle_elapsed_days = max((battle_today - battle_cycle_start).total_seconds() / 86_400, 1 / 1_440)
+        battle_days_remaining = max((battle_cycle_end - battle_today).total_seconds() / 86_400, 1 / 1_440)
+
 
         creator_manager_map = {}
         if not creators.empty and "_manager" in creators.columns:
@@ -1845,7 +1854,7 @@ def main():
         battle_agency_target = (len(creators) * 50 + 99) // 100 if len(creators) else 0
         battle_agency_wins_needed = max(0, battle_agency_target - battle_combined_wins)
 
-        st.markdown("### Battle Command Center")
+        st.markdown("### Creator Focus Center")
         st.markdown(f"""
         <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:8px 0 14px 0;">
           <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance achieved</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_achieved:,}</div></div>
@@ -1919,9 +1928,9 @@ def main():
                 )
 
 
-        battle_view = st.radio("Battle list", ["Maintenance", "Graduation"], horizontal=True, key="battle_focus_view")
+        battle_view = st.radio("Focus list", ["Maintenance", "Graduation"], horizontal=True, key="battle_focus_view")
         if battle_view == "Maintenance":
-            st.markdown("### Maintenance Battle List")
+            st.markdown("### Maintenance Focus List")
             if maintenance_battle.empty:
                 st.info("No maintenance battle records are available for this manager.")
             else:
@@ -1929,7 +1938,7 @@ def main():
                 maintenance_battle = maintenance_battle.assign(_order=battle_order).sort_values(["_order", "_pace_gap"], ascending=[True, False]).drop(columns=["_order", "_pace_gap"])
                 render_battle_creator_cards(maintenance_battle, "Maintenance")
         else:
-            st.markdown("### Graduation Battle List")
+            st.markdown("### Graduation Focus List")
             st.caption(f"{battle_reached_count:,} graduated toward a {battle_graduation_target:,} creator target. {graduation_help:,} active creator(s) currently project below 200K.")
             if battle_active.empty:
                 st.info("No active graduation battle records are available for this manager.")
