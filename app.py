@@ -2135,7 +2135,8 @@ def main():
             }
             available_ids = list(creator_label_map)
             default_ids = [creator_id for creator_id in current_ids if creator_id in creator_label_map]
-            st.markdown("### Select creators")
+            st.markdown("### Add or Remove People")
+            st.caption("This list stays editable before and during the event. Add walk-ins or remove people, then save the updated tracking list.")
             selected_creator_ids = st.multiselect(
                 "Search and select creators",
                 available_ids,
@@ -2143,7 +2144,7 @@ def main():
                 format_func=lambda value: creator_label_map.get(value, value),
                 key=f"event_creators_{selected_event_id}",
             )
-            if st.button("Save tracked creators", type="primary", key=f"save_event_creators_{selected_event_id}"):
+            if st.button("Update people being tracked", type="primary", key=f"save_event_creators_{selected_event_id}"):
                 save_event_participants(selected_event_id, selected_creator_ids, creator_choices)
                 st.success(f"Saved {len(selected_creator_ids)} tracked creator(s).")
                 st.rerun()
@@ -2168,8 +2169,9 @@ def main():
                 results["Ending diamonds"] = results["Ending diamonds"].fillna(results["Current diamonds"])
                 results["Total diamonds earned"] = (results["Ending diamonds"] - results["Starting diamonds"]).clip(lower=0)
                 results_display = results.rename(columns={"username": "Creator", "manager": "Manager"})
-                results_display = results_display[["Creator", "Manager", "Starting diamonds", "Ending diamonds", "Total diamonds earned"]].sort_values("Total diamonds earned", ascending=False)
-                st.markdown("### Event Diamond Results")
+                results_display = results_display[["Creator", "Manager", "Starting diamonds", "Ending diamonds", "Total diamonds earned"]].rename(columns={"Ending diamonds": "Current / ending diamonds"}).sort_values("Total diamonds earned", ascending=False)
+                st.markdown("### Live Event Results")
+                st.caption("Starting diamonds are saved at the official event start. During a live event, current diamonds show the latest Goal total; after the event, the saved ending snapshot is used.")
                 total_battle_diamonds = int(results_display["Total diamonds earned"].fillna(0).sum())
                 result_a, result_b, result_c = st.columns(3)
                 result_a.metric("Tracked creators", len(results_display))
