@@ -244,8 +244,8 @@ def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names
     month_options = list(dict.fromkeys([current_month, *finalized_months]))
     selected_month = st.selectbox("Reward month", month_options, format_func=lambda value: pd.Timestamp(f"{value}-01").strftime("%B %Y"))
     if selected_month != current_month:
-        safe_month = selected_month if re.fullmatch(r"\d{4}-\d{2}", selected_month) else current_month
-        finalized = pd.read_sql(text(f"SELECT * FROM monthly_reward_results WHERE month_key='{safe_month}'"), engine)
+        all_finalized = pd.read_sql(text("SELECT * FROM monthly_reward_results"), engine)
+        finalized = all_finalized[all_finalized["month_key"].astype(str) == selected_month].copy()
         classified = finalized.rename(columns={
             "creator_id":"Creator ID", "username":"Creator", "manager_name":"Manager",
             "diamonds":"Diamonds", "valid_live_days":"Valid LIVE days",
