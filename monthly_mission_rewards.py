@@ -604,7 +604,9 @@ def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.D
             is_admin, _ = _signed_in_reward_admin(engine)
             if is_admin:
                 st.markdown("#### Admin drawing reset")
-                confirm_delete = st.checkbox("I am sure I want to reset this drawing", key=f"confirm_delete_drawing_{drawing_id}")
+                confirm_key = f"confirm_delete_drawing_{drawing_id}"
+                confirm_delete = st.checkbox("I am sure I want to reset this drawing", key=confirm_key)
+                confirm_delete = bool(st.session_state.get(confirm_key, confirm_delete))
                 if st.button("Reset drawing and return all names", disabled=not confirm_delete, key=f"delete_drawing_{drawing_id}"):
                     with engine.begin() as connection:
                         connection.execute(text("DELETE FROM monthly_prize_drawings WHERE id=:id"), {"id": int(drawing_id)})
