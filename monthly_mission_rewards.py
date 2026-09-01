@@ -273,6 +273,12 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
     unavailable_locked = pd.read_sql(text("SELECT creator_id FROM monthly_reward_unavailable WHERE month_key=:month_key AND (override_granted=false OR reschedule_blocked=true)"), engine, params={"month_key": month_key})
     if not unavailable_locked.empty:
         add_pool = add_pool[~add_pool["Creator ID"].isin(unavailable_locked["creator_id"].astype(str))]
+    st.markdown("#### Creators still needing an event")
+    if add_pool.empty:
+        st.success("Every currently eligible creator is scheduled, delivered, or awaiting manager reschedule approval.")
+    else:
+        needs_columns = [column for column in ["Picture", "Creator", "Manager", "Reward", "Milestone", "Prize value"] if column in add_pool]
+        _display_table(add_pool[needs_columns].sort_values(["Manager", "Creator"]), min(480, 88 + len(add_pool) * 42))
     label_map = {f"{r['Creator']} — {r['Manager']} — {r['Reward']}": r for r in add_pool.to_dict("records")}
     selected_add = st.multiselect("Add unscheduled creators from the eligible rewards list", list(label_map), key=f"reward_add_{event_id}")
     if st.button("Add selected creators", key=f"reward_add_button_{event_id}", disabled=not selected_add):
@@ -312,8 +318,8 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
 
         active_rows = editor[~editor["Given out"].astype(bool)].copy()
         unavailable_labels = {f"{r['Creator']} — {r['Manager']} — {r['Reward']}": r for r in active_rows.to_dict("records")}
-        selected_unavailable = st.multiselect("Mark creators unavailable for this event", list(unavailable_labels), key=f"reward_unavailable_{event_id}")
-        if st.button("Move selected to unavailable", key=f"reward_unavailable_button_{event_id}", disabled=not selected_unavailable):
+        selected_unavailable = st.multiselect("Select creators to reschedule / mark unavailable", list(unavailable_labels), key=f"reward_unavailable_{event_id}")
+        if st.button("Remove from this event and reschedule", key=f"reward_unavailable_button_{event_id}", disabled=not selected_unavailable):
             already_used = []
             moved = 0
             with engine.begin() as connection:
@@ -339,7 +345,7 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
             if already_used:
                 st.error("These creators used their automatic reschedule and now require manager approval before another event: " + ", ".join(already_used))
             if moved:
-                st.success(f"Moved {moved} creator(s) to the unavailable list. Their one automatic reschedule is available; any later reschedule requires manager approval.")
+                st.success(f"Removed {moved} creator(s) from this event and returned them to Creators still needing an event. Their first reschedule is automatic; later reschedules require manager approval.")
                 st.rerun()
 
         remove_labels = {f"{r['Creator']} — {r['Reward']}": r["creator_id"] for r in editor.to_dict("records")}
@@ -350,7 +356,7 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
                     connection.execute(text("DELETE FROM monthly_reward_event_creators WHERE event_id=:event_id AND creator_id=:creator_id"), {"event_id": event_id, "creator_id": remove_labels[label]})
             st.rerun()
 
-    st.markdown("#### Unavailable creators — one allowance per month")
+    st.markdown("#### Rescheduled / unavailable creators")
     unavailable = pd.read_sql(text("""
         SELECT u.creator_id,u.username AS "Creator",u.manager_name AS "Manager",u.reward_name AS "Reward",
                e.event_name AS "Unavailable for event",u.marked_at AS "Marked unavailable",
