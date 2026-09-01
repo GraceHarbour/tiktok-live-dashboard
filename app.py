@@ -1808,7 +1808,7 @@ def main():
             st.info("Maintenance source pages have not supplied a complete read yet. The dashboard remains online, and these boxes will populate automatically as soon as the scheduled maintenance reader imports its next complete run.")
 
 
-    with battle_tab.container():
+    with battle_tab:
         st.subheader("Creator Focus")
         st.caption("Live action lists for creators who must maintain tier or reach graduation. Pacing updates automatically from the existing scheduled reads.")
         st.markdown("""
