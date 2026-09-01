@@ -500,16 +500,27 @@ def _wheel_replay_html(prize_name: str, candidate_names: list[str], winners: lis
     names_json = json.dumps(candidate_names, ensure_ascii=False).replace("</", "<\\/")
     winners_json = json.dumps(winners, ensure_ascii=False).replace("</", "<\\/")
     winner_cards = "".join(f'<div class="winner"><b>Winner {index}</b><span>{html.escape(name)}</span></div>' for index, name in enumerate(winners, 1))
+    wheel_names = candidate_names or ["No entries"]
+    colors = ["#ff2d95", "#18bfff", "#7b4dff", "#ff9f1c", "#0ad5a8", "#ff4d4d", "#4169e1", "#d83cff"]
+    segment = 100 / len(wheel_names)
+    gradient = ",".join(f"{colors[index % len(colors)]} {index * segment:.4f}% {(index + 1) * segment:.4f}%" for index in range(len(wheel_names)))
+    name_size = 12 if len(wheel_names) <= 12 else (9 if len(wheel_names) <= 24 else 7)
+    wheel_labels = "".join(
+        f'<div class="wheel-label" style="font-size:{name_size}px;transform:translate(-50%,-50%) rotate({index * 360 / len(wheel_names):.3f}deg) translateY(-142px) rotate({-index * 360 / len(wheel_names):.3f}deg)">{html.escape(str(name)[:18])}</div>'
+        for index, name in enumerate(wheel_names)
+    )
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>{safe_prize} Drawing</title><style>
     body{{margin:0;background:radial-gradient(circle at top,#123b70,#050914 65%);color:white;font-family:Arial,sans-serif;text-align:center;padding:24px}}
     h1{{color:#ffd34d;margin:0 0 8px}} .subtitle{{color:#bfe4ff;margin-bottom:18px}}
     .stage{{display:flex;justify-content:center;align-items:center;min-height:390px;position:relative}}
     .pointer{{position:absolute;top:5px;z-index:3;width:0;height:0;border-left:20px solid transparent;border-right:20px solid transparent;border-top:42px solid #ffd34d}}
-    .wheel{{width:340px;height:340px;border-radius:50%;border:10px solid #f4c542;background:conic-gradient(#ff2d95 0 12.5%,#18bfff 12.5% 25%,#7b4dff 25% 37.5%,#ff9f1c 37.5% 50%,#0ad5a8 50% 62.5%,#ff4d4d 62.5% 75%,#4169e1 75% 87.5%,#d83cff 87.5%);box-shadow:0 0 35px #149cff;display:grid;place-items:center;transition:transform 2.8s cubic-bezier(.1,.7,.1,1)}}
-    .wheel.spin{{transform:rotate(2160deg)}} .center{{width:190px;height:190px;border-radius:50%;background:#061329;border:5px solid white;display:grid;place-items:center;padding:12px;font-size:25px;font-weight:800;box-shadow:inset 0 0 25px #1f79c9}}
+    .wheel{{width:340px;height:340px;border-radius:50%;border:10px solid #f4c542;background:conic-gradient({gradient});box-shadow:0 0 35px #149cff;position:relative;display:grid;place-items:center;transition:transform 3.8s cubic-bezier(.08,.68,.08,1)}}
+    .wheel:after{{content:'';position:absolute;inset:46%;border-radius:50%;background:#ffd34d;border:4px solid white;box-shadow:0 0 15px #000;z-index:4}}
+    .wheel-label{{position:absolute;left:50%;top:50%;width:78px;line-height:1.05;font-weight:800;color:#fff;text-shadow:0 1px 3px #000,0 0 4px #000;z-index:2;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}}
+    .wheel.spin{{transform:rotate(2520deg)}} .center{{width:145px;height:145px;border-radius:50%;background:rgba(6,19,41,.94);border:5px solid white;display:grid;place-items:center;padding:12px;font-size:21px;font-weight:800;box-shadow:inset 0 0 25px #1f79c9;z-index:3}}
     .results{{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:18px}} .winner{{min-width:220px;background:#0c2b50;border:2px solid #39bfff;border-radius:14px;padding:14px;box-shadow:0 0 16px #1565a8}}
     .winner b{{display:block;color:#ffd34d;font-size:18px}} .winner span{{display:block;font-size:23px;font-weight:800;margin-top:6px}}
-    </style></head><body><h1>{safe_prize}</h1><div class="subtitle">Monthly Creator Prize Drawing</div><div class="stage"><div class="pointer"></div><div id="wheel" class="wheel"><div id="name" class="center">Ready</div></div></div><div id="status">The drawing will begin automatically.</div><div class="results">{winner_cards}</div><script>
+    </style></head><body><h1>{safe_prize}</h1><div class="subtitle">Monthly Creator Prize Drawing</div><div class="stage"><div class="pointer"></div><div id="wheel" class="wheel">{wheel_labels}<div id="name" class="center">Ready</div></div></div><div id="status">The drawing will begin automatically.</div><div class="results">{winner_cards}</div><script>
     const candidates={names_json}, winners={winners_json}; let spin=0; const wheel=document.getElementById('wheel'), nameBox=document.getElementById('name'), status=document.getElementById('status');
     function runSpin(){{if(spin>=winners.length){{status.textContent='Drawing complete';nameBox.textContent='Complete';return;}} status.textContent='Spinning for Winner '+(spin+1)+' of '+winners.length; wheel.classList.remove('spin'); void wheel.offsetWidth; wheel.classList.add('spin'); let ticks=0; const timer=setInterval(()=>{{nameBox.textContent=candidates[Math.floor(Math.random()*candidates.length)]||'Spinning';if(++ticks>25){{clearInterval(timer);nameBox.textContent=winners[spin];status.textContent='Winner '+(spin+1)+': '+winners[spin];spin++;setTimeout(runSpin,1700);}}}},100);}}
     setTimeout(runSpin,700);
@@ -567,6 +578,13 @@ def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.D
             d1, d2 = st.columns(2)
             d1.download_button("Download spinning wheel replay", replay.encode("utf-8"), file_name=f"{month_key}-{drawing.iloc[0]['drawing_key'].lower().replace(' ','-')}-wheel.html", mime="text/html")
             d2.download_button("Download winner results", csv_data, file_name=f"{month_key}-{drawing.iloc[0]['drawing_key'].lower().replace(' ','-')}-winners.csv", mime="text/csv")
+            confirm_delete = st.checkbox("I am sure I want to delete this drawing result", key=f"confirm_delete_drawing_{drawing_id}")
+            if st.button("Delete this drawing result", disabled=not confirm_delete, key=f"delete_drawing_{drawing_id}"):
+                with engine.begin() as connection:
+                    connection.execute(text("DELETE FROM monthly_prize_drawings WHERE id=:id"), {"id": int(drawing_id)})
+                st.session_state.pop("monthly_wheel_drawing_id", None)
+                st.success("Drawing deleted. Its winners have been returned to the available wheel pool.")
+                st.rerun()
 
 
 def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
