@@ -1808,7 +1808,7 @@ def main():
             st.info("Maintenance source pages have not supplied a complete read yet. The dashboard remains online, and these boxes will populate automatically as soon as the scheduled maintenance reader imports its next complete run.")
 
 
-    with battle_tab:
+    with battle_tab.container():
         st.subheader("Creator Focus")
         st.caption("Live action lists for creators who must maintain tier or reach graduation. Pacing updates automatically from the existing scheduled reads.")
         st.markdown("""
@@ -2097,8 +2097,12 @@ def main():
         }
         with event_left:
             st.markdown("### Schedule an event")
-            with st.form("community_event_form", clear_on_submit=True):
-                event_name = st.text_input("Event name", placeholder="Monday Community Battle")
+            if st.button("Create another event", key="create_another_community_event", use_container_width=True):
+                st.session_state["community_event_form_version"] = st.session_state.get("community_event_form_version", 0) + 1
+                st.rerun()
+            event_form_version = st.session_state.get("community_event_form_version", 0)
+            with st.form(f"community_event_form_{event_form_version}", clear_on_submit=True):
+                event_name = st.text_input("Event name", placeholder="Monday Community Battle", key=f"community_event_name_{event_form_version}")
                 quarter_hour_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 15, 30, 45)]
                 format_event_time = lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0")
                 start_default_value = f"{next_slot.hour:02d}:{next_slot.minute:02d}"
@@ -2138,6 +2142,7 @@ def main():
                     new_event_id = create_community_event(event_name.strip(), start_local.tz_convert("UTC").isoformat(), end_local.tz_convert("UTC").isoformat())
                     save_event_participants(new_event_id, initial_creator_ids, event_creator_choices)
                     st.session_state["selected_community_event"] = new_event_id
+                    st.session_state["community_event_form_version"] = event_form_version + 1
                     st.success(f"Event scheduled with {len(initial_creator_ids)} tracked creator(s). Complete Goal snapshots will save automatically.")
                     st.rerun()
 
