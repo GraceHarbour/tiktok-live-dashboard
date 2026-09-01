@@ -2695,3 +2695,5 @@ with rewards_tab:
 
 if __name__ == "__main__":
     main()
+
+# Deployment marker: reload monthly rewards navigation and section together.
