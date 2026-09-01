@@ -1815,6 +1815,15 @@ def main():
             st.info("Maintenance source pages have not supplied a complete read yet. The dashboard remains online, and these boxes will populate automatically as soon as the scheduled maintenance reader imports its next complete run.")
 
 
+    st.markdown("""
+    <style>
+    .st-key-creator_focus_only { display: none !important; }
+    body:has([data-testid="stTabs"] [role="tab"]:nth-child(5)[aria-selected="true"]) .st-key-creator_focus_only {
+        display: block !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     with battle_tab:
         with st.container(key="creator_focus_only"):
             st.subheader("Creator Focus")
