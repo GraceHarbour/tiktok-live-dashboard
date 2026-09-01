@@ -1654,7 +1654,7 @@ def main():
         else:
             visible_business = business.copy()
             if choice != "All managers" and "Manager" in visible_business.columns:
-                visible_business = visible_business[visible_business["Manager"].fillna("").astype(str) == choice].copy()
+                visible_business = visible_business[visible_business["Manager"].fillna("").astype(str) == creator_focus_manager].copy()
 
             section_series = visible_business.get("Section", pd.Series("", index=visible_business.index)).astype(str)
             stability_rows = visible_business[section_series.str.contains("Creator Stability", case=False, na=False)].copy()
@@ -1828,6 +1828,44 @@ def main():
         with st.container(key="creator_focus_only"):
             st.subheader("Creator Focus")
             st.caption("Live action lists for creators who must maintain tier or reach graduation. Pacing updates automatically from the existing scheduled reads.")
+            creator_focus_manager_values = set(
+                business.get("Manager", pd.Series(dtype="object")).dropna().astype(str).str.strip().tolist()
+            )
+            creator_focus_manager_values.update(
+                creators.get("manager", pd.Series(dtype="object")).dropna().astype(str).str.strip().tolist()
+            )
+            creator_focus_manager_options = ["All managers", *sorted(
+                manager for manager in creator_focus_manager_values if manager and manager != "-"
+            )]
+            creator_focus_manager = st.selectbox(
+                "Creator Focus manager",
+                creator_focus_manager_options,
+                key="creator_focus_manager_filter",
+                help="Show only the selected manager's creators in both focus lists.",
+            )
+            creator_focus_logo_key = "".join(
+                char for char in creator_focus_manager.lower() if char.isalnum()
+            )
+            creator_focus_logo_name = (
+                "agency-logo.png"
+                if creator_focus_manager == "All managers"
+                else manager_logo_files.get(creator_focus_logo_key)
+            )
+            creator_focus_logo_path = (
+                __import__("pathlib").Path(__file__).resolve().parent
+                / "assets"
+                / ("" if creator_focus_manager == "All managers" else "manager-logos")
+                / creator_focus_logo_name
+            ) if creator_focus_logo_name else None
+            if creator_focus_logo_path and creator_focus_logo_path.exists():
+                logo_left, logo_center, logo_right = st.columns([2, 1, 2])
+                with logo_center:
+                    st.image(
+                        str(creator_focus_logo_path),
+                        width=180,
+                        caption="Agency" if creator_focus_manager == "All managers" else creator_focus_manager,
+                    )
+
             st.markdown("""
             <style>
             div[data-testid="stRadio"] > label,
@@ -1893,7 +1931,7 @@ def main():
                     target_value = int(progress_match.group(2).replace(",", ""))
                     creator_name = str(source_row.get("creator", "")).strip()
                     manager_name = creator_manager_map.get(creator_name.lstrip("@").casefold(), "Unassigned")
-                    if choice != "All managers" and manager_name != choice:
+                    if creator_focus_manager != "All managers" and manager_name != creator_focus_manager:
                         continue
                     maintained_value = bool(source_row.get("maintained_tier", False)) or bool(re.search(r"Ranked up|Maintained tier", raw, flags=re.IGNORECASE))
                     projected_value = int(round(current_value / battle_elapsed_days * battle_total_days))
@@ -1931,8 +1969,8 @@ def main():
             maintenance_battle = pd.DataFrame(maintenance_battle_rows)
 
             battle_business = business.copy()
-            if choice != "All managers" and not battle_business.empty and "Manager" in battle_business.columns:
-                battle_business = battle_business[battle_business["Manager"].fillna("").astype(str) == choice].copy()
+            if creator_focus_manager != "All managers" and not battle_business.empty and "Manager" in battle_business.columns:
+                battle_business = battle_business[battle_business["Manager"].fillna("").astype(str) == creator_focus_manager].copy()
             battle_sections = battle_business.get("Section", pd.Series("", index=battle_business.index)).fillna("").astype(str)
             battle_graduation = battle_business[battle_sections.str.contains("Creator Graduation", case=False, na=False) & battle_sections.str.contains("Evaluated", case=False, na=False)].copy()
             battle_reached = battle_business[battle_sections.str.contains("Reached graduation", case=False, na=False)].copy()
@@ -1963,7 +2001,7 @@ def main():
             battle_active.loc[graduation_reachable, "_action"] = "Push today — reachable"
 
             battle_reached_count = int(battle_reached.get("Reached graduation", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
-            battle_evaluated_base = max(165, len(battle_graduation)) if choice == "All managers" else len(battle_graduation)
+            battle_evaluated_base = max(165, len(battle_graduation)) if creator_focus_manager == "All managers" else len(battle_graduation)
             battle_graduation_target = (battle_evaluated_base * 15 + 99) // 100 if battle_evaluated_base else 0
             battle_wins_needed = max(0, battle_graduation_target - battle_reached_count)
 
