@@ -1972,41 +1972,41 @@ def main():
                     if creator_focus_manager != "All managers" and manager_name != creator_focus_manager:
                         continue
                     maintained_value = bool(source_row.get("maintained_tier", False)) or bool(re.search(r"Ranked up|Maintained tier", raw, flags=re.IGNORECASE))
-                projected_value = int(round(current_value / battle_elapsed_days * battle_total_days)) if battle_pacing_ready else 0
-                remaining_value = max(0, target_value - current_value)
-                daily_needed = int((remaining_value / battle_days_remaining) + 0.999999)
-                daily_actual = current_value / battle_elapsed_days if battle_pacing_ready else 0
-                daily_gap = max(0, int(round(daily_needed - daily_actual)))
-                valid_days_match = re.search(r"(\d+)\s*d", raw, flags=re.IGNORECASE)
-                valid_days = int(valid_days_match.group(1)) if valid_days_match else 0
-                if maintained_value or current_value >= target_value:
-                    pace_status = "Achieved"
-                    manager_action = "Goal secured"
-                elif not battle_pacing_ready:
-                    pace_status = "Pending"
-                    manager_action = "Await first completed 8:00 PM read"
-                elif projected_value >= target_value:
-                    pace_status = "On pace"
-                    manager_action = "Keep current pace"
-                elif remaining_value <= max(20_000, int(target_value * 0.20)) or daily_gap <= max(1_000, int(daily_actual * 0.35)):
-                    pace_status = "Needs help"
-                    manager_action = "Push today — reachable"
-                else:
-                    pace_status = "Needs help"
-                    manager_action = "Increase LIVE time and diamonds"
-                    maintenance_battle_rows.append({
-                        "Priority": pace_status,
-                        "Creator": creator_name,
-                        "Manager": manager_name,
-                        "Manager action": manager_action,
-                        "Current / goal": f"{current_value:,} / {target_value:,}",
-                        "Projected finish": f"{projected_value:,}",
-                        "Still needed": f"{remaining_value:,}",
-                        "Daily pace needed": f"{daily_needed:,}",
-                        "Daily pace gap": f"{daily_gap:,}",
-                        "Valid LIVE days": valid_days,
-                        "_pace_gap": daily_gap,
-                    })
+                    projected_value = int(round(current_value / battle_elapsed_days * battle_total_days)) if battle_pacing_ready else 0
+                    remaining_value = max(0, target_value - current_value)
+                    daily_needed = int((remaining_value / battle_days_remaining) + 0.999999)
+                    daily_actual = current_value / battle_elapsed_days if battle_pacing_ready else 0
+                    daily_gap = max(0, int(round(daily_needed - daily_actual)))
+                    valid_days_match = re.search(r"(\d+)\s*d", raw, flags=re.IGNORECASE)
+                    valid_days = int(valid_days_match.group(1)) if valid_days_match else 0
+                    if maintained_value or current_value >= target_value:
+                        pace_status = "Achieved"
+                        manager_action = "Goal secured"
+                    elif not battle_pacing_ready:
+                        pace_status = "Pending"
+                        manager_action = "Await first completed 8:00 PM read"
+                    elif projected_value >= target_value:
+                        pace_status = "On pace"
+                        manager_action = "Keep current pace"
+                    elif remaining_value <= max(20_000, int(target_value * 0.20)) or daily_gap <= max(1_000, int(daily_actual * 0.35)):
+                        pace_status = "Needs help"
+                        manager_action = "Push today — reachable"
+                    else:
+                        pace_status = "Needs help"
+                        manager_action = "Increase LIVE time and diamonds"
+                        maintenance_battle_rows.append({
+                            "Priority": pace_status,
+                            "Creator": creator_name,
+                            "Manager": manager_name,
+                            "Manager action": manager_action,
+                            "Current / goal": f"{current_value:,} / {target_value:,}",
+                            "Projected finish": f"{projected_value:,}",
+                            "Still needed": f"{remaining_value:,}",
+                            "Daily pace needed": f"{daily_needed:,}",
+                            "Daily pace gap": f"{daily_gap:,}",
+                            "Valid LIVE days": valid_days,
+                            "_pace_gap": daily_gap,
+                        })
             maintenance_battle = pd.DataFrame(maintenance_battle_rows)
 
             battle_business = business.copy()
@@ -2017,13 +2017,13 @@ def main():
             battle_reached = battle_business[battle_sections.str.contains("Reached graduation", case=False, na=False)].copy()
             battle_progress = battle_graduation.get("Graduation progress", pd.Series("", index=battle_graduation.index)).fillna("").astype(str)
             battle_current = pd.to_numeric(battle_progress.str.replace(",", "", regex=False).str.extract(r"(\d+)\s*/")[0], errors="coerce").fillna(0).astype("int64")
-        if battle_creator_column and not creators.empty and "diamonds" in creators.columns and "Creator" in battle_graduation.columns:
-            live_creator_keys = creators[battle_creator_column].fillna("").astype(str).str.strip().str.lstrip("@").str.casefold()
-            live_creator_diamonds = pd.to_numeric(creators["diamonds"], errors="coerce")
-            live_diamond_map = pd.Series(live_creator_diamonds.values, index=live_creator_keys).groupby(level=0).max().to_dict()
-            graduation_creator_keys = battle_graduation["Creator"].fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold()
-            fresh_goal_current = pd.to_numeric(graduation_creator_keys.map(live_diamond_map), errors="coerce")
-            battle_current = fresh_goal_current.where(fresh_goal_current.notna(), battle_current).astype("int64")
+            if battle_creator_column and not creators.empty and "diamonds" in creators.columns and "Creator" in battle_graduation.columns:
+                live_creator_keys = creators[battle_creator_column].fillna("").astype(str).str.strip().str.lstrip("@").str.casefold()
+                live_creator_diamonds = pd.to_numeric(creators["diamonds"], errors="coerce")
+                live_diamond_map = pd.Series(live_creator_diamonds.values, index=live_creator_keys).groupby(level=0).max().to_dict()
+                graduation_creator_keys = battle_graduation["Creator"].fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold()
+                fresh_goal_current = pd.to_numeric(graduation_creator_keys.map(live_diamond_map), errors="coerce")
+                battle_current = fresh_goal_current.where(fresh_goal_current.notna(), battle_current).astype("int64")
             battle_quit = battle_graduation.get("Quit on", pd.Series("", index=battle_graduation.index)).fillna("").astype(str).str.strip()
             battle_active = battle_graduation[battle_quit.isin(["", "-", "—", "None", "nan"])].copy()
             battle_active["_current"] = battle_current.loc[battle_active.index]
