@@ -518,11 +518,12 @@ def _wheel_replay_html(prize_name: str, candidate_names: list[str], winners: lis
 
 def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.DataFrame]) -> None:
     st.markdown("### Spin Wheel Drawing")
-    st.caption("Choose a qualifying list and number of spins. Winners are removed from that drawing's future wheel pool for the month.")
+    st.caption("Choose a qualifying list. Drawing 1 selects 3 winners; Drawings 2 and 3 select 1 winner each. Winners are removed from that drawing's future wheel pool for the month.")
     c1, c2, c3 = st.columns([1.2, 1.4, 0.8])
     drawing_label = c1.selectbox("Drawing list", list(drawing_lists), key="monthly_wheel_list")
+    drawing_label = st.session_state.get("monthly_wheel_list", drawing_label)
     prize_name = c2.text_input("Prize name", value=f"{drawing_label} Prize", key="monthly_wheel_prize").strip()
-    spin_count = 3 if drawing_label == "Drawing 1" else 1
+    spin_count = {"Drawing 1": 3, "Drawing 2": 1, "Drawing 3": 1}.get(drawing_label, 1)
     c3.metric("Winners / spins", spin_count)
     pool = drawing_lists[drawing_label].copy()
     prior = pd.read_sql(text("""
