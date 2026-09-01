@@ -2156,7 +2156,7 @@ def main():
 
 
 
-rewards_tab = locals().get("rewards_tab") or locals().get("battle_tab") or st.container()
+rewards_tab = locals().get("rewards_tab", battle_tab)
 with rewards_tab:
     from rewards_section import render_monthly_rewards
     render_monthly_rewards(
