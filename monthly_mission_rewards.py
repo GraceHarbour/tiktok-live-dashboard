@@ -642,10 +642,29 @@ def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.D
         st.session_state["monthly_wheel_drawing_id"] = int(drawing_id)
         st.rerun()
 
-    drawing_id = st.session_state.get("monthly_wheel_drawing_id")
-    if not drawing_id:
-        latest = pd.read_sql(text("SELECT id FROM monthly_prize_drawings WHERE month_key=:month_key ORDER BY created_at DESC,id DESC LIMIT 1"), engine, params={"month_key": month_key})
-        drawing_id = int(latest.iloc[0]["id"]) if not latest.empty else None
+    completed_drawings = pd.read_sql(text("""
+        SELECT id,drawing_key,prize_name,created_at
+        FROM monthly_prize_drawings
+        WHERE month_key=:month_key
+        ORDER BY created_at DESC,id DESC
+    """), engine, params={"month_key": month_key})
+    drawing_id = None
+    if not completed_drawings.empty:
+        drawing_labels = {
+            int(row["id"]): f"{row['drawing_key']} — {row['prize_name']} — {pd.to_datetime(row['created_at']).strftime('%b %d, %Y %I:%M %p')}"
+            for _, row in completed_drawings.iterrows()
+        }
+        saved_id = st.session_state.pop("monthly_wheel_drawing_id", None)
+        drawing_options = completed_drawings["id"].astype(int).tolist()
+        default_index = drawing_options.index(int(saved_id)) if saved_id and int(saved_id) in drawing_options else 0
+        drawing_id = st.selectbox(
+            "View completed drawing",
+            drawing_options,
+            index=default_index,
+            format_func=lambda value: drawing_labels.get(int(value), str(value)),
+            key=f"monthly_completed_drawing_{month_key}",
+        )
+        st.caption("Select any saved drawing to restore its wheel replay, winners, and downloads.")
     if drawing_id:
         drawing = pd.read_sql(text("SELECT id,drawing_key,prize_name,created_at FROM monthly_prize_drawings WHERE id=:id AND month_key=:month_key"), engine, params={"id": drawing_id, "month_key": month_key})
         winners = pd.read_sql(text("SELECT winner_order AS \"Winner number\",username AS \"Creator\",manager_name AS \"Manager\" FROM monthly_prize_winners WHERE drawing_id=:id ORDER BY winner_order"), engine, params={"id": drawing_id})
