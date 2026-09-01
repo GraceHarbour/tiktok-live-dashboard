@@ -1612,6 +1612,25 @@ def main():
                     display_frame = shared_frame
                     st.caption("This published file has no Manager column to filter yet.")
                 render_read_table(display_frame[shared_columns], height=720)
+                full_prior_csv = shared_frame[shared_columns].to_csv(index=False).encode("utf-8-sig")
+                filtered_prior_csv = display_frame[shared_columns].to_csv(index=False).encode("utf-8-sig")
+                download_all, download_filtered = st.columns(2)
+                download_all.download_button(
+                    "Download complete prior-month sheet",
+                    data=full_prior_csv,
+                    file_name="goal-management-prior-month-complete.csv",
+                    mime="text/csv",
+                    key="download_prior_month_complete",
+                    use_container_width=True,
+                )
+                download_filtered.download_button(
+                    "Download displayed manager view",
+                    data=filtered_prior_csv,
+                    file_name="goal-management-prior-month-filtered.csv",
+                    mime="text/csv",
+                    key="download_prior_month_filtered",
+                    use_container_width=True,
+                )
             else:
                 st.info("The shared file has no selected display columns yet.")
         else:
