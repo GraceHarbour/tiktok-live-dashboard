@@ -1921,6 +1921,13 @@ def main():
         battle_reached = battle_business[battle_sections.str.contains("Reached graduation", case=False, na=False)].copy()
         battle_progress = battle_graduation.get("Graduation progress", pd.Series("", index=battle_graduation.index)).fillna("").astype(str)
         battle_current = pd.to_numeric(battle_progress.str.replace(",", "", regex=False).str.extract(r"(\d+)\s*/")[0], errors="coerce").fillna(0).astype("int64")
+    if battle_creator_column and not creators.empty and "diamonds" in creators.columns and "Creator" in battle_graduation.columns:
+        live_creator_keys = creators[battle_creator_column].fillna("").astype(str).str.strip().str.lstrip("@").str.casefold()
+        live_creator_diamonds = pd.to_numeric(creators["diamonds"], errors="coerce")
+        live_diamond_map = pd.Series(live_creator_diamonds.values, index=live_creator_keys).groupby(level=0).max().to_dict()
+        graduation_creator_keys = battle_graduation["Creator"].fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold()
+        fresh_goal_current = pd.to_numeric(graduation_creator_keys.map(live_diamond_map), errors="coerce")
+        battle_current = fresh_goal_current.where(fresh_goal_current.notna(), battle_current).astype("int64")
         battle_quit = battle_graduation.get("Quit on", pd.Series("", index=battle_graduation.index)).fillna("").astype(str).str.strip()
         battle_active = battle_graduation[battle_quit.isin(["", "-", "—", "None", "nan"])].copy()
         battle_active["_current"] = battle_current.loc[battle_active.index]
