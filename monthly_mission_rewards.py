@@ -646,6 +646,14 @@ def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[s
     st.caption("Track entries for each monthly drawing. Creator pictures and progress update from the daily Creator Data read.")
     st.markdown("""
     <style>
+    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, .stTextInput input, .stNumberInput input, .stDateInput input, textarea{background:#071b3a!important;color:#fff!important;border-color:#2e78b8!important}
+    div[data-baseweb="select"] input, div[data-baseweb="select"] span, div[data-baseweb="input"] input{color:#fff!important;-webkit-text-fill-color:#fff!important}
+    div[data-baseweb="select"] svg, div[data-baseweb="input"] svg{fill:#fff!important;color:#fff!important}
+    ul[role="listbox"], div[role="listbox"]{background:#071b3a!important;color:#fff!important}
+    li[role="option"], div[role="option"]{background:#071b3a!important;color:#fff!important}
+    li[role="option"]:hover, div[role="option"]:hover, div[aria-selected="true"][role="option"]{background:#164b7d!important;color:#fff!important}
+    [data-testid="stDataFrame"]{background:#071b3a!important;border:1px solid #2e78b8!important;border-radius:12px}
+    [data-testid="stDataFrame"] button{color:#fff!important;background:#12355f!important}
     .monthly-prize-card{min-height:190px;padding:22px 18px;border-radius:18px;border:1px solid rgba(94,207,255,.55);background:linear-gradient(145deg,#071b3a,#122c57 58%,#30145a);box-shadow:0 10px 26px rgba(0,0,0,.28);text-align:center;color:#fff;margin-bottom:12px}
     .monthly-prize-card.pink{border-color:rgba(255,74,180,.7);background:linear-gradient(145deg,#281044,#60164c 58%,#172b57)}
     .monthly-prize-card.gold{border-color:rgba(255,199,73,.75);background:linear-gradient(145deg,#291b05,#5b3910 58%,#38134d)}
