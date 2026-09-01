@@ -286,9 +286,10 @@ def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names
     month_options = list(dict.fromkeys([current_month, *finalized_months]))
     selected_month = st.selectbox("Reward month", month_options, format_func=lambda value: pd.Timestamp(f"{value}-01").strftime("%B %Y"))
     live_progress = selected_month == current_month
-    if selected_month != current_month:
-        all_finalized = pd.read_sql(text("SELECT * FROM monthly_reward_results"), engine)
-        finalized = all_finalized[all_finalized["month_key"].astype(str) == selected_month].copy()
+    all_snapshots = pd.read_sql(text("SELECT * FROM monthly_reward_results"), engine)
+    finalized = all_snapshots[all_snapshots["month_key"].astype(str) == selected_month].copy()
+    using_creator_data = not finalized.empty
+    if using_creator_data:
         classified = finalized.rename(columns={
             "creator_id":"Creator ID", "username":"Creator", "manager_name":"Manager",
             "diamonds":"Diamonds", "valid_live_days":"Valid LIVE days",
@@ -301,6 +302,10 @@ def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names
         })
         if "Picture" not in classified:
             classified["Picture"] = ""
+        if selected_month == current_month:
+            st.info("Current-month eligibility uses the latest complete daily Creator Data read through yesterday. It updates once each morning.")
+    elif selected_month == current_month:
+        st.info("Waiting for the first complete daily Creator Data read; current progress is temporarily using Goal data.")
 
     c1, c2 = st.columns([1, 1.5])
     manager = c1.selectbox("Manager", ["All managers", *manager_names], key="mission_reward_manager")
@@ -317,7 +322,7 @@ def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names
         classified["Met requirements"] = ""
     if "Missing requirements" not in classified:
         classified["Missing requirements"] = classified.get("Missing requirement", "")
-    if live_progress:
+    if live_progress and not using_creator_data:
         classified = classified[classified["Diamonds"] >= MILESTONES[-1][0]].copy()
     near = classified[classified["Track"] & ~classified["Eligible"]].copy()
     m1, m2, m3, m4 = st.columns(4)
