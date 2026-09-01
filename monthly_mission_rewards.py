@@ -80,6 +80,16 @@ def _series(frame: pd.DataFrame, column: str, default=0) -> pd.Series:
     return pd.to_numeric(frame[column], errors="coerce").fillna(default)
 
 
+def _live_hours(frame: pd.DataFrame) -> pd.Series:
+    if "valid_live_hours" in frame:
+        return _series(frame, "valid_live_hours").round(1)
+    duration = frame.get("valid_live_duration", pd.Series("", index=frame.index)).fillna("").astype(str)
+    hours = duration.str.extract(r"(?:(\d+)h)", expand=False).fillna(0).astype(float)
+    minutes = duration.str.extract(r"(?:(\d+)m)", expand=False).fillna(0).astype(float)
+    seconds = duration.str.extract(r"(?:(\d+)s)", expand=False).fillna(0).astype(float)
+    return (hours + minutes / 60 + seconds / 3600).round(1)
+
+
 def _manager(frame: pd.DataFrame) -> pd.Series:
     for column in ("manager_name", "manager"):
         if column in frame.columns:
@@ -106,7 +116,7 @@ def _classify(frame: pd.DataFrame) -> pd.DataFrame:
     rows["Manager"] = _manager(rows)
     rows["Diamonds"] = _series(rows, "diamonds").astype("int64")
     rows["Valid LIVE days"] = _series(rows, "valid_live_days").astype("int64")
-    rows["Valid LIVE hours"] = _series(rows, "valid_live_hours").round(1)
+    rows["Valid LIVE hours"] = _live_hours(rows)
     rows["Maintained or ranked up"] = _tier_eligible(rows)
     photo_column = next((c for c in ("avatar_url", "profile_image_url", "photo_url", "image_url") if c in rows), None)
     rows["Picture"] = rows[photo_column].fillna("").astype(str) if photo_column else ""
@@ -135,7 +145,7 @@ def _classify(frame: pd.DataFrame) -> pd.DataFrame:
         else:
             missing.append(f"LIVE hours: {row['Valid LIVE hours']:g} / {hours_needed}")
         eligible = not missing
-        track = bool(met)
+        track = row["Diamonds"] >= lowest_milestone[0]
         classifications.append(
             (reward_name, reward_value, diamond_level, eligible, track, "; ".join(met), "; ".join(missing))
         )
@@ -153,7 +163,13 @@ def _display_table(frame: pd.DataFrame, height: int = 480) -> None:
         "Milestone": st.column_config.NumberColumn(format="%,d"),
         "Prize value": st.column_config.NumberColumn(format="%,d coins"),
     }
-    st.dataframe(frame, use_container_width=True, hide_index=True, height=height, column_config=config)
+    styled = frame.style.set_properties(**{
+        "background-color": "#0b2342", "color": "#f7fbff",
+        "border-color": "#315b86", "font-weight": "500",
+    }).set_table_styles([
+        {"selector": "th", "props": [("background-color", "#123f70"), ("color", "white"), ("font-weight", "700")]},
+    ])
+    st.dataframe(styled, use_container_width=True, hide_index=True, height=height, column_config=config)
 
 
 def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], month_key: str) -> None:
@@ -259,12 +275,13 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
 def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
     _ensure_tables(engine)
     st.subheader("Monthly Mission Rewards")
-    st.caption("Rewards are calculated from the final successful 7:59 PM ET Goal read. Creators receive only their single highest completed milestone and must maintain or rank up their tier.")
+    st.caption("During the month, progress uses the latest Goal read. Final monthly results use the complete Creator Data report captured after 8:00 AM ET on the first. Creators below 150,000 diamonds are excluded.")
     classified = _classify(creators)
     current_month = dt.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m")
     finalized_months = pd.read_sql(text("SELECT DISTINCT month_key FROM monthly_reward_results ORDER BY month_key DESC"), engine)["month_key"].astype(str).tolist()
     month_options = list(dict.fromkeys([current_month, *finalized_months]))
     selected_month = st.selectbox("Reward month", month_options, format_func=lambda value: pd.Timestamp(f"{value}-01").strftime("%B %Y"))
+    live_progress = selected_month == current_month
     if selected_month != current_month:
         all_finalized = pd.read_sql(text("SELECT * FROM monthly_reward_results"), engine)
         finalized = all_finalized[all_finalized["month_key"].astype(str) == selected_month].copy()
@@ -296,6 +313,8 @@ def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names
         classified["Met requirements"] = ""
     if "Missing requirements" not in classified:
         classified["Missing requirements"] = classified.get("Missing requirement", "")
+    if live_progress:
+        classified = classified[classified["Diamonds"] >= MILESTONES[-1][0]].copy()
     near = classified[classified["Track"] & ~classified["Eligible"]].copy()
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Eligible creators", f"{len(qualified):,}")
