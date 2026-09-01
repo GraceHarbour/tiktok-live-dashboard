@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import datetime as dt
+import html
+import json
 import re
+import secrets
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from sqlalchemy import text
 
 
@@ -97,6 +101,28 @@ def _ensure_tables(engine) -> None:
         connection.execute(text("ALTER TABLE monthly_reward_unavailable ADD COLUMN IF NOT EXISTS overridden_by text NOT NULL DEFAULT ''"))
         connection.execute(text("ALTER TABLE monthly_reward_unavailable ADD COLUMN IF NOT EXISTS reschedule_blocked boolean NOT NULL DEFAULT false"))
         connection.execute(text("ALTER TABLE monthly_reward_unavailable ADD COLUMN IF NOT EXISTS reschedule_count integer NOT NULL DEFAULT 0"))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS monthly_prize_drawings (
+                id bigserial PRIMARY KEY,
+                month_key text NOT NULL,
+                drawing_key text NOT NULL,
+                prize_name text NOT NULL,
+                spin_count integer NOT NULL,
+                created_by text NOT NULL DEFAULT '',
+                created_at timestamptz NOT NULL DEFAULT now()
+            )
+        """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS monthly_prize_winners (
+                drawing_id bigint NOT NULL REFERENCES monthly_prize_drawings(id) ON DELETE CASCADE,
+                winner_order integer NOT NULL,
+                creator_id text NOT NULL,
+                username text NOT NULL,
+                manager_name text NOT NULL DEFAULT '',
+                PRIMARY KEY (drawing_id, winner_order),
+                UNIQUE (drawing_id, creator_id)
+            )
+        """))
 
 
 def _signed_in_reward_approver(engine) -> tuple[bool, str]:
@@ -469,6 +495,79 @@ def _render_mission_rewards(engine, creators: pd.DataFrame, manager_names: list[
     _event_section(engine, classified, manager_names, selected_month)
 
 
+def _wheel_replay_html(prize_name: str, candidate_names: list[str], winners: list[str]) -> str:
+    safe_prize = html.escape(prize_name)
+    names_json = json.dumps(candidate_names, ensure_ascii=False).replace("</", "<\\/")
+    winners_json = json.dumps(winners, ensure_ascii=False).replace("</", "<\\/")
+    winner_cards = "".join(f'<div class="winner"><b>Winner {index}</b><span>{html.escape(name)}</span></div>' for index, name in enumerate(winners, 1))
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>{safe_prize} Drawing</title><style>
+    body{{margin:0;background:radial-gradient(circle at top,#123b70,#050914 65%);color:white;font-family:Arial,sans-serif;text-align:center;padding:24px}}
+    h1{{color:#ffd34d;margin:0 0 8px}} .subtitle{{color:#bfe4ff;margin-bottom:18px}}
+    .stage{{display:flex;justify-content:center;align-items:center;min-height:390px;position:relative}}
+    .pointer{{position:absolute;top:5px;z-index:3;width:0;height:0;border-left:20px solid transparent;border-right:20px solid transparent;border-top:42px solid #ffd34d}}
+    .wheel{{width:340px;height:340px;border-radius:50%;border:10px solid #f4c542;background:conic-gradient(#ff2d95 0 12.5%,#18bfff 12.5% 25%,#7b4dff 25% 37.5%,#ff9f1c 37.5% 50%,#0ad5a8 50% 62.5%,#ff4d4d 62.5% 75%,#4169e1 75% 87.5%,#d83cff 87.5%);box-shadow:0 0 35px #149cff;display:grid;place-items:center;transition:transform 2.8s cubic-bezier(.1,.7,.1,1)}}
+    .wheel.spin{{transform:rotate(2160deg)}} .center{{width:190px;height:190px;border-radius:50%;background:#061329;border:5px solid white;display:grid;place-items:center;padding:12px;font-size:25px;font-weight:800;box-shadow:inset 0 0 25px #1f79c9}}
+    .results{{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:18px}} .winner{{min-width:220px;background:#0c2b50;border:2px solid #39bfff;border-radius:14px;padding:14px;box-shadow:0 0 16px #1565a8}}
+    .winner b{{display:block;color:#ffd34d;font-size:18px}} .winner span{{display:block;font-size:23px;font-weight:800;margin-top:6px}}
+    </style></head><body><h1>{safe_prize}</h1><div class="subtitle">Monthly Creator Prize Drawing</div><div class="stage"><div class="pointer"></div><div id="wheel" class="wheel"><div id="name" class="center">Ready</div></div></div><div id="status">The drawing will begin automatically.</div><div class="results">{winner_cards}</div><script>
+    const candidates={names_json}, winners={winners_json}; let spin=0; const wheel=document.getElementById('wheel'), nameBox=document.getElementById('name'), status=document.getElementById('status');
+    function runSpin(){{if(spin>=winners.length){{status.textContent='Drawing complete';nameBox.textContent='Complete';return;}} status.textContent='Spinning for Winner '+(spin+1)+' of '+winners.length; wheel.classList.remove('spin'); void wheel.offsetWidth; wheel.classList.add('spin'); let ticks=0; const timer=setInterval(()=>{{nameBox.textContent=candidates[Math.floor(Math.random()*candidates.length)]||'Spinning';if(++ticks>25){{clearInterval(timer);nameBox.textContent=winners[spin];status.textContent='Winner '+(spin+1)+': '+winners[spin];spin++;setTimeout(runSpin,1700);}}}},100);}}
+    setTimeout(runSpin,700);
+    </script></body></html>"""
+
+
+def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.DataFrame]) -> None:
+    st.markdown("### Spin Wheel Drawing")
+    st.caption("Choose a qualifying list and number of spins. Winners are removed from that drawing's future wheel pool for the month.")
+    c1, c2, c3 = st.columns([1.2, 1.4, 0.8])
+    drawing_label = c1.selectbox("Drawing list", list(drawing_lists), key="monthly_wheel_list")
+    prize_name = c2.text_input("Prize name", value=f"{drawing_label} Prize", key="monthly_wheel_prize").strip()
+    spin_count = 3 if drawing_label == "Drawing 1" else 1
+    c3.metric("Winners / spins", spin_count)
+    pool = drawing_lists[drawing_label].copy()
+    prior = pd.read_sql(text("""
+        SELECT DISTINCT w.creator_id FROM monthly_prize_winners w
+        JOIN monthly_prize_drawings d ON d.id=w.drawing_id
+        WHERE d.month_key=:month_key AND d.drawing_key=:drawing_key
+    """), engine, params={"month_key": month_key, "drawing_key": drawing_label})
+    if not prior.empty and "Creator ID" in pool:
+        pool = pool[~pool["Creator ID"].astype(str).isin(prior["creator_id"].astype(str))]
+    st.write(f"**{len(pool):,} names available for this wheel.**")
+    if st.button("Spin wheel and select winners", type="primary", disabled=len(pool) < spin_count or not prize_name, key="monthly_wheel_spin_button"):
+        winners = secrets.SystemRandom().sample(pool.to_dict("records"), spin_count)
+        _, actor_email = _signed_in_reward_approver(engine)
+        with engine.begin() as connection:
+            drawing_id = connection.execute(text("""
+                INSERT INTO monthly_prize_drawings(month_key,drawing_key,prize_name,spin_count,created_by)
+                VALUES (:month_key,:drawing_key,:prize_name,:spin_count,:created_by) RETURNING id
+            """), {"month_key": month_key, "drawing_key": drawing_label, "prize_name": prize_name, "spin_count": spin_count, "created_by": actor_email}).scalar_one()
+            for order, winner in enumerate(winners, 1):
+                connection.execute(text("""
+                    INSERT INTO monthly_prize_winners(drawing_id,winner_order,creator_id,username,manager_name)
+                    VALUES (:drawing_id,:winner_order,:creator_id,:username,:manager_name)
+                """), {"drawing_id": drawing_id, "winner_order": order, "creator_id": str(winner.get("Creator ID", winner.get("Creator", ""))), "username": str(winner.get("Creator", "")), "manager_name": str(winner.get("Manager", "Unassigned"))})
+        st.session_state["monthly_wheel_drawing_id"] = int(drawing_id)
+        st.rerun()
+
+    drawing_id = st.session_state.get("monthly_wheel_drawing_id")
+    if not drawing_id:
+        latest = pd.read_sql(text("SELECT id FROM monthly_prize_drawings WHERE month_key=:month_key ORDER BY created_at DESC,id DESC LIMIT 1"), engine, params={"month_key": month_key})
+        drawing_id = int(latest.iloc[0]["id"]) if not latest.empty else None
+    if drawing_id:
+        drawing = pd.read_sql(text("SELECT id,drawing_key,prize_name,created_at FROM monthly_prize_drawings WHERE id=:id"), engine, params={"id": drawing_id})
+        winners = pd.read_sql(text("SELECT winner_order AS \"Winner number\",username AS \"Creator\",manager_name AS \"Manager\" FROM monthly_prize_winners WHERE drawing_id=:id ORDER BY winner_order"), engine, params={"id": drawing_id})
+        if not drawing.empty and not winners.empty:
+            winner_names = winners["Creator"].astype(str).tolist()
+            candidate_names = drawing_lists.get(str(drawing.iloc[0]["drawing_key"]), pd.DataFrame()).get("Creator", pd.Series(dtype=str)).astype(str).tolist()
+            replay = _wheel_replay_html(str(drawing.iloc[0]["prize_name"]), candidate_names, winner_names)
+            components.html(replay, height=650, scrolling=True)
+            _display_table(winners, min(360, 88 + len(winners) * 48))
+            csv_data = winners.to_csv(index=False).encode("utf-8")
+            d1, d2 = st.columns(2)
+            d1.download_button("Download spinning wheel replay", replay.encode("utf-8"), file_name=f"{month_key}-{drawing.iloc[0]['drawing_key'].lower().replace(' ','-')}-wheel.html", mime="text/html")
+            d2.download_button("Download winner results", csv_data, file_name=f"{month_key}-{drawing.iloc[0]['drawing_key'].lower().replace(' ','-')}-winners.csv", mime="text/csv")
+
+
 def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
     st.subheader("Monthly Creator Prizes")
     st.caption("Track entries for each monthly drawing. Creator pictures and progress update from the daily Creator Data read.")
@@ -520,6 +619,11 @@ def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[s
             st.info("No creators currently qualify for Drawing 3.")
         else:
             _display_table(drawing_three[prize_columns].sort_values(["Diamonds", "Creator"], ascending=[False, True]), min(640, 88 + len(drawing_three) * 44))
+    _drawing_wheel_section(engine, current_month, {
+        "Drawing 1": drawing_one,
+        "Drawing 2": drawing_two,
+        "Drawing 3": drawing_three,
+    })
 
 
 def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
