@@ -2233,22 +2233,22 @@ def main():
                 unsafe_allow_html=True,
             )
 
-        with st.expander("Delete this event"):
-            st.warning("Deleting this event permanently removes its participant list and saved results.")
-            confirm_event_delete = st.checkbox(
-                "Yes, I am sure I want to delete this event.",
-                key=f"confirm_delete_event_{selected_event_id}",
-            )
-            if st.button(
-                "Delete event permanently",
-                key=f"delete_event_{selected_event_id}",
-                disabled=not confirm_event_delete,
-                use_container_width=True,
-            ):
-                delete_community_event(selected_event_id)
-                st.session_state.pop("selected_community_event", None)
-                st.success("Event deleted.")
-                st.rerun()
+            with st.expander("Delete this event"):
+                st.warning("Deleting this event permanently removes its participant list and saved results.")
+                confirm_event_delete = st.checkbox(
+                    "Yes, I am sure I want to delete this event.",
+                    key=f"confirm_delete_event_{selected_event_id}",
+                )
+                if st.button(
+                    "Delete event permanently",
+                    key=f"delete_event_{selected_event_id}",
+                    disabled=not confirm_event_delete,
+                    use_container_width=True,
+                ):
+                    delete_community_event(selected_event_id)
+                    st.session_state.pop("selected_community_event", None)
+                    st.success("Event deleted.")
+                    st.rerun()
 
             creator_choices = creators.copy()
             if "creator_id" not in creator_choices.columns:
