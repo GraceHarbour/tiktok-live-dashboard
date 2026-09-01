@@ -550,6 +550,13 @@ def remove_event_participants(event_id, selected_creator_ids):
             )
 
 
+def delete_community_event(event_id):
+    with get_engine().begin() as connection:
+        connection.execute(text("DELETE FROM community_event_snapshots WHERE event_id = :event_id"), {"event_id": event_id})
+        connection.execute(text("DELETE FROM community_event_participants WHERE event_id = :event_id"), {"event_id": event_id})
+        connection.execute(text("DELETE FROM community_events WHERE event_id = :event_id"), {"event_id": event_id})
+
+
 def numeric_series(frame, column):
     if column not in frame.columns:
         return pd.Series(0, index=frame.index, dtype="float64")
@@ -2177,6 +2184,23 @@ def main():
                 f'<div style="color:{status_color};font-weight:900;margin-top:3px;">{live_status}</div></div>',
                 unsafe_allow_html=True,
             )
+
+        with st.expander("Delete this event"):
+            st.warning("Deleting this event permanently removes its participant list and saved results.")
+            confirm_event_delete = st.checkbox(
+                "Yes, I am sure I want to delete this event.",
+                key=f"confirm_delete_event_{selected_event_id}",
+            )
+            if st.button(
+                "Delete event permanently",
+                key=f"delete_event_{selected_event_id}",
+                disabled=not confirm_event_delete,
+                use_container_width=True,
+            ):
+                delete_community_event(selected_event_id)
+                st.session_state.pop("selected_community_event", None)
+                st.success("Event deleted.")
+                st.rerun()
 
             creator_choices = creators.copy()
             if "creator_id" not in creator_choices.columns:
