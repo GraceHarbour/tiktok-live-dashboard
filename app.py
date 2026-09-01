@@ -30,7 +30,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
-from monthly_mission_rewards import render_monthly_mission_rewards
+from monthly_mission_rewards import render_monthly_mission_rewards, _wheel_replay_html
 
 
 
@@ -273,6 +273,7 @@ def ensure_schema():
         "CREATE TABLE IF NOT EXISTS community_events (event_id TEXT PRIMARY KEY, event_name TEXT NOT NULL, start_at TEXT NOT NULL, end_at TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS community_event_participants (event_id TEXT NOT NULL, creator_id TEXT NOT NULL, username TEXT, manager TEXT, added_at TEXT NOT NULL, PRIMARY KEY (event_id, creator_id))",
         "CREATE TABLE IF NOT EXISTS community_event_snapshots (event_id TEXT NOT NULL, phase TEXT NOT NULL, creator_id TEXT NOT NULL, username TEXT, manager TEXT, diamonds INTEGER NOT NULL, captured_at TEXT NOT NULL, PRIMARY KEY (event_id, phase, creator_id))",
+        "CREATE TABLE IF NOT EXISTS community_event_drawings (drawing_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, excluded_json TEXT NOT NULL, candidates_json TEXT NOT NULL, winners_json TEXT NOT NULL, winner_count INTEGER NOT NULL, created_at TEXT NOT NULL)",
     ]
     with get_engine().begin() as connection:
         for statement in statements:
@@ -553,10 +554,43 @@ def remove_event_participants(event_id, selected_creator_ids):
 
 def delete_community_event(event_id):
     with get_engine().begin() as connection:
+        connection.execute(text("DELETE FROM community_event_drawings WHERE event_id = :event_id"), {"event_id": event_id})
         connection.execute(text("DELETE FROM community_event_snapshots WHERE event_id = :event_id"), {"event_id": event_id})
         connection.execute(text("DELETE FROM community_event_participants WHERE event_id = :event_id"), {"event_id": event_id})
         connection.execute(text("DELETE FROM community_events WHERE event_id = :event_id"), {"event_id": event_id})
 
+
+
+def load_event_drawings(event_id):
+    with get_engine().connect() as connection:
+        return pd.read_sql(
+            text("SELECT * FROM community_event_drawings WHERE event_id = :event_id ORDER BY created_at DESC"),
+            connection,
+            params={"event_id": event_id},
+        )
+
+
+def save_event_drawing(event_id, excluded_names, candidate_names, winner_names):
+    created_at = pd.Timestamp.now(tz="UTC")
+    drawing_id = f"{event_id}-{created_at.strftime('%Y%m%d%H%M%S%f')}"
+    with get_engine().begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO community_event_drawings "
+                "(drawing_id,event_id,excluded_json,candidates_json,winners_json,winner_count,created_at) "
+                "VALUES (:drawing_id,:event_id,:excluded_json,:candidates_json,:winners_json,:winner_count,:created_at)"
+            ),
+            {
+                "drawing_id": drawing_id,
+                "event_id": event_id,
+                "excluded_json": json.dumps(list(excluded_names)),
+                "candidates_json": json.dumps(list(candidate_names)),
+                "winners_json": json.dumps(list(winner_names)),
+                "winner_count": len(winner_names),
+                "created_at": created_at.isoformat(),
+            },
+        )
+    return drawing_id
 
 def numeric_series(frame, column):
     if column not in frame.columns:
@@ -2452,6 +2486,110 @@ def main():
                     mime="text/csv",
                     key=f"download_event_{selected_event_id}",
                 )
+
+
+                st.markdown("### Event Winner Wheel")
+                st.caption("Available on every event. Exclude any number of people, choose how many random winners to draw, and download the completed wheel replay for posting.")
+                wheel_names = sorted({str(name).strip() for name in results_display["Creator"].fillna("") if str(name).strip()})
+                saved_event_drawings = load_event_drawings(selected_event_id)
+                prior_event_winners = set()
+                if not saved_event_drawings.empty:
+                    for saved_winners in saved_event_drawings["winners_json"].fillna("[]"):
+                        try:
+                            prior_event_winners.update(str(name) for name in json.loads(saved_winners))
+                        except (TypeError, ValueError, json.JSONDecodeError):
+                            continue
+                event_wheel_exclusions = st.multiselect(
+                    "Exclude people from this drawing",
+                    wheel_names,
+                    key=f"event_wheel_exclusions_{selected_event_id}",
+                    help="Select as many people as needed. Winners from earlier spins for this event are excluded automatically.",
+                )
+                available_wheel_names = [
+                    name for name in wheel_names
+                    if name not in set(event_wheel_exclusions) and name not in prior_event_winners
+                ]
+                if prior_event_winners:
+                    st.caption("Already selected and automatically excluded: " + ", ".join(sorted(prior_event_winners)))
+                if event_wheel_exclusions:
+                    st.caption("Manually excluded: " + ", ".join(event_wheel_exclusions))
+                maximum_winners = max(1, min(20, len(available_wheel_names)))
+                event_winner_count = st.number_input(
+                    "Number of random winners",
+                    min_value=1,
+                    max_value=maximum_winners,
+                    value=min(2, maximum_winners),
+                    step=1,
+                    key=f"event_winner_count_{selected_event_id}",
+                    disabled=not available_wheel_names,
+                )
+                st.markdown(f"**{len(available_wheel_names):,} names available for this wheel.**")
+                if st.button(
+                    "Spin wheel and select winners",
+                    type="primary",
+                    key=f"spin_event_wheel_{selected_event_id}",
+                    disabled=not available_wheel_names,
+                    use_container_width=True,
+                ):
+                    draw_count = min(int(event_winner_count), len(available_wheel_names))
+                    event_winners = pd.Series(available_wheel_names).sample(n=draw_count).tolist()
+                    saved_id = save_event_drawing(
+                        selected_event_id,
+                        sorted(set(event_wheel_exclusions).union(prior_event_winners)),
+                        available_wheel_names,
+                        event_winners,
+                    )
+                    st.session_state[f"selected_event_drawing_{selected_event_id}"] = saved_id
+                    st.rerun()
+
+                saved_event_drawings = load_event_drawings(selected_event_id)
+                if not saved_event_drawings.empty:
+                    drawing_labels = {}
+                    for _, drawing_row in saved_event_drawings.iterrows():
+                        created_label = pd.to_datetime(drawing_row["created_at"], utc=True).tz_convert("America/New_York").strftime("%b %-d, %Y %-I:%M %p")
+                        drawing_labels[str(drawing_row["drawing_id"])] = f"{created_label} — {int(drawing_row['winner_count'])} winner(s)"
+                    drawing_ids = list(drawing_labels)
+                    selected_drawing_id = st.selectbox(
+                        "View saved event drawing",
+                        drawing_ids,
+                        index=drawing_ids.index(st.session_state.get(f"selected_event_drawing_{selected_event_id}")) if st.session_state.get(f"selected_event_drawing_{selected_event_id}") in drawing_ids else 0,
+                        format_func=lambda value: drawing_labels[value],
+                        key=f"event_drawing_view_{selected_event_id}",
+                    )
+                    st.session_state[f"selected_event_drawing_{selected_event_id}"] = selected_drawing_id
+                    selected_drawing = saved_event_drawings[saved_event_drawings["drawing_id"].astype(str) == selected_drawing_id].iloc[0]
+                    drawing_candidates = json.loads(selected_drawing["candidates_json"] or "[]")
+                    drawing_winners = json.loads(selected_drawing["winners_json"] or "[]")
+                    drawing_exclusions = json.loads(selected_drawing["excluded_json"] or "[]")
+                    wheel_title = f"{selected_event['event_name']} — Event Winners"
+                    event_wheel_html = _wheel_replay_html(wheel_title, drawing_candidates, drawing_winners)
+                    st.components.v1.html(event_wheel_html, height=650, scrolling=False)
+                    winner_manager_map = dict(zip(results_display["Creator"].astype(str), results_display["Manager"].astype(str)))
+                    event_winner_table = pd.DataFrame({
+                        "Winner number": range(1, len(drawing_winners) + 1),
+                        "Creator": drawing_winners,
+                        "Manager": [winner_manager_map.get(str(name), "Unassigned") for name in drawing_winners],
+                    })
+                    render_read_table(event_winner_table, height=min(360, 90 + len(event_winner_table) * 38))
+                    if drawing_exclusions:
+                        st.caption("Excluded from this drawing: " + ", ".join(drawing_exclusions))
+                    replay_col, winners_col = st.columns(2)
+                    replay_col.download_button(
+                        "Download spinning wheel replay",
+                        event_wheel_html.encode("utf-8"),
+                        file_name=f"{str(selected_event['event_name']).strip().replace(' ', '_')}_wheel_replay.html",
+                        mime="text/html",
+                        key=f"download_event_wheel_{selected_drawing_id}",
+                        use_container_width=True,
+                    )
+                    winners_col.download_button(
+                        "Download winner results",
+                        event_winner_table.to_csv(index=False).encode("utf-8"),
+                        file_name=f"{str(selected_event['event_name']).strip().replace(' ', '_')}_winners.csv",
+                        mime="text/csv",
+                        key=f"download_event_winners_{selected_drawing_id}",
+                        use_container_width=True,
+                    )
 
 
     with scouting_tab:
