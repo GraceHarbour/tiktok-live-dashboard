@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import html
 import json
@@ -138,6 +139,28 @@ def _signed_in_reward_approver(engine) -> tuple[bool, str]:
     with engine.connect() as connection:
         role = connection.execute(text("SELECT role FROM dashboard_access_people WHERE email=:email AND active=true"), {"email": email}).scalar()
     return str(role or "").casefold() in {"member", "owner", "admin"}, email
+
+
+def _signed_in_reward_admin(engine) -> tuple[bool, str]:
+    try:
+        email = str(st.context.headers.get("X-Goog-Authenticated-User-Email", "")).strip()
+    except Exception:
+        email = ""
+    if ":" in email:
+        email = email.split(":", 1)[1]
+    email = email.casefold()
+    if not email:
+        return False, ""
+    with engine.connect() as connection:
+        role = connection.execute(text("SELECT role FROM dashboard_access_people WHERE email=:email AND active=true"), {"email": email}).scalar()
+    return str(role or "").casefold() in {"owner", "admin"}, email
+
+
+def _image_data_uri(filename: str) -> str:
+    path = Path(__file__).resolve().parent / "assets" / filename
+    if not path.exists():
+        return ""
+    return "data:image/webp;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
 
 
 def _series(frame: pd.DataFrame, column: str, default=0) -> pd.Series:
@@ -578,13 +601,16 @@ def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.D
             d1, d2 = st.columns(2)
             d1.download_button("Download spinning wheel replay", replay.encode("utf-8"), file_name=f"{month_key}-{drawing.iloc[0]['drawing_key'].lower().replace(' ','-')}-wheel.html", mime="text/html")
             d2.download_button("Download winner results", csv_data, file_name=f"{month_key}-{drawing.iloc[0]['drawing_key'].lower().replace(' ','-')}-winners.csv", mime="text/csv")
-            confirm_delete = st.checkbox("I am sure I want to delete this drawing result", key=f"confirm_delete_drawing_{drawing_id}")
-            if st.button("Delete this drawing result", disabled=not confirm_delete, key=f"delete_drawing_{drawing_id}"):
-                with engine.begin() as connection:
-                    connection.execute(text("DELETE FROM monthly_prize_drawings WHERE id=:id"), {"id": int(drawing_id)})
-                st.session_state.pop("monthly_wheel_drawing_id", None)
-                st.success("Drawing deleted. Its winners have been returned to the available wheel pool.")
-                st.rerun()
+            is_admin, _ = _signed_in_reward_admin(engine)
+            if is_admin:
+                st.markdown("#### Admin drawing reset")
+                confirm_delete = st.checkbox("I am sure I want to reset this drawing", key=f"confirm_delete_drawing_{drawing_id}")
+                if st.button("Reset drawing and return all names", disabled=not confirm_delete, key=f"delete_drawing_{drawing_id}"):
+                    with engine.begin() as connection:
+                        connection.execute(text("DELETE FROM monthly_prize_drawings WHERE id=:id"), {"id": int(drawing_id)})
+                    st.session_state.pop("monthly_wheel_drawing_id", None)
+                    st.success("Drawing reset. Every winner has been returned to the available wheel pool.")
+                    st.rerun()
 
 
 def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
@@ -601,10 +627,13 @@ def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[s
     .monthly-prize-detail{font-size:15px;line-height:1.4;color:#eef5ff}
     </style>
     """, unsafe_allow_html=True)
+    prize_one_image = _image_data_uri("drawing-1-prize.webp")
+    prize_two_image = _image_data_uri("drawing-2-interstellar.webp")
+    prize_three_image = _image_data_uri("drawing-3-leopard.webp")
     p1, p2, p3 = st.columns(3)
-    p1.markdown('<div class="monthly-prize-card pink"><div class="monthly-prize-number">Drawing 1</div><div class="monthly-prize-value">$50 Choice</div><div class="monthly-prize-detail">$50 gift card, TikTok ring light with backdrop, or an equal-value gift in their LIVE<br><b>3 winners</b></div></div>', unsafe_allow_html=True)
-    p2.markdown('<div class="monthly-prize-card"><div class="monthly-prize-number">Drawing 2</div><div class="monthly-prize-value">$100</div><div class="monthly-prize-detail">Gift delivered in the creator\'s LIVE<br><b>1 winner</b></div></div>', unsafe_allow_html=True)
-    p3.markdown('<div class="monthly-prize-card gold"><div class="monthly-prize-number">Drawing 3</div><div class="monthly-prize-value">$150</div><div class="monthly-prize-detail">Gift delivered in the creator\'s LIVE<br><b>1 winner</b></div></div>', unsafe_allow_html=True)
+    p1.markdown(f'<div class="monthly-prize-card pink"><img src="{prize_one_image}" style="height:150px;max-width:100%;object-fit:contain"><div class="monthly-prize-number">Drawing 1</div><div class="monthly-prize-value">$50 Choice</div><div class="monthly-prize-detail">Gift card, ring light with backdrop, or equal-value LIVE gift<br><b>3 winners</b></div></div>', unsafe_allow_html=True)
+    p2.markdown(f'<div class="monthly-prize-card"><img src="{prize_two_image}" style="height:150px;max-width:100%;object-fit:contain"><div class="monthly-prize-number">Drawing 2</div><div class="monthly-prize-value">Interstellar — $100</div><div class="monthly-prize-detail">Interstellar gift delivered in the creator\'s LIVE<br><b>1 winner</b></div></div>', unsafe_allow_html=True)
+    p3.markdown(f'<div class="monthly-prize-card gold"><img src="{prize_three_image}" style="height:150px;max-width:100%;object-fit:contain"><div class="monthly-prize-number">Drawing 3</div><div class="monthly-prize-value">Leopard — $150</div><div class="monthly-prize-detail">Leopard gift delivered in the creator\'s LIVE<br><b>1 winner</b></div></div>', unsafe_allow_html=True)
     rows = _classify(creators)
     current_month = dt.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m")
     saved_months = pd.read_sql(text("SELECT DISTINCT month_key FROM monthly_reward_results ORDER BY month_key DESC"), engine)["month_key"].astype(str).tolist()
