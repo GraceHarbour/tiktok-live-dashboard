@@ -1783,63 +1783,67 @@ def main():
                     download_frame_csv(business_export, f"Download {section_name}", f"business-essentials-{business_slug}.csv", f"business_download_{business_slug}")
                     render_read_table(business_export)
 
-    with maintenance_tab:
-        st.subheader("Maintenance Rate")
-        st.caption("Latest maintenance records from the three authorized Maintenance Rate source pages.")
+with maintenance_tab:
+    st.subheader("Maintenance Rate")
+    st.caption("Maintenance results from the authorized Creator Data-page capture only. Business Essentials is not used for this sheet.")
 
+    maintenance_data = pd.DataFrame()
+    try:
+        maintenance_data = pd.read_sql(text("""
+            SELECT creator_id,
+                   username AS creator,
+                   COALESCE(NULLIF(manager_name, ''), NULLIF(manager, ''), 'Unassigned') AS manager,
+                   COALESCE(diamonds, 0) AS diamonds,
+                   COALESCE(valid_live_days, 0) AS valid_live_days,
+                   COALESCE(valid_live_hours, 0) AS valid_live_hours,
+                   COALESCE(tier_status, '') AS tier_status,
+                   COALESCE(rank_up_progress, '') AS rank_up_progress
+            FROM goal_creators
+            ORDER BY COALESCE(diamonds, 0) DESC, username
+        """), get_engine())
+    except Exception:
         maintenance_data = pd.DataFrame()
-        try:
-            maintenance_payloads = pd.read_sql(text("SELECT payload FROM maintenance_rate_rows ORDER BY row_index"), get_engine())
-            if not maintenance_payloads.empty:
-                maintenance_data = pd.DataFrame(maintenance_payloads["payload"].tolist())
-        except Exception:
-            maintenance_data = pd.DataFrame()
 
-        if not maintenance_data.empty and "maintained_tier" in maintenance_data.columns:
-            total_maintenance = len(maintenance_data)
-            maintaining_count = int(maintenance_data["maintained_tier"].fillna(False).astype(bool).sum())
-            maintenance_rate = (maintaining_count / total_maintenance * 100) if total_maintenance else 0.0
-            card_one, card_two, card_three = st.columns(3)
-            card_one.metric("Creators in Maintenance Rate", f"{total_maintenance:,}")
-            card_two.metric("Maintaining or ranked up", f"{maintaining_count:,}")
-            card_three.metric("Maintenance rate", f"{maintenance_rate:.2f}%")
-            st.caption("Cleaned Maintenance Rate read from the latest source pages.")
+    if not maintenance_data.empty:
+        status_text = (
+            maintenance_data["tier_status"].fillna("").astype(str)
+            + " "
+            + maintenance_data["rank_up_progress"].fillna("").astype(str)
+        )
+        explicit_not_maintained = status_text.str.contains(r"not maintained|did not maintain|failed", case=False, regex=True, na=False)
+        ranked_up = status_text.str.contains(r"rank(?:ed|ing)?\s*up", case=False, regex=True, na=False)
+        maintained = status_text.str.contains(r"maintain(?:ed|ing)?(?:\s+tier)?", case=False, regex=True, na=False) & ~explicit_not_maintained
+        maintenance_data["maintained_tier"] = ranked_up | maintained
+        maintenance_data["Status"] = "Not maintained"
+        maintenance_data.loc[maintained, "Status"] = "Maintained tier"
+        maintenance_data.loc[ranked_up, "Status"] = "Ranked up"
 
-            clean_rows = []
-            for _, source_row in maintenance_data.iterrows():
-                raw = str(source_row.get("raw_row", "")).replace("\u0014", " ").replace("\n", " ")
-                raw = re.sub(r"\s+", " ", raw).strip()
-                tier_matches = re.findall(r"\bTier\s+\d+\b", raw, flags=re.IGNORECASE)
-                tier_matches = ["Tier " + re.search(r"\d+", item).group() for item in tier_matches]
+        total_maintenance = len(maintenance_data)
+        maintaining_count = int(maintenance_data["maintained_tier"].sum())
+        maintenance_rate = (maintaining_count / total_maintenance * 100) if total_maintenance else 0.0
+        card_one, card_two, card_three = st.columns(3)
+        card_one.metric("Creators in Creator Data", f"{total_maintenance:,}")
+        card_two.metric("Maintaining or ranked up", f"{maintaining_count:,}")
+        card_three.metric("Maintenance rate", f"{maintenance_rate:.2f}%")
+        st.caption("Updated exclusively from the scheduled Creator Data-page read.")
 
-                progress_match = re.search(r"([\d,]+)\s*/\s*([\d,]+)", raw)
-                progress = ""
-                if progress_match:
-                    progress = f"{progress_match.group(1).replace(',', '')}/{progress_match.group(2).replace(',', '')}"
-
-                current_tier = tier_matches[0] if tier_matches else ""
-                last_month_tier = tier_matches[-1] if len(tier_matches) > 1 else ""
-                next_tier = next((tier for tier in tier_matches[1:] if tier != current_tier and tier != last_month_tier), "")
-                if not next_tier and len(tier_matches) >= 3:
-                    next_tier = tier_matches[2]
-
-                valid_days_match = re.search(r"\b\d+\s*d\b", raw, flags=re.IGNORECASE)
-                valid_days = valid_days_match.group(0).replace(" ", "") if valid_days_match else ""
-                status = "Ranked up" if re.search(r"Ranked up", raw, flags=re.IGNORECASE) else ("Maintained tier" if re.search(r"Maintained tier", raw, flags=re.IGNORECASE) else "Not maintained")
-
-                clean_rows.append({
-                    "Creator": source_row.get("creator", ""),
-                    "Tier progress": progress,
-                    "Current tier": current_tier,
-                    "Valid Go LIVE days": valid_days,
-                    "Tier last month": last_month_tier,
-                    "Maintained": "Yes" if bool(source_row.get("maintained_tier", False)) else "No",
-                    "Status": status,
-                })
-
-            render_read_table(pd.DataFrame(clean_rows), height=720)
-        else:
-            st.info("Maintenance source pages have not supplied a complete read yet. The dashboard remains online, and these boxes will populate automatically as soon as the scheduled maintenance reader imports its next complete run.")
+        display_maintenance = maintenance_data.rename(columns={
+            "creator": "Creator",
+            "manager": "Manager",
+            "diamonds": "Diamonds",
+            "valid_live_days": "Valid Go LIVE days",
+            "valid_live_hours": "LIVE duration",
+            "tier_status": "Tier status",
+            "rank_up_progress": "Rank-up progress",
+        })
+        display_maintenance["Maintained"] = display_maintenance["maintained_tier"].map({True: "Yes", False: "No"})
+        maintenance_columns = [
+            "Creator", "Manager", "Diamonds", "Valid Go LIVE days", "LIVE duration",
+            "Tier status", "Rank-up progress", "Maintained", "Status",
+        ]
+        render_read_table(display_maintenance[maintenance_columns], height=720)
+    else:
+        st.info("The Creator Data page has not supplied a complete read yet. This sheet will populate automatically after the next successful Creator Data capture.")
 
 
     st.markdown("""
