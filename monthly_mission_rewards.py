@@ -389,7 +389,7 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
             st.caption("A signed-in manager must approve these creators before they can be rescheduled.")
 
 
-def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
+def _render_mission_rewards(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
     _ensure_tables(engine)
     st.subheader("Monthly Mission Rewards")
     st.caption("During the month, progress uses the latest Goal read. Final monthly results use the complete Creator Data report captured after 8:00 AM ET on the first. Creators below 150,000 diamonds are excluded.")
@@ -467,3 +467,64 @@ def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names
         _display_table(near[["Picture","Creator","Manager","Diamonds","Valid LIVE days","Valid LIVE hours","Maintained or ranked up","Reward","Milestone","Prize value","Met requirements","Missing requirements"]], min(760, 88 + len(near) * 48))
 
     _event_section(engine, classified, manager_names, selected_month)
+
+
+def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
+    st.subheader("Monthly Creator Prizes")
+    st.caption("Track entries for each monthly drawing. Creator pictures and progress update from the daily Creator Data read.")
+    rows = _classify(creators)
+    current_month = dt.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m")
+    snapshots = pd.read_sql(text("SELECT * FROM monthly_reward_results WHERE month_key=:month_key"), engine, params={"month_key": current_month})
+    if not snapshots.empty:
+        rows = snapshots.rename(columns={
+            "creator_id":"Creator ID", "username":"Creator", "manager_name":"Manager",
+            "diamonds":"Diamonds", "valid_live_days":"Valid LIVE days",
+            "valid_live_hours":"Valid LIVE hours", "avatar_url":"Picture",
+        })
+        st.info("Using the latest complete daily Creator Data snapshot through yesterday.")
+    else:
+        st.info("Waiting for the first daily Creator Data snapshot; showing available Goal data for now.")
+    for column, default in (("Picture", ""), ("Manager", "Unassigned"), ("Creator", ""), ("Diamonds", 0), ("Valid LIVE days", 0), ("Valid LIVE hours", 0)):
+        if column not in rows:
+            rows[column] = default
+    c1, c2 = st.columns([1, 1.5])
+    manager = c1.selectbox("Monthly prizes manager", ["All managers", *manager_names], key="monthly_prizes_manager")
+    search = c2.text_input("Search monthly prize creators", key="monthly_prizes_search").strip()
+    if manager != "All managers":
+        rows = rows[rows["Manager"] == manager]
+    if search:
+        rows = rows[rows["Creator"].astype(str).str.contains(re.escape(search), case=False, na=False)]
+
+    drawing_one = rows[(pd.to_numeric(rows["Valid LIVE days"], errors="coerce").fillna(0) >= 8) & (pd.to_numeric(rows["Valid LIVE hours"], errors="coerce").fillna(0) >= 20)].copy()
+    drawing_two = rows[(pd.to_numeric(rows["Valid LIVE days"], errors="coerce").fillna(0) >= 15) & (pd.to_numeric(rows["Valid LIVE hours"], errors="coerce").fillna(0) >= 40) & (pd.to_numeric(rows["Diamonds"], errors="coerce").fillna(0) >= 100)].copy()
+    drawing_three = rows[pd.to_numeric(rows["Diamonds"], errors="coerce").fillna(0) >= 200_000].copy()
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Drawing 1 entries", f"{len(drawing_one):,}", help="8 valid days and 20 LIVE hours by the 20th")
+    m2.metric("Drawing 2 entries", f"{len(drawing_two):,}", help="Level 3: 15 valid days, 40 LIVE hours, and at least 100 diamonds")
+    m3.metric("Drawing 3 entries", f"{len(drawing_three):,}", help="At least 200,000 diamonds during the month")
+
+    prize_columns = ["Picture", "Creator", "Manager", "Diamonds", "Valid LIVE days", "Valid LIVE hours"]
+    with st.expander("Drawing 1 — 8 days and 20 hours by the 20th", expanded=True):
+        if drawing_one.empty:
+            st.info("No creators currently qualify for Drawing 1.")
+        else:
+            _display_table(drawing_one[prize_columns].sort_values(["Valid LIVE days", "Valid LIVE hours", "Creator"], ascending=[False, False, True]), min(640, 88 + len(drawing_one) * 44))
+    with st.expander("Drawing 2 — Reach Level 3", expanded=True):
+        if drawing_two.empty:
+            st.info("No creators currently qualify for Drawing 2.")
+        else:
+            _display_table(drawing_two[prize_columns].sort_values(["Diamonds", "Creator"], ascending=[False, True]), min(640, 88 + len(drawing_two) * 44))
+    with st.expander("Drawing 3 — Reach 200,000 diamonds", expanded=True):
+        if drawing_three.empty:
+            st.info("No creators currently qualify for Drawing 3.")
+        else:
+            _display_table(drawing_three[prize_columns].sort_values(["Diamonds", "Creator"], ascending=[False, True]), min(640, 88 + len(drawing_three) * 44))
+
+
+def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
+    mission_tab, prizes_tab = st.tabs(["Mission Rewards", "Monthly Prizes"])
+    with mission_tab:
+        _render_mission_rewards(engine, creators, manager_names)
+    with prizes_tab:
+        _render_monthly_prizes(engine, creators, manager_names)
