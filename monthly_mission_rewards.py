@@ -29,10 +29,12 @@ def _ensure_tables(engine) -> None:
                 month_key text NOT NULL,
                 event_name text NOT NULL,
                 scheduled_at timestamptz NOT NULL,
+                ends_at timestamptz,
                 manager_name text NOT NULL DEFAULT '',
                 created_at timestamptz NOT NULL DEFAULT now()
             )
         """))
+        connection.execute(text("ALTER TABLE monthly_reward_events ADD COLUMN IF NOT EXISTS ends_at timestamptz"))
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS monthly_reward_event_creators (
                 event_id bigint NOT NULL REFERENCES monthly_reward_events(id) ON DELETE CASCADE,
@@ -220,33 +222,40 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
         for hour in range(24) for minute in (0, 15, 30, 45)
     ]
     with st.form("monthly_reward_event_form", clear_on_submit=True):
-        c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
+        c1, c2, c3, c4, c5 = st.columns([1.5, 1, 1, 1, 1])
         event_name = c1.text_input("Event name", placeholder="September Mission Rewards")
         event_date = c2.date_input("Event date", value=now.date())
         default_time = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0).strftime("%-I:%M %p")
-        event_time = c3.selectbox("Event time", time_options, index=time_options.index(default_time))
-        event_manager = c4.selectbox("Manager", ["All managers", *manager_names])
+        start_index = time_options.index(default_time)
+        event_start_time = c3.selectbox("Start time", time_options, index=start_index)
+        event_end_time = c4.selectbox("End time", time_options, index=min(start_index + 4, len(time_options) - 1))
+        event_manager = c5.selectbox("Manager", ["All managers", *manager_names])
         create_event = st.form_submit_button("Create reward event", type="primary")
     if create_event:
         clean_name = event_name.strip()
         if not clean_name:
             st.error("Enter an event name.")
         else:
-            parsed_time = dt.datetime.strptime(event_time, "%I:%M %p").time()
-            scheduled = dt.datetime.combine(event_date, parsed_time, tzinfo=eastern)
-            with engine.begin() as connection:
-                connection.execute(text("""
-                    INSERT INTO monthly_reward_events(month_key,event_name,scheduled_at,manager_name)
-                    VALUES (:month_key,:event_name,:scheduled_at,:manager_name) RETURNING id
-                """), {"month_key": month_key, "event_name": clean_name, "scheduled_at": scheduled, "manager_name": event_manager})
-            st.success(f"Created {clean_name}. Managers can now add eligible creators.")
-            st.rerun()
+            start_time = dt.datetime.strptime(event_start_time, "%I:%M %p").time()
+            end_time = dt.datetime.strptime(event_end_time, "%I:%M %p").time()
+            scheduled = dt.datetime.combine(event_date, start_time, tzinfo=eastern)
+            ends_at = dt.datetime.combine(event_date, end_time, tzinfo=eastern)
+            if ends_at <= scheduled:
+                st.error("End time must be later than the start time.")
+            else:
+                with engine.begin() as connection:
+                    connection.execute(text("""
+                        INSERT INTO monthly_reward_events(month_key,event_name,scheduled_at,ends_at,manager_name)
+                        VALUES (:month_key,:event_name,:scheduled_at,:ends_at,:manager_name)
+                    """), {"month_key": month_key, "event_name": clean_name, "scheduled_at": scheduled, "ends_at": ends_at, "manager_name": event_manager})
+                st.success(f"Created {clean_name}. Managers can now add unscheduled eligible creators.")
+                st.rerun()
 
-    events = pd.read_sql(text("SELECT id,month_key,event_name,scheduled_at,manager_name FROM monthly_reward_events WHERE month_key=:month_key ORDER BY scheduled_at,id"), engine, params={"month_key": month_key})
+    events = pd.read_sql(text("SELECT id,month_key,event_name,scheduled_at,ends_at,manager_name FROM monthly_reward_events WHERE month_key=:month_key ORDER BY scheduled_at,id"), engine, params={"month_key": month_key})
     if events.empty:
         st.info("No reward distribution events have been scheduled yet.")
         return
-    events["label"] = events.apply(lambda r: f"{r['event_name']} — {pd.Timestamp(r['scheduled_at']).tz_convert(eastern).strftime('%b %-d, %Y at %-I:%M %p')} ({r['manager_name']})", axis=1)
+    events["label"] = events.apply(lambda r: f"{r['event_name']} — {pd.Timestamp(r['scheduled_at']).tz_convert(eastern).strftime('%b %-d, %Y, %-I:%M %p')} to {pd.Timestamp(r['ends_at']).tz_convert(eastern).strftime('%-I:%M %p') if pd.notna(r['ends_at']) else 'end time not set'} ({r['manager_name']})", axis=1)
     selected_label = st.selectbox("View reward event", events["label"].tolist())
     event = events[events["label"] == selected_label].iloc[0]
     event_id = int(event["id"])
@@ -265,7 +274,7 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
     if not unavailable_locked.empty:
         add_pool = add_pool[~add_pool["Creator ID"].isin(unavailable_locked["creator_id"].astype(str))]
     label_map = {f"{r['Creator']} — {r['Manager']} — {r['Reward']}": r for r in add_pool.to_dict("records")}
-    selected_add = st.multiselect("Add creators after scheduling", list(label_map), key=f"reward_add_{event_id}")
+    selected_add = st.multiselect("Add unscheduled creators from the eligible rewards list", list(label_map), key=f"reward_add_{event_id}")
     if st.button("Add selected creators", key=f"reward_add_button_{event_id}", disabled=not selected_add):
         with engine.begin() as connection:
             for label in selected_add:
