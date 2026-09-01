@@ -1219,26 +1219,32 @@ def main():
                     focus_prior_diamonds = monthly_metric_value(monthly_metrics, "prior_month_diamonds", 0)
                     focus_current_diamonds = int(dashboard_diamonds.sum())
                     focus_today = pd.Timestamp.now(tz="America/New_York")
-                    # TikTok's reporting month starts at 8:00 PM ET on the last
-                    # calendar day of the prior month and ends just before 8:00
-                    # PM ET on the last calendar day of the current month. The
-                    # completed month remains displayed until the first new
-                    # reporting-day value is available at 8:00 PM ET on day 1.
-                    focus_reporting_today = focus_today
-                    if focus_today.day == 1 and focus_today.hour < 20:
-                        focus_reporting_today = focus_today - pd.offsets.MonthBegin(1)
-                    focus_month_start = focus_reporting_today.normalize().replace(day=1)
+                    # A reporting day is complete only at the next 8:00 PM ET boundary.
+                    # Never project from a partial day.
+                    focus_calendar_month_start = focus_today.normalize().replace(day=1)
+                    focus_current_month_end = focus_calendar_month_start + pd.offsets.MonthBegin(1) - pd.Timedelta(hours=4)
+                    focus_month_start = (
+                        focus_calendar_month_start + pd.offsets.MonthBegin(1)
+                        if focus_today >= focus_current_month_end
+                        else focus_calendar_month_start
+                    )
                     focus_next_month_start = focus_month_start + pd.offsets.MonthBegin(1)
                     focus_reporting_start = focus_month_start - pd.Timedelta(hours=4)
                     focus_reporting_end = focus_next_month_start - pd.Timedelta(hours=4)
                     focus_total_reporting_days = int((focus_reporting_end - focus_reporting_start).total_seconds() / 86_400)
-                    focus_elapsed_reporting_days = min(focus_total_reporting_days, max(1, focus_reporting_today.day))
+                    focus_elapsed_reporting_days = min(
+                        focus_total_reporting_days,
+                        max(0, int((focus_today - focus_reporting_start).total_seconds() // 86_400)),
+                    )
                     focus_projected_diamonds = (
                         focus_current_diamonds
                         / focus_elapsed_reporting_days
                         * focus_total_reporting_days
-                    ) if focus_current_diamonds else 0.0
-                    if focus_projected_diamonds >= focus_total_goal > 0:
+                    ) if focus_current_diamonds and focus_elapsed_reporting_days > 0 else 0.0
+                    if focus_elapsed_reporting_days == 0:
+                        focus_diamond_color = "#6ee7ff"
+                        focus_diamond_status = "Pacing begins after the first completed 8:00 PM read"
+                    elif focus_projected_diamonds >= focus_total_goal > 0:
                         focus_diamond_color = "#40e39a"
                         focus_diamond_status = "Pacing to total goal"
                     elif focus_projected_diamonds >= focus_minimum_goal > 0:
@@ -1899,16 +1905,23 @@ def main():
 
 
             battle_today = pd.Timestamp.now(tz="America/New_York")
-            battle_boundary_today = battle_today.normalize() + pd.Timedelta(hours=20)
-            if battle_today >= battle_boundary_today:
-                battle_cycle_start = battle_boundary_today
-                battle_cycle_end = battle_cycle_start + pd.offsets.MonthEnd(1)
-            else:
-                battle_cycle_end = battle_boundary_today
-                battle_cycle_start = battle_cycle_end - pd.offsets.MonthEnd(1)
-            battle_total_days = max((battle_cycle_end - battle_cycle_start).total_seconds() / 86_400, 1 / 1_440)
-            battle_elapsed_days = max((battle_today - battle_cycle_start).total_seconds() / 86_400, 1 / 1_440)
-            battle_days_remaining = max((battle_cycle_end - battle_today).total_seconds() / 86_400, 1 / 1_440)
+            battle_calendar_month_start = battle_today.normalize().replace(day=1)
+            battle_current_month_end = battle_calendar_month_start + pd.offsets.MonthBegin(1) - pd.Timedelta(hours=4)
+            battle_reporting_month_start = (
+                battle_calendar_month_start + pd.offsets.MonthBegin(1)
+                if battle_today >= battle_current_month_end
+                else battle_calendar_month_start
+            )
+            battle_cycle_start = battle_reporting_month_start - pd.Timedelta(hours=4)
+            battle_cycle_end = battle_reporting_month_start + pd.offsets.MonthBegin(1) - pd.Timedelta(hours=4)
+            battle_total_days = max(int((battle_cycle_end - battle_cycle_start).total_seconds() // 86_400), 1)
+            battle_completed_days = min(
+                battle_total_days,
+                max(0, int((battle_today - battle_cycle_start).total_seconds() // 86_400)),
+            )
+            battle_pacing_ready = battle_completed_days > 0
+            battle_elapsed_days = max(battle_completed_days, 1)
+            battle_days_remaining = max(battle_total_days - battle_completed_days, 1)
 
 
             creator_manager_map = {}
@@ -1934,25 +1947,28 @@ def main():
                     if creator_focus_manager != "All managers" and manager_name != creator_focus_manager:
                         continue
                     maintained_value = bool(source_row.get("maintained_tier", False)) or bool(re.search(r"Ranked up|Maintained tier", raw, flags=re.IGNORECASE))
-                    projected_value = int(round(current_value / battle_elapsed_days * battle_total_days))
-                    remaining_value = max(0, target_value - current_value)
-                    daily_needed = int((remaining_value / battle_days_remaining) + 0.999999)
-                    daily_actual = current_value / battle_elapsed_days
-                    daily_gap = max(0, int(round(daily_needed - daily_actual)))
-                    valid_days_match = re.search(r"(\d+)\s*d", raw, flags=re.IGNORECASE)
-                    valid_days = int(valid_days_match.group(1)) if valid_days_match else 0
-                    if maintained_value or current_value >= target_value:
-                        pace_status = "Achieved"
-                        manager_action = "Goal secured"
-                    elif projected_value >= target_value:
-                        pace_status = "On pace"
-                        manager_action = "Keep current pace"
-                    elif remaining_value <= max(20_000, int(target_value * 0.20)) or daily_gap <= max(1_000, int(daily_actual * 0.35)):
-                        pace_status = "Needs help"
-                        manager_action = "Push today — reachable"
-                    else:
-                        pace_status = "Needs help"
-                        manager_action = "Increase LIVE time and diamonds"
+                projected_value = int(round(current_value / battle_elapsed_days * battle_total_days)) if battle_pacing_ready else 0
+                remaining_value = max(0, target_value - current_value)
+                daily_needed = int((remaining_value / battle_days_remaining) + 0.999999)
+                daily_actual = current_value / battle_elapsed_days if battle_pacing_ready else 0
+                daily_gap = max(0, int(round(daily_needed - daily_actual)))
+                valid_days_match = re.search(r"(\d+)\s*d", raw, flags=re.IGNORECASE)
+                valid_days = int(valid_days_match.group(1)) if valid_days_match else 0
+                if maintained_value or current_value >= target_value:
+                    pace_status = "Achieved"
+                    manager_action = "Goal secured"
+                elif not battle_pacing_ready:
+                    pace_status = "Pending"
+                    manager_action = "Await first completed 8:00 PM read"
+                elif projected_value >= target_value:
+                    pace_status = "On pace"
+                    manager_action = "Keep current pace"
+                elif remaining_value <= max(20_000, int(target_value * 0.20)) or daily_gap <= max(1_000, int(daily_actual * 0.35)):
+                    pace_status = "Needs help"
+                    manager_action = "Push today — reachable"
+                else:
+                    pace_status = "Needs help"
+                    manager_action = "Increase LIVE time and diamonds"
                     maintenance_battle_rows.append({
                         "Priority": pace_status,
                         "Creator": creator_name,
@@ -1986,15 +2002,16 @@ def main():
             battle_quit = battle_graduation.get("Quit on", pd.Series("", index=battle_graduation.index)).fillna("").astype(str).str.strip()
             battle_active = battle_graduation[battle_quit.isin(["", "-", "—", "None", "nan"])].copy()
             battle_active["_current"] = battle_current.loc[battle_active.index]
-            battle_active["_projected"] = (battle_active["_current"] / battle_elapsed_days * battle_total_days).round().astype("int64")
+            battle_active["_projected"] = (battle_active["_current"] / battle_elapsed_days * battle_total_days).round().astype("int64") if battle_pacing_ready else 0
             battle_active["_remaining"] = (200_000 - battle_active["_current"]).clip(lower=0)
             battle_active["_daily_needed"] = (battle_active["_remaining"] / battle_days_remaining).apply(lambda value: int(value + 0.999999))
-            battle_active["_daily_actual"] = battle_active["_current"] / battle_elapsed_days
+            battle_active["_daily_actual"] = battle_active["_current"] / battle_elapsed_days if battle_pacing_ready else 0
             battle_active["_pace_gap"] = (battle_active["_daily_needed"] - battle_active["_daily_actual"]).clip(lower=0).round().astype("int64")
-            battle_active["_priority"] = "Needs help"
-            battle_active.loc[battle_active["_projected"].ge(200_000), "_priority"] = "On pace"
+            battle_active["_priority"] = "Needs help" if battle_pacing_ready else "Pending"
+            if battle_pacing_ready:
+                battle_active.loc[battle_active["_projected"].ge(200_000), "_priority"] = "On pace"
             battle_active.loc[battle_active["_current"].ge(200_000) | battle_progress.loc[battle_active.index].str.contains("met target", case=False, na=False), "_priority"] = "Achieved"
-            battle_active["_action"] = "Increase LIVE time and diamonds"
+            battle_active["_action"] = "Increase LIVE time and diamonds" if battle_pacing_ready else "Await first completed 8:00 PM read"
             battle_active.loc[battle_active["_priority"].eq("On pace"), "_action"] = "Keep current pace"
             battle_active.loc[battle_active["_priority"].eq("Achieved"), "_action"] = "Goal secured"
             graduation_reachable = battle_active["_priority"].eq("Needs help") & ((battle_active["_remaining"] <= 40_000) | (battle_active["_pace_gap"] <= battle_active["_daily_actual"].mul(0.35).clip(lower=1_000)))
@@ -2030,11 +2047,15 @@ def main():
               <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Agency wins to 50%</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_agency_wins_needed:,}</div></div>
             </div>
             """, unsafe_allow_html=True)
-            st.caption(f"Pacing uses the 8:00 PM ET reporting boundary: {battle_elapsed_days:.2f} elapsed day(s) and {battle_days_remaining * 24:.1f} hour(s) remaining.")
+            if battle_pacing_ready:
+                st.caption(f"Pacing uses {battle_completed_days} completed 8:00 PM ET reporting day(s); {battle_days_remaining} full day(s) remain.")
+            else:
+                st.caption("Pacing is pending until the first reporting day completes at 8:00 PM ET.")
 
 
             def render_battle_creator_cards(frame, battle_type):
                 group_styles = {
+                "Awaiting first 8:00 PM read": ("#6ee7ff", "No creator is labeled on or off pace until a full reporting day is complete."),
                     "Immediate push — reachable": ("#ffcf5a", "Creators close enough for a concentrated push before the reporting period closes."),
                     "Increase activity": ("#ff8a80", "Creators who can still benefit from additional LIVE time and diamonds."),
                     "Protect current pace": ("#6ee7ff", "Creators pacing to the requirement; keep their activity consistent."),
@@ -2055,7 +2076,9 @@ def main():
                     action = str(row.get("Manager action", "") or "Review creator")
                     current_text = str(row.get("Current / goal", "0"))
                     current_value = int(re.sub(r"[^0-9]", "", current_text.split("/")[0]) or 0)
-                    if priority == "Achieved":
+                    if priority == "Pending":
+                        group_name = "Awaiting first 8:00 PM read"
+                    elif priority == "Achieved":
                         group_name = "Goal secured"
                     elif priority == "On pace":
                         group_name = "Protect current pace"
@@ -2104,7 +2127,7 @@ def main():
                 if maintenance_battle.empty:
                     st.info("No maintenance battle records are available for this manager.")
                 else:
-                    battle_order = pd.Categorical(maintenance_battle["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
+                    battle_order = pd.Categorical(maintenance_battle["Priority"], ["Pending", "Needs help", "On pace", "Achieved"], ordered=True)
                     maintenance_battle = maintenance_battle.assign(_order=battle_order).sort_values(["_order", "_pace_gap"], ascending=[True, False]).drop(columns=["_order", "_pace_gap"])
                     render_battle_creator_cards(maintenance_battle, "Maintenance")
             else:
@@ -2126,7 +2149,7 @@ def main():
                         "Valid LIVE days": battle_active.get("Valid go LIVE days", pd.Series("", index=battle_active.index)),
                             "Valid LIVE duration": battle_active.get("Valid LIVE duration", pd.Series("", index=battle_active.index)),
                     })
-                    graduation_order = pd.Categorical(graduation_display["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
+                    graduation_order = pd.Categorical(graduation_display["Priority"], ["Pending", "Needs help", "On pace", "Achieved"], ordered=True)
                     graduation_display = graduation_display.assign(_order=graduation_order, _gap=battle_active["_pace_gap"].values).sort_values(["_order", "_gap"], ascending=[True, False]).drop(columns=["_order", "_gap"])
                     render_battle_creator_cards(graduation_display, "Graduation")
 
