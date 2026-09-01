@@ -17,8 +17,8 @@ MILESTONES = [
     (1_500_000, 20, 30, "Dragon Flame", 26_999),
     (1_000_000, 20, 30, "Adam's Dream", 25_999),
     (500_000, 10, 20, "Interstellar", 10_000),
-    (300_000, 10, 20, "Leon the Kitten", 4_888),
-    (150_000, 10, 20, "Motorcycle", 2_988),
+    (300_000, 8, 20, "Leon the Kitten", 4_888),
+    (150_000, 8, 20, "Motorcycle", 2_988),
 ]
 
 
