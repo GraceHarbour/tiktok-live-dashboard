@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -276,6 +277,9 @@ def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names
     _ensure_tables(engine)
     st.subheader("Monthly Mission Rewards")
     st.caption("During the month, progress uses the latest Goal read. Final monthly results use the complete Creator Data report captured after 8:00 AM ET on the first. Creators below 150,000 diamonds are excluded.")
+    reward_banner = Path(__file__).resolve().parent / "assets" / "monthly-milestone-rewards.jpg"
+    if reward_banner.exists():
+        st.image(str(reward_banner), use_container_width=True)
     classified = _classify(creators)
     current_month = dt.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m")
     finalized_months = pd.read_sql(text("SELECT DISTINCT month_key FROM monthly_reward_results ORDER BY month_key DESC"), engine)["month_key"].astype(str).tolist()
