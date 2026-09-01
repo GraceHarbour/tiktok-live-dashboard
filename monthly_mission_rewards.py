@@ -542,6 +542,16 @@ def _render_mission_rewards(engine, creators: pd.DataFrame, manager_names: list[
     if live_progress and not using_creator_data:
         classified = classified[classified["Diamonds"] >= MILESTONES[-1][0]].copy()
     near = classified[classified["Track"] & ~classified["Eligible"]].copy()
+    mission_export = classified.copy()
+    mission_export["Eligibility status"] = mission_export["Eligible"].map({True: "Eligible", False: "Not eligible"})
+    st.download_button(
+        "Download mission rewards report",
+        data=mission_export.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"{selected_month}-mission-rewards.csv",
+        mime="text/csv",
+        key="download_monthly_mission_report",
+        use_container_width=True,
+    )
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Eligible creators", f"{len(qualified):,}")
     m2.metric("Prize value", f"{int(qualified['Prize value'].sum()):,} coins")
@@ -745,6 +755,20 @@ def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[s
     drawing_one = rows[(pd.to_numeric(rows["Valid LIVE days"], errors="coerce").fillna(0) >= 8) & (pd.to_numeric(rows["Valid LIVE hours"], errors="coerce").fillna(0) >= 20)].copy()
     drawing_two = rows[(pd.to_numeric(rows["Valid LIVE days"], errors="coerce").fillna(0) >= 15) & (pd.to_numeric(rows["Valid LIVE hours"], errors="coerce").fillna(0) >= 40) & (pd.to_numeric(rows["Diamonds"], errors="coerce").fillna(0) >= 100)].copy()
     drawing_three = rows[pd.to_numeric(rows["Diamonds"], errors="coerce").fillna(0) >= 200_000].copy()
+    prize_exports = []
+    for drawing_name, drawing_frame in (("Drawing 1", drawing_one), ("Drawing 2", drawing_two), ("Drawing 3", drawing_three)):
+        drawing_export = drawing_frame.copy()
+        drawing_export.insert(0, "Drawing", drawing_name)
+        prize_exports.append(drawing_export)
+    monthly_prizes_export = pd.concat(prize_exports, ignore_index=True) if prize_exports else pd.DataFrame()
+    st.download_button(
+        "Download monthly prizes drawing lists",
+        data=monthly_prizes_export.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"{selected_month}-monthly-prize-drawing-lists.csv",
+        mime="text/csv",
+        key="download_monthly_prizes_report",
+        use_container_width=True,
+    )
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Drawing 1 entries", f"{len(drawing_one):,}", help="8 valid days and 20 LIVE hours by the 20th")
