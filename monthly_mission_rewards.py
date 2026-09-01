@@ -555,7 +555,7 @@ def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.D
         latest = pd.read_sql(text("SELECT id FROM monthly_prize_drawings WHERE month_key=:month_key ORDER BY created_at DESC,id DESC LIMIT 1"), engine, params={"month_key": month_key})
         drawing_id = int(latest.iloc[0]["id"]) if not latest.empty else None
     if drawing_id:
-        drawing = pd.read_sql(text("SELECT id,drawing_key,prize_name,created_at FROM monthly_prize_drawings WHERE id=:id"), engine, params={"id": drawing_id})
+        drawing = pd.read_sql(text("SELECT id,drawing_key,prize_name,created_at FROM monthly_prize_drawings WHERE id=:id AND month_key=:month_key"), engine, params={"id": drawing_id, "month_key": month_key})
         winners = pd.read_sql(text("SELECT winner_order AS \"Winner number\",username AS \"Creator\",manager_name AS \"Manager\" FROM monthly_prize_winners WHERE drawing_id=:id ORDER BY winner_order"), engine, params={"id": drawing_id})
         if not drawing.empty and not winners.empty:
             winner_names = winners["Creator"].astype(str).tolist()
@@ -572,16 +572,44 @@ def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.D
 def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
     st.subheader("Monthly Creator Prizes")
     st.caption("Track entries for each monthly drawing. Creator pictures and progress update from the daily Creator Data read.")
+    st.markdown("""
+    <style>
+    .monthly-prize-card{min-height:190px;padding:22px 18px;border-radius:18px;border:1px solid rgba(94,207,255,.55);background:linear-gradient(145deg,#071b3a,#122c57 58%,#30145a);box-shadow:0 10px 26px rgba(0,0,0,.28);text-align:center;color:#fff;margin-bottom:12px}
+    .monthly-prize-card.pink{border-color:rgba(255,74,180,.7);background:linear-gradient(145deg,#281044,#60164c 58%,#172b57)}
+    .monthly-prize-card.gold{border-color:rgba(255,199,73,.75);background:linear-gradient(145deg,#291b05,#5b3910 58%,#38134d)}
+    .monthly-prize-number{font-size:18px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8ee7ff}
+    .monthly-prize-card.pink .monthly-prize-number{color:#ff8ed4}.monthly-prize-card.gold .monthly-prize-number{color:#ffd66f}
+    .monthly-prize-value{font-size:35px;line-height:1.05;font-weight:900;margin:12px 0 8px}
+    .monthly-prize-detail{font-size:15px;line-height:1.4;color:#eef5ff}
+    </style>
+    """, unsafe_allow_html=True)
+    p1, p2, p3 = st.columns(3)
+    p1.markdown('<div class="monthly-prize-card pink"><div class="monthly-prize-number">Drawing 1</div><div class="monthly-prize-value">$50 Choice</div><div class="monthly-prize-detail">$50 gift card, TikTok ring light with backdrop, or an equal-value gift in their LIVE<br><b>3 winners</b></div></div>', unsafe_allow_html=True)
+    p2.markdown('<div class="monthly-prize-card"><div class="monthly-prize-number">Drawing 2</div><div class="monthly-prize-value">$100</div><div class="monthly-prize-detail">Gift delivered in the creator\'s LIVE<br><b>1 winner</b></div></div>', unsafe_allow_html=True)
+    p3.markdown('<div class="monthly-prize-card gold"><div class="monthly-prize-number">Drawing 3</div><div class="monthly-prize-value">$150</div><div class="monthly-prize-detail">Gift delivered in the creator\'s LIVE<br><b>1 winner</b></div></div>', unsafe_allow_html=True)
     rows = _classify(creators)
     current_month = dt.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m")
-    snapshots = pd.read_sql(text("SELECT * FROM monthly_reward_results WHERE month_key=:month_key"), engine, params={"month_key": current_month})
+    saved_months = pd.read_sql(text("SELECT DISTINCT month_key FROM monthly_reward_results ORDER BY month_key DESC"), engine)["month_key"].astype(str).tolist()
+    month_options = list(dict.fromkeys([current_month, *saved_months]))
+    default_month = current_month if current_month in saved_months else (saved_months[0] if saved_months else current_month)
+    selected_month = st.selectbox(
+        "Monthly prizes month",
+        month_options,
+        index=month_options.index(default_month),
+        format_func=lambda value: pd.Timestamp(f"{value}-01").strftime("%B %Y"),
+        key="monthly_prizes_month",
+    )
+    snapshots = pd.read_sql(text("SELECT * FROM monthly_reward_results WHERE month_key=:month_key"), engine, params={"month_key": selected_month})
     if not snapshots.empty:
         rows = snapshots.rename(columns={
             "creator_id":"Creator ID", "username":"Creator", "manager_name":"Manager",
             "diamonds":"Diamonds", "valid_live_days":"Valid LIVE days",
             "valid_live_hours":"Valid LIVE hours", "avatar_url":"Picture",
         })
-        st.info("Using the latest complete daily Creator Data snapshot through yesterday.")
+        if selected_month == current_month:
+            st.info("Using the latest complete daily Creator Data snapshot through yesterday.")
+        else:
+            st.success(f"Using the frozen final Creator Data capture for {pd.Timestamp(f'{selected_month}-01').strftime('%B %Y')}.")
     else:
         st.info("Waiting for the first daily Creator Data snapshot; showing available Goal data for now.")
     for column, default in (("Picture", ""), ("Manager", "Unassigned"), ("Creator", ""), ("Diamonds", 0), ("Valid LIVE days", 0), ("Valid LIVE hours", 0)):
@@ -620,7 +648,7 @@ def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[s
             st.info("No creators currently qualify for Drawing 3.")
         else:
             _display_table(drawing_three[prize_columns].sort_values(["Diamonds", "Creator"], ascending=[False, True]), min(640, 88 + len(drawing_three) * 44))
-    _drawing_wheel_section(engine, current_month, {
+    _drawing_wheel_section(engine, selected_month, {
         "Drawing 1": drawing_one,
         "Drawing 2": drawing_two,
         "Drawing 3": drawing_three,
