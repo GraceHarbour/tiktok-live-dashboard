@@ -1783,69 +1783,69 @@ def main():
                     download_frame_csv(business_export, f"Download {section_name}", f"business-essentials-{business_slug}.csv", f"business_download_{business_slug}")
                     render_read_table(business_export)
 
-with maintenance_tab:
-    st.subheader("Maintenance Rate")
-    st.caption("Maintenance results from the authorized Creator Data-page capture only. Business Essentials is not used for this sheet.")
-
-    maintenance_data = pd.DataFrame()
-    try:
-        maintenance_data = pd.read_sql(text("""
-            SELECT creator_id,
-                   username AS creator,
-                   COALESCE(NULLIF(manager_name, ''), NULLIF(manager, ''), 'Unassigned') AS manager,
-                   COALESCE(diamonds, 0) AS diamonds,
-                   COALESCE(valid_live_days, 0) AS valid_live_days,
-                   COALESCE(valid_live_hours, 0) AS valid_live_hours,
-                   COALESCE(tier_status, '') AS tier_status,
-                   COALESCE(rank_up_progress, '') AS rank_up_progress
-            FROM goal_creators
-            ORDER BY COALESCE(diamonds, 0) DESC, username
-        """), get_engine())
-    except Exception:
+    with maintenance_tab:
+        st.subheader("Maintenance Rate")
+        st.caption("Maintenance results from the authorized Creator Data-page capture only. Business Essentials is not used for this sheet.")
+    
         maintenance_data = pd.DataFrame()
-
-    if not maintenance_data.empty:
-        status_text = (
-            maintenance_data["tier_status"].fillna("").astype(str)
-            + " "
-            + maintenance_data["rank_up_progress"].fillna("").astype(str)
-        )
-        explicit_not_maintained = status_text.str.contains(r"not maintained|did not maintain|failed", case=False, regex=True, na=False)
-        ranked_up = status_text.str.contains(r"rank(?:ed|ing)?\s*up", case=False, regex=True, na=False)
-        maintained = status_text.str.contains(r"maintain(?:ed|ing)?(?:\s+tier)?", case=False, regex=True, na=False) & ~explicit_not_maintained
-        maintenance_data["maintained_tier"] = ranked_up | maintained
-        maintenance_data["Status"] = "Not maintained"
-        maintenance_data.loc[maintained, "Status"] = "Maintained tier"
-        maintenance_data.loc[ranked_up, "Status"] = "Ranked up"
-
-        total_maintenance = len(maintenance_data)
-        maintaining_count = int(maintenance_data["maintained_tier"].sum())
-        maintenance_rate = (maintaining_count / total_maintenance * 100) if total_maintenance else 0.0
-        card_one, card_two, card_three = st.columns(3)
-        card_one.metric("Creators in Creator Data", f"{total_maintenance:,}")
-        card_two.metric("Maintaining or ranked up", f"{maintaining_count:,}")
-        card_three.metric("Maintenance rate", f"{maintenance_rate:.2f}%")
-        st.caption("Updated exclusively from the scheduled Creator Data-page read.")
-
-        display_maintenance = maintenance_data.rename(columns={
-            "creator": "Creator",
-            "manager": "Manager",
-            "diamonds": "Diamonds",
-            "valid_live_days": "Valid Go LIVE days",
-            "valid_live_hours": "LIVE duration",
-            "tier_status": "Tier status",
-            "rank_up_progress": "Rank-up progress",
-        })
-        display_maintenance["Maintained"] = display_maintenance["maintained_tier"].map({True: "Yes", False: "No"})
-        maintenance_columns = [
-            "Creator", "Manager", "Diamonds", "Valid Go LIVE days", "LIVE duration",
-            "Tier status", "Rank-up progress", "Maintained", "Status",
-        ]
-        render_read_table(display_maintenance[maintenance_columns], height=720)
-    else:
-        st.info("The Creator Data page has not supplied a complete read yet. This sheet will populate automatically after the next successful Creator Data capture.")
-
-
+        try:
+            maintenance_data = pd.read_sql(text("""
+                SELECT creator_id,
+                       username AS creator,
+                       COALESCE(NULLIF(manager_name, ''), NULLIF(manager, ''), 'Unassigned') AS manager,
+                       COALESCE(diamonds, 0) AS diamonds,
+                       COALESCE(valid_live_days, 0) AS valid_live_days,
+                       COALESCE(valid_live_hours, 0) AS valid_live_hours,
+                       COALESCE(tier_status, '') AS tier_status,
+                       COALESCE(rank_up_progress, '') AS rank_up_progress
+                FROM goal_creators
+                ORDER BY COALESCE(diamonds, 0) DESC, username
+            """), get_engine())
+        except Exception:
+            maintenance_data = pd.DataFrame()
+    
+        if not maintenance_data.empty:
+            status_text = (
+                maintenance_data["tier_status"].fillna("").astype(str)
+                + " "
+                + maintenance_data["rank_up_progress"].fillna("").astype(str)
+            )
+            explicit_not_maintained = status_text.str.contains(r"not maintained|did not maintain|failed", case=False, regex=True, na=False)
+            ranked_up = status_text.str.contains(r"rank(?:ed|ing)?\s*up", case=False, regex=True, na=False)
+            maintained = status_text.str.contains(r"maintain(?:ed|ing)?(?:\s+tier)?", case=False, regex=True, na=False) & ~explicit_not_maintained
+            maintenance_data["maintained_tier"] = ranked_up | maintained
+            maintenance_data["Status"] = "Not maintained"
+            maintenance_data.loc[maintained, "Status"] = "Maintained tier"
+            maintenance_data.loc[ranked_up, "Status"] = "Ranked up"
+    
+            total_maintenance = len(maintenance_data)
+            maintaining_count = int(maintenance_data["maintained_tier"].sum())
+            maintenance_rate = (maintaining_count / total_maintenance * 100) if total_maintenance else 0.0
+            card_one, card_two, card_three = st.columns(3)
+            card_one.metric("Creators in Creator Data", f"{total_maintenance:,}")
+            card_two.metric("Maintaining or ranked up", f"{maintaining_count:,}")
+            card_three.metric("Maintenance rate", f"{maintenance_rate:.2f}%")
+            st.caption("Updated exclusively from the scheduled Creator Data-page read.")
+    
+            display_maintenance = maintenance_data.rename(columns={
+                "creator": "Creator",
+                "manager": "Manager",
+                "diamonds": "Diamonds",
+                "valid_live_days": "Valid Go LIVE days",
+                "valid_live_hours": "LIVE duration",
+                "tier_status": "Tier status",
+                "rank_up_progress": "Rank-up progress",
+            })
+            display_maintenance["Maintained"] = display_maintenance["maintained_tier"].map({True: "Yes", False: "No"})
+            maintenance_columns = [
+                "Creator", "Manager", "Diamonds", "Valid Go LIVE days", "LIVE duration",
+                "Tier status", "Rank-up progress", "Maintained", "Status",
+            ]
+            render_read_table(display_maintenance[maintenance_columns], height=720)
+        else:
+            st.info("The Creator Data page has not supplied a complete read yet. This sheet will populate automatically after the next successful Creator Data capture.")
+    
+    
     st.markdown("""
     <style>
     .st-key-creator_focus_only { display: none !important; }
