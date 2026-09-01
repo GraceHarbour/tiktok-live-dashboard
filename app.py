@@ -1281,7 +1281,7 @@ def main():
                             focus_reached_rows.get("Reached graduation", pd.Series(dtype="object"))
                             .astype(str).str.casefold().eq("yes").sum()
                         )
-                        focus_graduation_total = len(focus_graduation_rows)
+                        focus_graduation_total = max(165, len(focus_graduation_rows))
                         if focus_graduation_total:
                             focus_graduation_rate = focus_reached_count / focus_graduation_total * 100
                     focus_graduation_goal = (focus_graduation_total * 15 + 99) // 100
@@ -1455,7 +1455,7 @@ def main():
             k.metric("Quit rate", f"{(dashboard_quit / len(dashboard_stability) * 100) if len(dashboard_stability) else 0:.2f}%")
             l, m, n, o = st.columns(4)
             l.metric("Reached graduation", f"{dashboard_reached_count:,}")
-            m.metric("Graduation rate", f"{(dashboard_reached_count / len(dashboard_graduation) * 100) if len(dashboard_graduation) else 0:.2f}%", delta="Goal: 15% minimum", delta_color="normal")
+            m.metric("Graduation rate", f"{(dashboard_reached_count / (max(165, len(dashboard_graduation)) if dashboard_choice == "Agency" else len(dashboard_graduation)) * 100) if len(dashboard_graduation) else 0:.2f}%", delta="Goal: 15% minimum", delta_color="normal")
             n.metric("Premium Invite Graduates", f"{dashboard_reward_completed:,} / {len(dashboard_reward):,}")
             o.metric("Creators with Extra Reward", f"{len(dashboard_reward):,}")
 
@@ -1506,7 +1506,7 @@ def main():
             selected_manager_rows = managers if goal_manager_choice == "All managers" else managers[managers["_manager"] == goal_manager_choice]
             new_creators = monthly_metric_value(monthly_metrics, "new_creators", int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0)
             not_maintained_text = tier_text.str.contains("not maintained") | rank_text.str.contains("not maintained")
-            
+
             ranked_mask = tier_text.str.contains("rank") | rank_text.str.contains("rank")
             maintained_mask = ~ranked_mask & ~not_maintained_text & (
                 tier_text.str.contains("maintain") | rank_text.str.contains("maintain")
@@ -1523,8 +1523,8 @@ def main():
             fourth.metric("Above 200k diamonds", f"{above_200k:,}")
 
             fifth, sixth, seventh = st.columns(3)
-            
-        
+
+
             fifth.metric("Maintaining tier", f"{int(maintained_mask.sum()):,}")
             sixth.metric("Ranking up", f"{int(ranked_mask.sum()):,}")
             seventh.metric("Tier not maintained", f"{int(not_maintained_mask.sum()):,}")
@@ -1675,7 +1675,7 @@ def main():
             reward_pages = reward_rows["Source page"].nunique() if "Source page" in reward_rows.columns else 0
 
             # Agency graduation focus list: hold a 165-creator minimum base, then follow the live evaluated count.
-            evaluated_base = max(165, len(graduation_rows))
+            evaluated_base = max(165, len(graduation_rows)) if choice == "All managers" else len(graduation_rows)
             graduation_target = (evaluated_base * 15 + 99) // 100
             focus_needed = max(0, graduation_target - reached_count)
             today_et = pd.Timestamp.now(tz="America/New_York")
@@ -1699,7 +1699,7 @@ def main():
                 focus_one, focus_two, focus_three, focus_four = st.columns(4)
                 focus_one.metric("Evaluated base", f"{evaluated_base:,}")
                 focus_two.metric("Graduated", f"{reached_count:,} / {graduation_target:,}")
-                focus_three.metric("Graduation rate", f"{(reached_count / len(graduation_rows) * 100) if len(graduation_rows) else 0:.2f}%")
+                focus_three.metric("Graduation rate", f"{(reached_count / evaluated_base * 100) if evaluated_base else 0:.2f}%")
                 focus_four.metric("Focus creators needed", f"{focus_needed:,}")
                 st.markdown(f"### Priority graduation push: Focus on these {focus_needed:,} creator(s) first. Daily diamond goals use the {days_remaining} remaining calendar day(s), including today.")
                 if focus_needed == 0:
@@ -1726,7 +1726,7 @@ def main():
 
             five, six, seven, eight = st.columns(4)
             five.metric("Reached graduation", f"{reached_count:,}")
-            six.metric("Graduation rate", f"{(reached_count / len(graduation_rows) * 100) if len(graduation_rows) else 0:.2f}%")
+            six.metric("Graduation rate", f"{(reached_count / evaluated_base * 100) if evaluated_base else 0:.2f}%")
             seven.metric("Premium Invite Graduates", f"{extra_completed:,} / {len(reward_rows):,}")
             eight.metric("Creators with Extra Reward", f"{len(reward_rows):,}")
 
