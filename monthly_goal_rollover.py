@@ -12,10 +12,10 @@ import psycopg
 
 
 MILESTONES = [
-    (5_000_000, 20, 30, "TikTok Universe", 44_999),
-    (2_000_000, 20, 30, "TikTok Stars", 39_999),
-    (1_500_000, 20, 30, "Dragon Flame", 26_999),
-    (1_000_000, 20, 30, "Adam's Dream", 25_999),
+    (5_000_000, 15, 30, "TikTok Universe", 44_999),
+    (2_000_000, 15, 30, "TikTok Stars", 39_999),
+    (1_500_000, 15, 30, "Dragon Flame", 26_999),
+    (1_000_000, 15, 30, "Adam's Dream", 25_999),
     (500_000, 10, 20, "Interstellar", 10_000),
     (300_000, 8, 20, "Leon the Kitten", 4_888),
     (150_000, 8, 20, "Motorcycle", 2_988),
