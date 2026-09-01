@@ -275,19 +275,42 @@ def _classify(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def _display_table(frame: pd.DataFrame, height: int = 480) -> None:
-    config = {
-        "Picture": st.column_config.ImageColumn("Picture", width="small"),
-        "Diamonds": st.column_config.NumberColumn(format="%,d"),
-        "Milestone": st.column_config.NumberColumn(format="%,d"),
-        "Prize value": st.column_config.NumberColumn(format="%,d coins"),
-    }
-    styled = frame.style.set_properties(**{
-        "background-color": "#0b2342", "color": "#f7fbff",
-        "border-color": "#315b86", "font-weight": "500",
-    }).set_table_styles([
-        {"selector": "th", "props": [("background-color", "#123f70"), ("color", "white"), ("font-weight", "700")]},
-    ])
-    st.dataframe(styled, use_container_width=True, hide_index=True, height=height, column_config=config)
+    def cell_value(column: str, value) -> str:
+        if column == "Picture":
+            url = html.escape(str(value or ""), quote=True)
+            return f'<img src="{url}" alt="Creator" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid #477fb4">' if url else ""
+        if pd.isna(value):
+            return ""
+        if column in {"Diamonds", "Milestone", "Prize value"}:
+            try:
+                suffix = " coins" if column == "Prize value" else ""
+                return f"{int(float(value)):,}{suffix}"
+            except Exception:
+                pass
+        if isinstance(value, float):
+            return f"{value:,.2f}".rstrip("0").rstrip(".")
+        return html.escape(str(value))
+
+    headers = "".join(f"<th>{html.escape(str(column))}</th>" for column in frame.columns)
+    body = "".join(
+        "<tr>" + "".join(f"<td>{cell_value(column, row[column])}</td>" for column in frame.columns) + "</tr>"
+        for _, row in frame.iterrows()
+    )
+    table_html = f"""
+    <div class="mission-dark-table" style="max-height:{height}px;overflow:auto;border:1px solid #315b86;border-radius:14px;background:#071b3a">
+      <table><thead><tr>{headers}</tr></thead><tbody>{body}</tbody></table>
+    </div>
+    <style>
+      .mission-dark-table table{{width:100%;border-collapse:separate;border-spacing:0;background:#071b3a;color:#fff;font-size:14px}}
+      .mission-dark-table th{{position:sticky;top:0;z-index:2;background:#123f70;color:#fff;text-align:left;padding:12px;border-bottom:2px solid #4e86bb;white-space:nowrap}}
+      .mission-dark-table td{{background:#0b294a;color:#fff;padding:9px 12px;border-bottom:1px solid #244d74;white-space:nowrap;vertical-align:middle}}
+      .mission-dark-table tr:nth-child(even) td{{background:#0e3157}}
+      .mission-dark-table tr:hover td{{background:#17466f}}
+      .mission-dark-table::-webkit-scrollbar{{width:13px;height:13px}}.mission-dark-table::-webkit-scrollbar-track{{background:#06162d}}.mission-dark-table::-webkit-scrollbar-thumb{{background:#3976aa;border-radius:8px;border:2px solid #06162d}}
+    </style>"""
+    st.markdown(table_html, unsafe_allow_html=True)
+    csv_key = abs(hash((tuple(str(column) for column in frame.columns), len(frame), str(frame.iloc[0].to_dict()) if not frame.empty else "empty")))
+    st.download_button("Download table CSV", frame.to_csv(index=False).encode("utf-8"), file_name="monthly-prize-data.csv", mime="text/csv", key=f"monthly_table_download_{csv_key}")
 
 
 def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], month_key: str) -> None:
@@ -662,6 +685,11 @@ def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[s
     li[role="option"]:hover, div[role="option"]:hover, div[aria-selected="true"][role="option"]{background:#164b7d!important;color:#fff!important}
     [data-testid="stDataFrame"]{background:#071b3a!important;border:1px solid #2e78b8!important;border-radius:12px}
     [data-testid="stDataFrame"] button{color:#fff!important;background:#12355f!important}
+    [data-testid="stExpander"], [data-testid="stExpander"] details, [data-testid="stExpander"] summary{background:#071b3a!important;color:#fff!important;border-color:#315b86!important}
+    [data-testid="stExpander"] summary:hover{background:#123f70!important}
+    [data-testid="stMetric"], [data-testid="metric-container"]{background:#0b294a!important;color:#fff!important;border:1px solid #315b86!important;border-radius:14px!important;padding:12px!important}
+    [data-testid="stAlert"]{background:#0b294a!important;color:#fff!important;border-color:#315b86!important}
+    button[kind="secondary"], button[data-testid="baseButton-secondary"]{background:#123f70!important;color:#fff!important;border-color:#3976aa!important}
     .monthly-prize-card{min-height:190px;padding:22px 18px;border-radius:18px;border:1px solid rgba(94,207,255,.55);background:linear-gradient(145deg,#071b3a,#122c57 58%,#30145a);box-shadow:0 10px 26px rgba(0,0,0,.28);text-align:center;color:#fff;margin-bottom:12px}
     .monthly-prize-card.pink{border-color:rgba(255,74,180,.7);background:linear-gradient(145deg,#281044,#60164c 58%,#172b57)}
     .monthly-prize-card.gold{border-color:rgba(255,199,73,.75);background:linear-gradient(145deg,#291b05,#5b3910 58%,#38134d)}
