@@ -145,6 +145,14 @@ def _ensure_tables(engine) -> None:
                     ORDER BY created_at DESC,id DESC LIMIT 1
                 )
             """))
+        clear_results = connection.execute(text("""
+            INSERT INTO monthly_prize_migrations(migration_key)
+            VALUES ('clear_august_2026_drawing_results_v2')
+            ON CONFLICT (migration_key) DO NOTHING
+            RETURNING migration_key
+        """)).first()
+        if clear_results:
+            connection.execute(text("DELETE FROM monthly_prize_drawings WHERE month_key='2026-08'"))
 
 
 def _signed_in_reward_approver(engine) -> tuple[bool, str]:
