@@ -605,14 +605,23 @@ def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.D
             if is_admin:
                 st.markdown("#### Admin drawing reset")
                 confirm_key = f"confirm_delete_drawing_{drawing_id}"
-                confirm_delete = st.checkbox("I am sure I want to reset this drawing", key=confirm_key)
-                confirm_delete = bool(st.session_state.get(confirm_key, confirm_delete))
-                if st.button("Reset drawing and return all names", disabled=not confirm_delete, key=f"delete_drawing_{drawing_id}"):
-                    with engine.begin() as connection:
-                        connection.execute(text("DELETE FROM monthly_prize_drawings WHERE id=:id"), {"id": int(drawing_id)})
-                    st.session_state.pop("monthly_wheel_drawing_id", None)
-                    st.success("Drawing reset. Every winner has been returned to the available wheel pool.")
-                    st.rerun()
+                if not st.session_state.get(confirm_key, False):
+                    if st.button("Prepare to reset this drawing", key=f"prepare_delete_drawing_{drawing_id}"):
+                        st.session_state[confirm_key] = True
+                        st.rerun()
+                else:
+                    st.warning("This will permanently delete the saved drawing result and return every winner to the available pool.")
+                    reset_col, cancel_col = st.columns(2)
+                    if reset_col.button("Confirm reset and return all names", type="primary", key=f"delete_drawing_{drawing_id}"):
+                        with engine.begin() as connection:
+                            connection.execute(text("DELETE FROM monthly_prize_drawings WHERE id=:id"), {"id": int(drawing_id)})
+                        st.session_state.pop("monthly_wheel_drawing_id", None)
+                        st.session_state.pop(confirm_key, None)
+                        st.success("Drawing reset. Every winner has been returned to the available wheel pool.")
+                        st.rerun()
+                    if cancel_col.button("Cancel reset", key=f"cancel_delete_drawing_{drawing_id}"):
+                        st.session_state.pop(confirm_key, None)
+                        st.rerun()
 
 
 def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
