@@ -2158,7 +2158,7 @@ def main():
 
 
     with rewards_tab:
-        render_monthly_mission_rewards(engine, creators, manager_names)
+        render_monthly_mission_rewards(get_engine(), creators, manager_names)
 
     with event_tab:
         st.subheader("Event Tool")
