@@ -549,17 +549,19 @@ def _wheel_replay_html(prize_name: str, candidate_names: list[str], winners: lis
     .stage{{display:flex;justify-content:center;align-items:center;min-height:400px;position:relative}}
     .pointer{{position:absolute;top:2px;z-index:8;width:0;height:0;border-left:22px solid transparent;border-right:22px solid transparent;border-top:48px solid #ffd34d;filter:drop-shadow(0 3px 3px #000)}}
     #wheel{{width:360px;height:360px;border-radius:50%;border:10px solid #f4c542;box-shadow:0 0 35px #149cff;transition:transform 4.2s cubic-bezier(.08,.68,.08,1);background:#10274a}}
-    .center{{position:absolute;z-index:6;width:132px;height:132px;border-radius:50%;background:rgba(6,19,41,.96);border:5px solid white;display:grid;place-items:center;padding:10px;font-size:20px;font-weight:800;box-shadow:inset 0 0 25px #1f79c9,0 0 15px #000}}
+    .center{{position:absolute;z-index:6;width:142px;height:142px;border-radius:50%;background:rgba(6,19,41,.96);border:5px solid white;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;font-size:18px;font-weight:800;box-shadow:inset 0 0 25px #1f79c9,0 0 15px #000}}
+    .center-prize{{color:#ffd34d;font-size:14px;line-height:1.15;margin-bottom:7px;max-width:130px}}
+    #name{{max-width:130px;line-height:1.1;overflow-wrap:anywhere}}
     .results{{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:18px}} .winner{{min-width:220px;background:#0c2b50;border:2px solid #39bfff;border-radius:14px;padding:14px;box-shadow:0 0 16px #1565a8}}
     .winner b{{display:block;color:#ffd34d;font-size:18px}} .winner span{{display:block;font-size:23px;font-weight:800;margin-top:6px}}
-    </style></head><body><h1>{safe_prize}</h1><div class="subtitle">Monthly Creator Prize Drawing</div><div class="stage"><div class="pointer"></div><canvas id="wheel" width="720" height="720"></canvas><div id="name" class="center">Ready</div></div><div id="status">The drawing will begin automatically.</div><div id="results" class="results"></div><script>
+    </style></head><body><h1>{safe_prize}</h1><div class="subtitle">Monthly Creator Prize Drawing</div><div class="stage"><div class="pointer"></div><canvas id="wheel" width="720" height="720"></canvas><div class="center"><div class="center-prize">{safe_prize}</div><div id="name">Ready</div></div></div><div id="status">The drawing will begin automatically.</div><div id="results" class="results"></div><script>
     const candidates={names_json}, winners={winners_json}, colors=['#ff2d95','#18bfff','#7b4dff','#ff9f1c','#0ad5a8','#ff4d4d','#4169e1','#d83cff'];
     const wheel=document.getElementById('wheel'),ctx=wheel.getContext('2d'),nameBox=document.getElementById('name'),status=document.getElementById('status'),results=document.getElementById('results');
     const names=candidates.length?candidates:['No entries'],cx=360,cy=360,radius=345,arc=Math.PI*2/names.length;
     function drawWheel(){{ctx.clearRect(0,0,720,720);for(let i=0;i<names.length;i++){{const start=-Math.PI/2+i*arc,end=start+arc,mid=start+arc/2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,radius,start,end);ctx.closePath();ctx.fillStyle=colors[i%colors.length];ctx.fill();ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=2;ctx.stroke();ctx.save();ctx.translate(cx,cy);ctx.rotate(mid);ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillStyle='#fff';ctx.shadowColor='#000';ctx.shadowBlur=5;ctx.font='800 '+(names.length>30?15:names.length>20?18:22)+'px Arial';let label=String(names[i]);if(label.length>19)label=label.slice(0,18)+'…';ctx.fillText(label,radius-18,0);ctx.restore();}}ctx.beginPath();ctx.arc(cx,cy,50,0,Math.PI*2);ctx.fillStyle='#ffd34d';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=8;ctx.stroke();}}
     drawWheel();let spin=0,rotation=0;
-    function addWinner(index,value){{const card=document.createElement('div');card.className='winner';card.innerHTML='<b>Winner '+index+'</b><span></span>';card.querySelector('span').textContent=value;results.appendChild(card);}}
-    function runSpin(){{if(spin>=winners.length){{status.textContent='Drawing complete';nameBox.textContent='Complete';return;}}const winnerNumber=spin+1;status.textContent='Spinning for Winner '+winnerNumber+' of '+winners.length;rotation+=2160+Math.floor(Math.random()*360);wheel.style.transform='rotate('+rotation+'deg)';let ticks=0;const timer=setInterval(()=>{{nameBox.textContent=candidates[Math.floor(Math.random()*candidates.length)]||'Spinning';if(++ticks>=38){{clearInterval(timer);const winner=winners[spin];nameBox.textContent=winner;status.textContent='Winner '+winnerNumber+': '+winner;addWinner(winnerNumber,winner);spin++;setTimeout(runSpin,1800);}}}},110);}}
+    function addWinner(index,value){{const card=document.createElement('div');card.className='winner';card.innerHTML='<b>Congratulations to Winner '+index+'!</b><span></span><small>{safe_prize}</small>';card.querySelector('span').textContent=value;results.appendChild(card);}}
+    function runSpin(){{if(spin>=winners.length){{status.textContent='Congratulations to all winners of {safe_prize}!';nameBox.textContent='Complete';return;}}const winnerNumber=spin+1;status.textContent='Spinning for Winner '+winnerNumber+' of '+winners.length+' — {safe_prize}';rotation+=2160+Math.floor(Math.random()*360);wheel.style.transform='rotate('+rotation+'deg)';let ticks=0;const timer=setInterval(()=>{{nameBox.textContent=candidates[Math.floor(Math.random()*candidates.length)]||'Spinning';if(++ticks>=38){{clearInterval(timer);const winner=winners[spin];nameBox.textContent=winner;status.textContent='Congratulations to Winner '+winnerNumber+': '+winner+' — {safe_prize}';addWinner(winnerNumber,winner);spin++;setTimeout(runSpin,1800);}}}},110);}}
     setTimeout(runSpin,900);
     </script></body></html>"""
 
@@ -570,7 +572,8 @@ def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.D
     c1, c2, c3 = st.columns([1.2, 1.4, 0.8])
     drawing_label = c1.selectbox("Drawing list", list(drawing_lists), key="monthly_wheel_list")
     drawing_label = st.session_state.get("monthly_wheel_list", drawing_label)
-    prize_name = c2.text_input("Prize name", value=f"{drawing_label} Prize", key="monthly_wheel_prize").strip()
+    prize_name = {"Drawing 1": "$50 Choice", "Drawing 2": "Interstellar — $100", "Drawing 3": "Leopard — $150"}.get(drawing_label, drawing_label)
+    c2.metric("Prize", prize_name)
     spin_count = {"Drawing 1": 3, "Drawing 2": 1, "Drawing 3": 1}.get(drawing_label, 1)
     c3.metric("Winners / spins", spin_count)
     pool = drawing_lists[drawing_label].copy()
