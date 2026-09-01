@@ -30,6 +30,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
+from monthly_mission_rewards import render_monthly_mission_rewards
 
 
 
@@ -1172,12 +1173,13 @@ def main():
 
 
 
-    manager_tab, goals_tab, business_tab, maintenance_tab, battle_tab, event_tab, scouting_tab, prior_month_tab, tier_guide_tab, access_tab = st.tabs([
+    manager_tab, goals_tab, business_tab, maintenance_tab, battle_tab, rewards_tab, event_tab, scouting_tab, prior_month_tab, tier_guide_tab, access_tab = st.tabs([
         "Dashboard",
         "Goal Management",
         "Business Essentials",
         "Maintenance Rate",
         "Creator Focus",
+        "Monthly Mission Rewards",
         "Event Tool",
         "Scouting",
         "Goal Management Prior Month",
@@ -2154,6 +2156,9 @@ def main():
                     render_battle_creator_cards(graduation_display, "Graduation")
 
 
+
+    with rewards_tab:
+        render_monthly_mission_rewards(engine, creators, manager_names)
 
     with event_tab:
         st.subheader("Event Tool")
