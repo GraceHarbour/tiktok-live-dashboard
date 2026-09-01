@@ -62,10 +62,16 @@ def _ensure_tables(engine) -> None:
                 qualified_milestone bigint NOT NULL DEFAULT 0,
                 eligible boolean NOT NULL DEFAULT false,
                 disqualification_reason text NOT NULL DEFAULT '',
+                met_requirements text NOT NULL DEFAULT '',
+                avatar_url text NOT NULL DEFAULT '',
+                track boolean NOT NULL DEFAULT true,
                 captured_at timestamptz NOT NULL DEFAULT now(),
                 PRIMARY KEY (month_key, creator_id)
             )
         """))
+        connection.execute(text("ALTER TABLE monthly_reward_results ADD COLUMN IF NOT EXISTS met_requirements text NOT NULL DEFAULT ''"))
+        connection.execute(text("ALTER TABLE monthly_reward_results ADD COLUMN IF NOT EXISTS avatar_url text NOT NULL DEFAULT ''"))
+        connection.execute(text("ALTER TABLE monthly_reward_results ADD COLUMN IF NOT EXISTS track boolean NOT NULL DEFAULT true"))
 
 
 def _series(frame: pd.DataFrame, column: str, default=0) -> pd.Series:
@@ -106,21 +112,37 @@ def _classify(frame: pd.DataFrame) -> pd.DataFrame:
     rows["Picture"] = rows[photo_column].fillna("").astype(str) if photo_column else ""
 
     classifications = []
+    lowest_milestone = MILESTONES[-1]
     for row in rows.to_dict("records"):
         reached = next((m for m in MILESTONES if row["Diamonds"] >= m[0]), None)
-        if not reached:
-            classifications.append(("", 0, 0, False, "Below 150,000-diamond reward level"))
-            continue
-        diamond_level, days_needed, hours_needed, reward_name, reward_value = reached
-        reasons = []
-        if not row["Maintained or ranked up"]:
-            reasons.append("Did not maintain or rank up tier")
-        if row["Valid LIVE days"] < days_needed:
-            reasons.append(f"Needs {days_needed} valid LIVE days")
-        if row["Valid LIVE hours"] < hours_needed:
-            reasons.append(f"Needs {hours_needed} valid LIVE hours")
-        classifications.append((reward_name, reward_value, diamond_level, not reasons, "; ".join(reasons)))
-    classified = pd.DataFrame(classifications, columns=["Reward", "Prize value", "Milestone", "Eligible", "Missing requirement"])
+        diamond_level, days_needed, hours_needed, reward_name, reward_value = reached or lowest_milestone
+        met = []
+        missing = []
+        if row["Diamonds"] >= diamond_level:
+            met.append(f"Diamonds: {row['Diamonds']:,} / {diamond_level:,}")
+        else:
+            missing.append(f"Diamonds: needs {diamond_level:,}")
+        if row["Maintained or ranked up"]:
+            met.append("Maintained or ranked up tier")
+        else:
+            missing.append("Must maintain or rank up tier")
+        if row["Valid LIVE days"] >= days_needed:
+            met.append(f"LIVE days: {row['Valid LIVE days']} / {days_needed}")
+        else:
+            missing.append(f"LIVE days: {row['Valid LIVE days']} / {days_needed}")
+        if row["Valid LIVE hours"] >= hours_needed:
+            met.append(f"LIVE hours: {row['Valid LIVE hours']:g} / {hours_needed}")
+        else:
+            missing.append(f"LIVE hours: {row['Valid LIVE hours']:g} / {hours_needed}")
+        eligible = not missing
+        track = bool(met)
+        classifications.append(
+            (reward_name, reward_value, diamond_level, eligible, track, "; ".join(met), "; ".join(missing))
+        )
+    classified = pd.DataFrame(
+        classifications,
+        columns=["Reward", "Prize value", "Milestone", "Eligible", "Track", "Met requirements", "Missing requirements"],
+    )
     return pd.concat([rows, classified], axis=1)
 
 
@@ -253,8 +275,11 @@ def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names
             "reward_name":"Reward", "reward_value":"Prize value",
             "qualified_milestone":"Milestone", "eligible":"Eligible",
             "disqualification_reason":"Missing requirement",
+            "met_requirements":"Met requirements", "avatar_url":"Picture",
+            "track":"Track",
         })
-        classified["Picture"] = ""
+        if "Picture" not in classified:
+            classified["Picture"] = ""
 
     c1, c2 = st.columns([1, 1.5])
     manager = c1.selectbox("Manager", ["All managers", *manager_names], key="mission_reward_manager")
@@ -265,7 +290,13 @@ def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names
         classified = classified[classified["Creator"].str.contains(re.escape(search), case=False, na=False)]
 
     qualified = classified[classified["Eligible"]].copy()
-    near = classified[(classified["Milestone"] > 0) & ~classified["Eligible"]].copy()
+    if "Track" not in classified:
+        classified["Track"] = classified["Milestone"].fillna(0).gt(0)
+    if "Met requirements" not in classified:
+        classified["Met requirements"] = ""
+    if "Missing requirements" not in classified:
+        classified["Missing requirements"] = classified.get("Missing requirement", "")
+    near = classified[classified["Track"] & ~classified["Eligible"]].copy()
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Eligible creators", f"{len(qualified):,}")
     m2.metric("Prize value", f"{int(qualified['Prize value'].sum()):,} coins")
@@ -289,6 +320,6 @@ def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names
         st.success("No creators are currently disqualified after reaching a reward diamond level.")
     else:
         near = near.sort_values(["Milestone","Diamonds","Creator"], ascending=[False,False,True])
-        _display_table(near[["Picture","Creator","Manager","Diamonds","Valid LIVE days","Valid LIVE hours","Maintained or ranked up","Reward","Milestone","Prize value","Missing requirement"]], min(760, 88 + len(near) * 48))
+        _display_table(near[["Picture","Creator","Manager","Diamonds","Valid LIVE days","Valid LIVE hours","Maintained or ranked up","Reward","Milestone","Prize value","Met requirements","Missing requirements"]], min(760, 88 + len(near) * 48))
 
     _event_section(engine, classified, manager_names, selected_month)
