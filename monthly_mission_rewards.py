@@ -124,6 +124,27 @@ def _ensure_tables(engine) -> None:
                 UNIQUE (drawing_id, creator_id)
             )
         """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS monthly_prize_migrations (
+                migration_key text PRIMARY KEY,
+                applied_at timestamptz NOT NULL DEFAULT now()
+            )
+        """))
+        cleanup = connection.execute(text("""
+            INSERT INTO monthly_prize_migrations(migration_key)
+            VALUES ('reset_august_2026_test_drawing_v1')
+            ON CONFLICT (migration_key) DO NOTHING
+            RETURNING migration_key
+        """)).first()
+        if cleanup:
+            connection.execute(text("""
+                DELETE FROM monthly_prize_drawings
+                WHERE id = (
+                    SELECT id FROM monthly_prize_drawings
+                    WHERE month_key='2026-08' AND drawing_key='Drawing 1'
+                    ORDER BY created_at DESC,id DESC LIMIT 1
+                )
+            """))
 
 
 def _signed_in_reward_approver(engine) -> tuple[bool, str]:
