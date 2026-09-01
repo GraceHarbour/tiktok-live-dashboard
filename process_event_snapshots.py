@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import psycopg
@@ -57,6 +57,18 @@ def snapshot(cursor, event_id: str, phase: str, captured_at: str) -> int:
     return cursor.rowcount
 
 
+def parse_utc(value) -> datetime:
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+
+
+def next_quarter_hour(value: datetime) -> datetime:
+    value = value.astimezone(timezone.utc)
+    base = value.replace(second=0, microsecond=0)
+    minutes = 15 - (base.minute % 15)
+    return base + timedelta(minutes=minutes)
+
+
 def main() -> None:
     database_url = (Path.home() / ".config/creator-reader/database-url").read_text(encoding="utf-8").strip()
     now = datetime.now(timezone.utc)
@@ -66,24 +78,25 @@ def main() -> None:
         with connection.cursor() as cursor:
             for statement in SCHEMA:
                 cursor.execute(statement)
+            cursor.execute("SELECT updated_at FROM data_updates ORDER BY updated_at::timestamptz DESC LIMIT 1")
+            update_row = cursor.fetchone()
+            latest_goal_update = parse_utc(update_row[0]) if update_row else None
             cursor.execute("SELECT event_id, event_name, start_at, end_at FROM community_events ORDER BY start_at")
             events = cursor.fetchall()
             for event_id, event_name, start_at, end_at in events:
-                start_value = datetime.fromisoformat(str(start_at).replace("Z", "+00:00"))
-                end_value = datetime.fromisoformat(str(end_at).replace("Z", "+00:00"))
-                if start_value.tzinfo is None:
-                    start_value = start_value.replace(tzinfo=timezone.utc)
-                if end_value.tzinfo is None:
-                    end_value = end_value.replace(tzinfo=timezone.utc)
+                start_value = parse_utc(start_at)
+                end_value = parse_utc(end_at)
+                final_read_due = next_quarter_hour(end_value)
+                final_read_ready = latest_goal_update is not None and latest_goal_update >= final_read_due
                 if now >= start_value:
                     rows = snapshot(cursor, event_id, "start", captured_at)
                     if rows:
                         captured.append(f"{event_name}: start ({rows} creators)")
                     cursor.execute(
                         "UPDATE community_events SET status = %s WHERE event_id = %s",
-                        ("completed" if now >= end_value else "live", event_id),
+                        (("completed" if final_read_ready else "live", event_id)),
                     )
-                if now >= end_value:
+                if now >= final_read_due and final_read_ready:
                     rows = snapshot(cursor, event_id, "end", captured_at)
                     if rows:
                         captured.append(f"{event_name}: end ({rows} creators)")
