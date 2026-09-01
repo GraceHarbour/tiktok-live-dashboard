@@ -1816,271 +1816,272 @@ def main():
 
 
     with battle_tab:
-        st.subheader("Creator Focus")
-        st.caption("Live action lists for creators who must maintain tier or reach graduation. Pacing updates automatically from the existing scheduled reads.")
-        st.markdown("""
-        <style>
-        div[data-testid="stRadio"] > label,
-        div[data-testid="stRadio"] > label p {
-            color: #ffffff !important;
-            font-weight: 800 !important;
-            font-size: 1.05rem !important;
-        }
-        div[data-testid="stRadio"] div[role="radiogroup"] {
-            gap: 0.75rem !important;
-        }
-        div[data-testid="stRadio"] div[role="radiogroup"] label {
-            background: #163a5f !important;
-            border: 2px solid #5f87ad !important;
-            border-radius: 0.65rem !important;
-            padding: 0.55rem 1.15rem !important;
-            min-width: 10rem !important;
-        }
-        div[data-testid="stRadio"] div[role="radiogroup"] label p {
-            color: #ffffff !important;
-            font-weight: 900 !important;
-            font-size: 1.1rem !important;
-        }
-        div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) {
-            background: #075ea8 !important;
-            border-color: #6ee7ff !important;
-            box-shadow: 0 0 0 2px rgba(110, 231, 255, 0.25) !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-
-        battle_today = pd.Timestamp.now(tz="America/New_York")
-        battle_boundary_today = battle_today.normalize() + pd.Timedelta(hours=20)
-        if battle_today >= battle_boundary_today:
-            battle_cycle_start = battle_boundary_today
-            battle_cycle_end = battle_cycle_start + pd.offsets.MonthEnd(1)
-        else:
-            battle_cycle_end = battle_boundary_today
-            battle_cycle_start = battle_cycle_end - pd.offsets.MonthEnd(1)
-        battle_total_days = max((battle_cycle_end - battle_cycle_start).total_seconds() / 86_400, 1 / 1_440)
-        battle_elapsed_days = max((battle_today - battle_cycle_start).total_seconds() / 86_400, 1 / 1_440)
-        battle_days_remaining = max((battle_cycle_end - battle_today).total_seconds() / 86_400, 1 / 1_440)
-
-
-        creator_manager_map = {}
-        if not creators.empty and "_manager" in creators.columns:
-            battle_creator_column = next((column for column in ["username", "creator", "Creator", "creator_name", "nickname"] if column in creators.columns), None)
-            if battle_creator_column:
-                creator_manager_map = {
-                    str(row[battle_creator_column]).strip().lstrip("@").casefold(): str(row["_manager"]).strip()
-                    for _, row in creators[[battle_creator_column, "_manager"]].dropna(subset=[battle_creator_column]).iterrows()
-                }
-
-        maintenance_battle_rows = []
-        if not maintenance_data.empty:
-            for _, source_row in maintenance_data.iterrows():
-                raw = re.sub(r"\s+", " ", str(source_row.get("raw_row", "")).replace(chr(20), " ").replace("\n", " ")).strip()
-                progress_match = re.search(r"([\d,]+)\s*/\s*([\d,]+)", raw)
-                if not progress_match:
-                    continue
-                current_value = int(progress_match.group(1).replace(",", ""))
-                target_value = int(progress_match.group(2).replace(",", ""))
-                creator_name = str(source_row.get("creator", "")).strip()
-                manager_name = creator_manager_map.get(creator_name.lstrip("@").casefold(), "Unassigned")
-                if choice != "All managers" and manager_name != choice:
-                    continue
-                maintained_value = bool(source_row.get("maintained_tier", False)) or bool(re.search(r"Ranked up|Maintained tier", raw, flags=re.IGNORECASE))
-                projected_value = int(round(current_value / battle_elapsed_days * battle_total_days))
-                remaining_value = max(0, target_value - current_value)
-                daily_needed = int((remaining_value / battle_days_remaining) + 0.999999)
-                daily_actual = current_value / battle_elapsed_days
-                daily_gap = max(0, int(round(daily_needed - daily_actual)))
-                valid_days_match = re.search(r"(\d+)\s*d", raw, flags=re.IGNORECASE)
-                valid_days = int(valid_days_match.group(1)) if valid_days_match else 0
-                if maintained_value or current_value >= target_value:
-                    pace_status = "Achieved"
-                    manager_action = "Goal secured"
-                elif projected_value >= target_value:
-                    pace_status = "On pace"
-                    manager_action = "Keep current pace"
-                elif remaining_value <= max(20_000, int(target_value * 0.20)) or daily_gap <= max(1_000, int(daily_actual * 0.35)):
-                    pace_status = "Needs help"
-                    manager_action = "Push today — reachable"
-                else:
-                    pace_status = "Needs help"
-                    manager_action = "Increase LIVE time and diamonds"
-                maintenance_battle_rows.append({
-                    "Priority": pace_status,
-                    "Creator": creator_name,
-                    "Manager": manager_name,
-                    "Manager action": manager_action,
-                    "Current / goal": f"{current_value:,} / {target_value:,}",
-                    "Projected finish": f"{projected_value:,}",
-                    "Still needed": f"{remaining_value:,}",
-                    "Daily pace needed": f"{daily_needed:,}",
-                    "Daily pace gap": f"{daily_gap:,}",
-                    "Valid LIVE days": valid_days,
-                    "_pace_gap": daily_gap,
-                })
-        maintenance_battle = pd.DataFrame(maintenance_battle_rows)
-
-        battle_business = business.copy()
-        if choice != "All managers" and not battle_business.empty and "Manager" in battle_business.columns:
-            battle_business = battle_business[battle_business["Manager"].fillna("").astype(str) == choice].copy()
-        battle_sections = battle_business.get("Section", pd.Series("", index=battle_business.index)).fillna("").astype(str)
-        battle_graduation = battle_business[battle_sections.str.contains("Creator Graduation", case=False, na=False) & battle_sections.str.contains("Evaluated", case=False, na=False)].copy()
-        battle_reached = battle_business[battle_sections.str.contains("Reached graduation", case=False, na=False)].copy()
-        battle_progress = battle_graduation.get("Graduation progress", pd.Series("", index=battle_graduation.index)).fillna("").astype(str)
-        battle_current = pd.to_numeric(battle_progress.str.replace(",", "", regex=False).str.extract(r"(\d+)\s*/")[0], errors="coerce").fillna(0).astype("int64")
-    if battle_creator_column and not creators.empty and "diamonds" in creators.columns and "Creator" in battle_graduation.columns:
-        live_creator_keys = creators[battle_creator_column].fillna("").astype(str).str.strip().str.lstrip("@").str.casefold()
-        live_creator_diamonds = pd.to_numeric(creators["diamonds"], errors="coerce")
-        live_diamond_map = pd.Series(live_creator_diamonds.values, index=live_creator_keys).groupby(level=0).max().to_dict()
-        graduation_creator_keys = battle_graduation["Creator"].fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold()
-        fresh_goal_current = pd.to_numeric(graduation_creator_keys.map(live_diamond_map), errors="coerce")
-        battle_current = fresh_goal_current.where(fresh_goal_current.notna(), battle_current).astype("int64")
-        battle_quit = battle_graduation.get("Quit on", pd.Series("", index=battle_graduation.index)).fillna("").astype(str).str.strip()
-        battle_active = battle_graduation[battle_quit.isin(["", "-", "—", "None", "nan"])].copy()
-        battle_active["_current"] = battle_current.loc[battle_active.index]
-        battle_active["_projected"] = (battle_active["_current"] / battle_elapsed_days * battle_total_days).round().astype("int64")
-        battle_active["_remaining"] = (200_000 - battle_active["_current"]).clip(lower=0)
-        battle_active["_daily_needed"] = (battle_active["_remaining"] / battle_days_remaining).apply(lambda value: int(value + 0.999999))
-        battle_active["_daily_actual"] = battle_active["_current"] / battle_elapsed_days
-        battle_active["_pace_gap"] = (battle_active["_daily_needed"] - battle_active["_daily_actual"]).clip(lower=0).round().astype("int64")
-        battle_active["_priority"] = "Needs help"
-        battle_active.loc[battle_active["_projected"].ge(200_000), "_priority"] = "On pace"
-        battle_active.loc[battle_active["_current"].ge(200_000) | battle_progress.loc[battle_active.index].str.contains("met target", case=False, na=False), "_priority"] = "Achieved"
-        battle_active["_action"] = "Increase LIVE time and diamonds"
-        battle_active.loc[battle_active["_priority"].eq("On pace"), "_action"] = "Keep current pace"
-        battle_active.loc[battle_active["_priority"].eq("Achieved"), "_action"] = "Goal secured"
-        graduation_reachable = battle_active["_priority"].eq("Needs help") & ((battle_active["_remaining"] <= 40_000) | (battle_active["_pace_gap"] <= battle_active["_daily_actual"].mul(0.35).clip(lower=1_000)))
-        battle_active.loc[graduation_reachable, "_action"] = "Push today — reachable"
-
-        battle_reached_count = int(battle_reached.get("Reached graduation", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
-        battle_evaluated_base = max(165, len(battle_graduation)) if choice == "All managers" else len(battle_graduation)
-        battle_graduation_target = (battle_evaluated_base * 15 + 99) // 100 if battle_evaluated_base else 0
-        battle_wins_needed = max(0, battle_graduation_target - battle_reached_count)
-
-        maintenance_achieved = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("Achieved").sum())
-        maintenance_on_pace = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("On pace").sum())
-        maintenance_help = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("Needs help").sum())
-        graduation_on_pace = int(battle_active["_priority"].eq("On pace").sum()) if not battle_active.empty else 0
-        graduation_help = int(battle_active["_priority"].eq("Needs help").sum()) if not battle_active.empty else 0
-        battle_tier_text = creators.get("tier_status", pd.Series("", index=creators.index)).fillna("").astype(str).str.lower()
-        battle_rank_text = creators.get("rank_up_progress", pd.Series("", index=creators.index)).fillna("").astype(str).str.lower()
-        battle_explicit_not = battle_tier_text.str.contains("not maintained|not maintain", na=False) | battle_rank_text.str.contains("not maintained|not maintain", na=False)
-        battle_ranked_mask = battle_tier_text.str.contains("ranked up|ranking up|rank up", na=False) | battle_rank_text.str.contains("rank up|ranked up|ranking up", na=False)
-        battle_maintained_mask = ~battle_ranked_mask & ~battle_explicit_not & (battle_tier_text.str.contains("maintained|maintain", na=False) | battle_rank_text.str.contains("maintain", na=False))
-        battle_combined_wins = int((battle_ranked_mask | battle_maintained_mask).sum())
-        battle_agency_target = (len(creators) * 50 + 99) // 100 if len(creators) else 0
-        battle_agency_wins_needed = max(0, battle_agency_target - battle_combined_wins)
-
-        st.markdown("### Creator Focus Center")
-        st.markdown(f"""
-        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:8px 0 14px 0;">
-          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance achieved</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_achieved:,}</div></div>
-          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_on_pace:,}</div></div>
-          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needs help</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{maintenance_help:,}</div></div>
-          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{graduation_on_pace:,}</div></div>
-          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation wins needed</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_wins_needed:,}</div></div>
-          <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Agency wins to 50%</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_agency_wins_needed:,}</div></div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(f"Pacing uses the 8:00 PM ET reporting boundary: {battle_elapsed_days:.2f} elapsed day(s) and {battle_days_remaining * 24:.1f} hour(s) remaining.")
-
-
-        def render_battle_creator_cards(frame, battle_type):
-            group_styles = {
-                "Immediate push — reachable": ("#ffcf5a", "Creators close enough for a concentrated push before the reporting period closes."),
-                "Increase activity": ("#ff8a80", "Creators who can still benefit from additional LIVE time and diamonds."),
-                "Protect current pace": ("#6ee7ff", "Creators pacing to the requirement; keep their activity consistent."),
-                "Goal secured": ("#63e6be", "Creators who have already completed the requirement."),
-                "Development pipeline": ("#b9d9f5", "Not a current-month push. Develop these creators for the next reporting cycle."),
+        with st.container(key="creator_focus_only"):
+            st.subheader("Creator Focus")
+            st.caption("Live action lists for creators who must maintain tier or reach graduation. Pacing updates automatically from the existing scheduled reads.")
+            st.markdown("""
+            <style>
+            div[data-testid="stRadio"] > label,
+            div[data-testid="stRadio"] > label p {
+                color: #ffffff !important;
+                font-weight: 800 !important;
+                font-size: 1.05rem !important;
             }
-            grouped_cards = {name: [] for name in group_styles}
-            frame = frame.copy()
-            frame["_diamond_sort"] = frame.get("Current / goal", pd.Series("0", index=frame.index)).fillna("0").astype(str).map(
-                lambda value: int(re.sub(r"[^0-9]", "", value.split("/")[0]) or 0)
-            )
-            frame = frame.sort_values(["_diamond_sort", "Creator"], ascending=[False, True])
-            visible_fields = [column for column in frame.columns if not str(column).startswith("_") and column not in {"Creator", "Manager", "Priority", "Manager action"}]
-            for _, row in frame.iterrows():
-                creator = html_escape(str(row.get("Creator", "") or "Unknown creator"))
-                manager = html_escape(str(row.get("Manager", "") or "Unassigned"))
-                priority = str(row.get("Priority", "") or "Review")
-                action = str(row.get("Manager action", "") or "Review creator")
-                current_text = str(row.get("Current / goal", "0"))
-                current_value = int(re.sub(r"[^0-9]", "", current_text.split("/")[0]) or 0)
-                if priority == "Achieved":
-                    group_name = "Goal secured"
-                elif priority == "On pace":
-                    group_name = "Protect current pace"
-                elif battle_type == "Graduation" and (current_value < 100_000 or battle_days_remaining < 1 and current_value < 150_000):
-                    group_name = "Development pipeline"
-                elif action == "Push today — reachable" or battle_type == "Graduation":
-                    group_name = "Immediate push — reachable"
-                else:
-                    group_name = "Increase activity"
-                group_color = group_styles[group_name][0]
-                fields = []
-                for field in visible_fields:
-                    value = row.get(field, "")
-                    if pd.isna(value):
-                        value = ""
-                    fields.append(
-                        f'<div style="background:#163f69;border:1px solid #4f86b7;border-radius:9px;padding:10px 12px;min-height:68px;">'
-                        f'<div style="color:#b9d9f5;font-size:.78rem;font-weight:800;text-transform:uppercase;">{html_escape(str(field))}</div>'
-                        f'<div style="color:#ffffff;font-size:1.12rem;font-weight:900;margin-top:5px;">{html_escape(str(value))}</div></div>'
+            div[data-testid="stRadio"] div[role="radiogroup"] {
+                gap: 0.75rem !important;
+            }
+            div[data-testid="stRadio"] div[role="radiogroup"] label {
+                background: #163a5f !important;
+                border: 2px solid #5f87ad !important;
+                border-radius: 0.65rem !important;
+                padding: 0.55rem 1.15rem !important;
+                min-width: 10rem !important;
+            }
+            div[data-testid="stRadio"] div[role="radiogroup"] label p {
+                color: #ffffff !important;
+                font-weight: 900 !important;
+                font-size: 1.1rem !important;
+            }
+            div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) {
+                background: #075ea8 !important;
+                border-color: #6ee7ff !important;
+                box-shadow: 0 0 0 2px rgba(110, 231, 255, 0.25) !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+
+
+            battle_today = pd.Timestamp.now(tz="America/New_York")
+            battle_boundary_today = battle_today.normalize() + pd.Timedelta(hours=20)
+            if battle_today >= battle_boundary_today:
+                battle_cycle_start = battle_boundary_today
+                battle_cycle_end = battle_cycle_start + pd.offsets.MonthEnd(1)
+            else:
+                battle_cycle_end = battle_boundary_today
+                battle_cycle_start = battle_cycle_end - pd.offsets.MonthEnd(1)
+            battle_total_days = max((battle_cycle_end - battle_cycle_start).total_seconds() / 86_400, 1 / 1_440)
+            battle_elapsed_days = max((battle_today - battle_cycle_start).total_seconds() / 86_400, 1 / 1_440)
+            battle_days_remaining = max((battle_cycle_end - battle_today).total_seconds() / 86_400, 1 / 1_440)
+
+
+            creator_manager_map = {}
+            if not creators.empty and "_manager" in creators.columns:
+                battle_creator_column = next((column for column in ["username", "creator", "Creator", "creator_name", "nickname"] if column in creators.columns), None)
+                if battle_creator_column:
+                    creator_manager_map = {
+                        str(row[battle_creator_column]).strip().lstrip("@").casefold(): str(row["_manager"]).strip()
+                        for _, row in creators[[battle_creator_column, "_manager"]].dropna(subset=[battle_creator_column]).iterrows()
+                    }
+
+            maintenance_battle_rows = []
+            if not maintenance_data.empty:
+                for _, source_row in maintenance_data.iterrows():
+                    raw = re.sub(r"\s+", " ", str(source_row.get("raw_row", "")).replace(chr(20), " ").replace("\n", " ")).strip()
+                    progress_match = re.search(r"([\d,]+)\s*/\s*([\d,]+)", raw)
+                    if not progress_match:
+                        continue
+                    current_value = int(progress_match.group(1).replace(",", ""))
+                    target_value = int(progress_match.group(2).replace(",", ""))
+                    creator_name = str(source_row.get("creator", "")).strip()
+                    manager_name = creator_manager_map.get(creator_name.lstrip("@").casefold(), "Unassigned")
+                    if choice != "All managers" and manager_name != choice:
+                        continue
+                    maintained_value = bool(source_row.get("maintained_tier", False)) or bool(re.search(r"Ranked up|Maintained tier", raw, flags=re.IGNORECASE))
+                    projected_value = int(round(current_value / battle_elapsed_days * battle_total_days))
+                    remaining_value = max(0, target_value - current_value)
+                    daily_needed = int((remaining_value / battle_days_remaining) + 0.999999)
+                    daily_actual = current_value / battle_elapsed_days
+                    daily_gap = max(0, int(round(daily_needed - daily_actual)))
+                    valid_days_match = re.search(r"(\d+)\s*d", raw, flags=re.IGNORECASE)
+                    valid_days = int(valid_days_match.group(1)) if valid_days_match else 0
+                    if maintained_value or current_value >= target_value:
+                        pace_status = "Achieved"
+                        manager_action = "Goal secured"
+                    elif projected_value >= target_value:
+                        pace_status = "On pace"
+                        manager_action = "Keep current pace"
+                    elif remaining_value <= max(20_000, int(target_value * 0.20)) or daily_gap <= max(1_000, int(daily_actual * 0.35)):
+                        pace_status = "Needs help"
+                        manager_action = "Push today — reachable"
+                    else:
+                        pace_status = "Needs help"
+                        manager_action = "Increase LIVE time and diamonds"
+                    maintenance_battle_rows.append({
+                        "Priority": pace_status,
+                        "Creator": creator_name,
+                        "Manager": manager_name,
+                        "Manager action": manager_action,
+                        "Current / goal": f"{current_value:,} / {target_value:,}",
+                        "Projected finish": f"{projected_value:,}",
+                        "Still needed": f"{remaining_value:,}",
+                        "Daily pace needed": f"{daily_needed:,}",
+                        "Daily pace gap": f"{daily_gap:,}",
+                        "Valid LIVE days": valid_days,
+                        "_pace_gap": daily_gap,
+                    })
+            maintenance_battle = pd.DataFrame(maintenance_battle_rows)
+
+            battle_business = business.copy()
+            if choice != "All managers" and not battle_business.empty and "Manager" in battle_business.columns:
+                battle_business = battle_business[battle_business["Manager"].fillna("").astype(str) == choice].copy()
+            battle_sections = battle_business.get("Section", pd.Series("", index=battle_business.index)).fillna("").astype(str)
+            battle_graduation = battle_business[battle_sections.str.contains("Creator Graduation", case=False, na=False) & battle_sections.str.contains("Evaluated", case=False, na=False)].copy()
+            battle_reached = battle_business[battle_sections.str.contains("Reached graduation", case=False, na=False)].copy()
+            battle_progress = battle_graduation.get("Graduation progress", pd.Series("", index=battle_graduation.index)).fillna("").astype(str)
+            battle_current = pd.to_numeric(battle_progress.str.replace(",", "", regex=False).str.extract(r"(\d+)\s*/")[0], errors="coerce").fillna(0).astype("int64")
+        if battle_creator_column and not creators.empty and "diamonds" in creators.columns and "Creator" in battle_graduation.columns:
+            live_creator_keys = creators[battle_creator_column].fillna("").astype(str).str.strip().str.lstrip("@").str.casefold()
+            live_creator_diamonds = pd.to_numeric(creators["diamonds"], errors="coerce")
+            live_diamond_map = pd.Series(live_creator_diamonds.values, index=live_creator_keys).groupby(level=0).max().to_dict()
+            graduation_creator_keys = battle_graduation["Creator"].fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold()
+            fresh_goal_current = pd.to_numeric(graduation_creator_keys.map(live_diamond_map), errors="coerce")
+            battle_current = fresh_goal_current.where(fresh_goal_current.notna(), battle_current).astype("int64")
+            battle_quit = battle_graduation.get("Quit on", pd.Series("", index=battle_graduation.index)).fillna("").astype(str).str.strip()
+            battle_active = battle_graduation[battle_quit.isin(["", "-", "—", "None", "nan"])].copy()
+            battle_active["_current"] = battle_current.loc[battle_active.index]
+            battle_active["_projected"] = (battle_active["_current"] / battle_elapsed_days * battle_total_days).round().astype("int64")
+            battle_active["_remaining"] = (200_000 - battle_active["_current"]).clip(lower=0)
+            battle_active["_daily_needed"] = (battle_active["_remaining"] / battle_days_remaining).apply(lambda value: int(value + 0.999999))
+            battle_active["_daily_actual"] = battle_active["_current"] / battle_elapsed_days
+            battle_active["_pace_gap"] = (battle_active["_daily_needed"] - battle_active["_daily_actual"]).clip(lower=0).round().astype("int64")
+            battle_active["_priority"] = "Needs help"
+            battle_active.loc[battle_active["_projected"].ge(200_000), "_priority"] = "On pace"
+            battle_active.loc[battle_active["_current"].ge(200_000) | battle_progress.loc[battle_active.index].str.contains("met target", case=False, na=False), "_priority"] = "Achieved"
+            battle_active["_action"] = "Increase LIVE time and diamonds"
+            battle_active.loc[battle_active["_priority"].eq("On pace"), "_action"] = "Keep current pace"
+            battle_active.loc[battle_active["_priority"].eq("Achieved"), "_action"] = "Goal secured"
+            graduation_reachable = battle_active["_priority"].eq("Needs help") & ((battle_active["_remaining"] <= 40_000) | (battle_active["_pace_gap"] <= battle_active["_daily_actual"].mul(0.35).clip(lower=1_000)))
+            battle_active.loc[graduation_reachable, "_action"] = "Push today — reachable"
+
+            battle_reached_count = int(battle_reached.get("Reached graduation", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+            battle_evaluated_base = max(165, len(battle_graduation)) if choice == "All managers" else len(battle_graduation)
+            battle_graduation_target = (battle_evaluated_base * 15 + 99) // 100 if battle_evaluated_base else 0
+            battle_wins_needed = max(0, battle_graduation_target - battle_reached_count)
+
+            maintenance_achieved = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("Achieved").sum())
+            maintenance_on_pace = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("On pace").sum())
+            maintenance_help = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("Needs help").sum())
+            graduation_on_pace = int(battle_active["_priority"].eq("On pace").sum()) if not battle_active.empty else 0
+            graduation_help = int(battle_active["_priority"].eq("Needs help").sum()) if not battle_active.empty else 0
+            battle_tier_text = creators.get("tier_status", pd.Series("", index=creators.index)).fillna("").astype(str).str.lower()
+            battle_rank_text = creators.get("rank_up_progress", pd.Series("", index=creators.index)).fillna("").astype(str).str.lower()
+            battle_explicit_not = battle_tier_text.str.contains("not maintained|not maintain", na=False) | battle_rank_text.str.contains("not maintained|not maintain", na=False)
+            battle_ranked_mask = battle_tier_text.str.contains("ranked up|ranking up|rank up", na=False) | battle_rank_text.str.contains("rank up|ranked up|ranking up", na=False)
+            battle_maintained_mask = ~battle_ranked_mask & ~battle_explicit_not & (battle_tier_text.str.contains("maintained|maintain", na=False) | battle_rank_text.str.contains("maintain", na=False))
+            battle_combined_wins = int((battle_ranked_mask | battle_maintained_mask).sum())
+            battle_agency_target = (len(creators) * 50 + 99) // 100 if len(creators) else 0
+            battle_agency_wins_needed = max(0, battle_agency_target - battle_combined_wins)
+
+            st.markdown("### Creator Focus Center")
+            st.markdown(f"""
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:8px 0 14px 0;">
+              <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance achieved</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_achieved:,}</div></div>
+              <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_on_pace:,}</div></div>
+              <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needs help</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{maintenance_help:,}</div></div>
+              <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{graduation_on_pace:,}</div></div>
+              <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation wins needed</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_wins_needed:,}</div></div>
+              <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Agency wins to 50%</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_agency_wins_needed:,}</div></div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.caption(f"Pacing uses the 8:00 PM ET reporting boundary: {battle_elapsed_days:.2f} elapsed day(s) and {battle_days_remaining * 24:.1f} hour(s) remaining.")
+
+
+            def render_battle_creator_cards(frame, battle_type):
+                group_styles = {
+                    "Immediate push — reachable": ("#ffcf5a", "Creators close enough for a concentrated push before the reporting period closes."),
+                    "Increase activity": ("#ff8a80", "Creators who can still benefit from additional LIVE time and diamonds."),
+                    "Protect current pace": ("#6ee7ff", "Creators pacing to the requirement; keep their activity consistent."),
+                    "Goal secured": ("#63e6be", "Creators who have already completed the requirement."),
+                    "Development pipeline": ("#b9d9f5", "Not a current-month push. Develop these creators for the next reporting cycle."),
+                }
+                grouped_cards = {name: [] for name in group_styles}
+                frame = frame.copy()
+                frame["_diamond_sort"] = frame.get("Current / goal", pd.Series("0", index=frame.index)).fillna("0").astype(str).map(
+                    lambda value: int(re.sub(r"[^0-9]", "", value.split("/")[0]) or 0)
+                )
+                frame = frame.sort_values(["_diamond_sort", "Creator"], ascending=[False, True])
+                visible_fields = [column for column in frame.columns if not str(column).startswith("_") and column not in {"Creator", "Manager", "Priority", "Manager action"}]
+                for _, row in frame.iterrows():
+                    creator = html_escape(str(row.get("Creator", "") or "Unknown creator"))
+                    manager = html_escape(str(row.get("Manager", "") or "Unassigned"))
+                    priority = str(row.get("Priority", "") or "Review")
+                    action = str(row.get("Manager action", "") or "Review creator")
+                    current_text = str(row.get("Current / goal", "0"))
+                    current_value = int(re.sub(r"[^0-9]", "", current_text.split("/")[0]) or 0)
+                    if priority == "Achieved":
+                        group_name = "Goal secured"
+                    elif priority == "On pace":
+                        group_name = "Protect current pace"
+                    elif battle_type == "Graduation" and (current_value < 100_000 or battle_days_remaining < 1 and current_value < 150_000):
+                        group_name = "Development pipeline"
+                    elif action == "Push today — reachable" or battle_type == "Graduation":
+                        group_name = "Immediate push — reachable"
+                    else:
+                        group_name = "Increase activity"
+                    group_color = group_styles[group_name][0]
+                    fields = []
+                    for field in visible_fields:
+                        value = row.get(field, "")
+                        if pd.isna(value):
+                            value = ""
+                        fields.append(
+                            f'<div style="background:#163f69;border:1px solid #4f86b7;border-radius:9px;padding:10px 12px;min-height:68px;">'
+                            f'<div style="color:#b9d9f5;font-size:.78rem;font-weight:800;text-transform:uppercase;">{html_escape(str(field))}</div>'
+                            f'<div style="color:#ffffff;font-size:1.12rem;font-weight:900;margin-top:5px;">{html_escape(str(value))}</div></div>'
+                        )
+                    grouped_cards[group_name].append(
+                        f'<article style="background:#102f4f;border-left:5px solid {group_color};border-radius:10px;padding:14px;">'
+                        f'<div style="display:flex;justify-content:space-between;gap:10px;"><div><div style="color:#ffffff;font-size:1.25rem;font-weight:900;">{creator}</div>'
+                        f'<div style="color:#b9d9f5;">Manager: <strong style="color:#ffffff;">{manager}</strong></div></div>'
+                        f'<strong style="color:{group_color};">{html_escape(priority)}</strong></div>'
+                        f'<div style="color:#ffffff;margin:9px 0;"><span style="color:#b9d9f5;font-weight:800;">Drive: </span>{html_escape(action)}</div>'
+                        f'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;">{"".join(fields)}</div></article>'
                     )
-                grouped_cards[group_name].append(
-                    f'<article style="background:#102f4f;border-left:5px solid {group_color};border-radius:10px;padding:14px;">'
-                    f'<div style="display:flex;justify-content:space-between;gap:10px;"><div><div style="color:#ffffff;font-size:1.25rem;font-weight:900;">{creator}</div>'
-                    f'<div style="color:#b9d9f5;">Manager: <strong style="color:#ffffff;">{manager}</strong></div></div>'
-                    f'<strong style="color:{group_color};">{html_escape(priority)}</strong></div>'
-                    f'<div style="color:#ffffff;margin:9px 0;"><span style="color:#b9d9f5;font-weight:800;">Drive: </span>{html_escape(action)}</div>'
-                    f'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;">{"".join(fields)}</div></article>'
-                )
-            for group_name, (group_color, description) in group_styles.items():
-                cards = grouped_cards[group_name]
-                if not cards:
-                    continue
-                st.markdown(
-                    f'<div style="background:#0a223b;border:2px solid {group_color};border-radius:14px;padding:14px 16px;margin:18px 0 12px;">'
-                    f'<div style="color:{group_color};font-size:1.35rem;font-weight:900;">{html_escape(group_name)} <span style="color:#ffffff;">({len(cards)})</span></div>'
-                    f'<div style="color:#dbeeff;">{html_escape(description)}</div></div>'
-                    f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(390px,1fr));gap:14px;margin-bottom:20px;">'
-                    + "".join(cards) + '</div>',
-                    unsafe_allow_html=True,
-                )
+                for group_name, (group_color, description) in group_styles.items():
+                    cards = grouped_cards[group_name]
+                    if not cards:
+                        continue
+                    st.markdown(
+                        f'<div style="background:#0a223b;border:2px solid {group_color};border-radius:14px;padding:14px 16px;margin:18px 0 12px;">'
+                        f'<div style="color:{group_color};font-size:1.35rem;font-weight:900;">{html_escape(group_name)} <span style="color:#ffffff;">({len(cards)})</span></div>'
+                        f'<div style="color:#dbeeff;">{html_escape(description)}</div></div>'
+                        f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(390px,1fr));gap:14px;margin-bottom:20px;">'
+                        + "".join(cards) + '</div>',
+                        unsafe_allow_html=True,
+                    )
 
 
-        battle_view = st.radio("Focus list", ["Maintenance", "Graduation"], horizontal=True, key="battle_focus_view")
-        if battle_view == "Maintenance":
-            st.markdown("### Maintenance Focus List")
-            if maintenance_battle.empty:
-                st.info("No maintenance battle records are available for this manager.")
+            battle_view = st.radio("Focus list", ["Maintenance", "Graduation"], horizontal=True, key="battle_focus_view")
+            if battle_view == "Maintenance":
+                st.markdown("### Maintenance Focus List")
+                if maintenance_battle.empty:
+                    st.info("No maintenance battle records are available for this manager.")
+                else:
+                    battle_order = pd.Categorical(maintenance_battle["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
+                    maintenance_battle = maintenance_battle.assign(_order=battle_order).sort_values(["_order", "_pace_gap"], ascending=[True, False]).drop(columns=["_order", "_pace_gap"])
+                    render_battle_creator_cards(maintenance_battle, "Maintenance")
             else:
-                battle_order = pd.Categorical(maintenance_battle["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
-                maintenance_battle = maintenance_battle.assign(_order=battle_order).sort_values(["_order", "_pace_gap"], ascending=[True, False]).drop(columns=["_order", "_pace_gap"])
-                render_battle_creator_cards(maintenance_battle, "Maintenance")
-        else:
-            st.markdown("### Graduation Focus List")
-            st.caption(f"{battle_reached_count:,} graduated toward a {battle_graduation_target:,} creator target. {graduation_help:,} active creator(s) currently project below 200K.")
-            if battle_active.empty:
-                st.info("No active graduation battle records are available for this manager.")
-            else:
-                graduation_display = pd.DataFrame({
-                    "Priority": battle_active["_priority"],
-                    "Creator": battle_active.get("Creator", pd.Series("", index=battle_active.index)),
-                    "Manager": battle_active.get("Manager", pd.Series("", index=battle_active.index)),
-                    "Manager action": battle_active["_action"],
-                    "Current / goal": battle_active["_current"].map(lambda value: f"{int(value):,} / 200,000"),
-                    "Projected finish": battle_active["_projected"].map(lambda value: f"{int(value):,}"),
-                    "Still needed": battle_active["_remaining"].map(lambda value: f"{int(value):,}"),
-                    "Daily pace needed": battle_active["_daily_needed"].map(lambda value: f"{int(value):,}"),
-                    "Daily pace gap": battle_active["_pace_gap"].map(lambda value: f"{int(value):,}"),
-                    "Valid LIVE days": battle_active.get("Valid go LIVE days", pd.Series("", index=battle_active.index)),
-                    "Valid LIVE duration": battle_active.get("Valid LIVE duration", pd.Series("", index=battle_active.index)),
-                })
-                graduation_order = pd.Categorical(graduation_display["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
-                graduation_display = graduation_display.assign(_order=graduation_order, _gap=battle_active["_pace_gap"].values).sort_values(["_order", "_gap"], ascending=[True, False]).drop(columns=["_order", "_gap"])
-                render_battle_creator_cards(graduation_display, "Graduation")
+                st.markdown("### Graduation Focus List")
+                st.caption(f"{battle_reached_count:,} graduated toward a {battle_graduation_target:,} creator target. {graduation_help:,} active creator(s) currently project below 200K.")
+                if battle_active.empty:
+                    st.info("No active graduation battle records are available for this manager.")
+                else:
+                    graduation_display = pd.DataFrame({
+                        "Priority": battle_active["_priority"],
+                        "Creator": battle_active.get("Creator", pd.Series("", index=battle_active.index)),
+                        "Manager": battle_active.get("Manager", pd.Series("", index=battle_active.index)),
+                        "Manager action": battle_active["_action"],
+                        "Current / goal": battle_active["_current"].map(lambda value: f"{int(value):,} / 200,000"),
+                        "Projected finish": battle_active["_projected"].map(lambda value: f"{int(value):,}"),
+                        "Still needed": battle_active["_remaining"].map(lambda value: f"{int(value):,}"),
+                        "Daily pace needed": battle_active["_daily_needed"].map(lambda value: f"{int(value):,}"),
+                        "Daily pace gap": battle_active["_pace_gap"].map(lambda value: f"{int(value):,}"),
+                        "Valid LIVE days": battle_active.get("Valid go LIVE days", pd.Series("", index=battle_active.index)),
+                            "Valid LIVE duration": battle_active.get("Valid LIVE duration", pd.Series("", index=battle_active.index)),
+                    })
+                    graduation_order = pd.Categorical(graduation_display["Priority"], ["Needs help", "On pace", "Achieved"], ordered=True)
+                    graduation_display = graduation_display.assign(_order=graduation_order, _gap=battle_active["_pace_gap"].values).sort_values(["_order", "_gap"], ascending=[True, False]).drop(columns=["_order", "_gap"])
+                    render_battle_creator_cards(graduation_display, "Graduation")
 
 
 
