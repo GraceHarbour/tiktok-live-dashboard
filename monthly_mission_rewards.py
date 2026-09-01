@@ -73,6 +73,41 @@ def _ensure_tables(engine) -> None:
         connection.execute(text("ALTER TABLE monthly_reward_results ADD COLUMN IF NOT EXISTS met_requirements text NOT NULL DEFAULT ''"))
         connection.execute(text("ALTER TABLE monthly_reward_results ADD COLUMN IF NOT EXISTS avatar_url text NOT NULL DEFAULT ''"))
         connection.execute(text("ALTER TABLE monthly_reward_results ADD COLUMN IF NOT EXISTS track boolean NOT NULL DEFAULT true"))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS monthly_reward_unavailable (
+                month_key text NOT NULL,
+                creator_id text NOT NULL,
+                username text NOT NULL,
+                manager_name text NOT NULL DEFAULT '',
+                reward_name text NOT NULL DEFAULT '',
+                event_id bigint REFERENCES monthly_reward_events(id) ON DELETE SET NULL,
+                marked_at timestamptz NOT NULL DEFAULT now(),
+                override_granted boolean NOT NULL DEFAULT false,
+                overridden_at timestamptz,
+                overridden_by text NOT NULL DEFAULT '',
+                reschedule_blocked boolean NOT NULL DEFAULT false,
+                PRIMARY KEY (month_key, creator_id)
+            )
+        """))
+        connection.execute(text("ALTER TABLE monthly_reward_unavailable ADD COLUMN IF NOT EXISTS override_granted boolean NOT NULL DEFAULT false"))
+        connection.execute(text("ALTER TABLE monthly_reward_unavailable ADD COLUMN IF NOT EXISTS overridden_at timestamptz"))
+        connection.execute(text("ALTER TABLE monthly_reward_unavailable ADD COLUMN IF NOT EXISTS overridden_by text NOT NULL DEFAULT ''"))
+        connection.execute(text("ALTER TABLE monthly_reward_unavailable ADD COLUMN IF NOT EXISTS reschedule_blocked boolean NOT NULL DEFAULT false"))
+
+
+def _signed_in_reward_admin(engine) -> tuple[bool, str]:
+    try:
+        email = str(st.context.headers.get("X-Goog-Authenticated-User-Email", "")).strip()
+    except Exception:
+        email = ""
+    if ":" in email:
+        email = email.split(":", 1)[1]
+    email = email.casefold()
+    if not email:
+        return False, ""
+    with engine.connect() as connection:
+        role = connection.execute(text("SELECT role FROM dashboard_access_people WHERE email=:email AND active=true"), {"email": email}).scalar()
+    return str(role or "").casefold() in {"owner", "admin"}, email
 
 
 def _series(frame: pd.DataFrame, column: str, default=0) -> pd.Series:
@@ -175,7 +210,7 @@ def _display_table(frame: pd.DataFrame, height: int = 480) -> None:
 
 def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], month_key: str) -> None:
     st.markdown("### Reward distribution events")
-    st.caption("Schedule a reward session. Every currently eligible creator is automatically added with the single highest reward earned.")
+    st.caption("Schedule as many reward sessions as needed. Managers can add their eligible creators to an event, or use their one unavailable allowance for the month.")
     eastern = ZoneInfo("America/New_York")
     now = dt.datetime.now(eastern)
     time_options = [
@@ -197,25 +232,15 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
         else:
             parsed_time = dt.datetime.strptime(event_time, "%I:%M %p").time()
             scheduled = dt.datetime.combine(event_date, parsed_time, tzinfo=eastern)
-            auto_rows = classified[classified["Eligible"]].copy()
-            if event_manager != "All managers":
-                auto_rows = auto_rows[auto_rows["Manager"] == event_manager]
             with engine.begin() as connection:
-                event_id = connection.execute(text("""
+                connection.execute(text("""
                     INSERT INTO monthly_reward_events(month_key,event_name,scheduled_at,manager_name)
                     VALUES (:month_key,:event_name,:scheduled_at,:manager_name) RETURNING id
-                """), {"month_key": month_key, "event_name": clean_name, "scheduled_at": scheduled, "manager_name": event_manager}).scalar_one()
-                for row in auto_rows.to_dict("records"):
-                    connection.execute(text("""
-                        INSERT INTO monthly_reward_event_creators
-                            (event_id,creator_id,username,manager_name,reward_name,reward_value,qualified_milestone,entry_source)
-                        VALUES (:event_id,:creator_id,:username,:manager_name,:reward_name,:reward_value,:milestone,'automatic')
-                        ON CONFLICT(event_id,creator_id) DO NOTHING
-                    """), {"event_id": event_id, "creator_id": row["Creator ID"], "username": row["Creator"], "manager_name": row["Manager"], "reward_name": row["Reward"], "reward_value": int(row["Prize value"]), "milestone": int(row["Milestone"])})
-            st.success(f"Created {clean_name} with {len(auto_rows):,} eligible creators.")
+                """), {"month_key": month_key, "event_name": clean_name, "scheduled_at": scheduled, "manager_name": event_manager})
+            st.success(f"Created {clean_name}. Managers can now add eligible creators.")
             st.rerun()
 
-    events = pd.read_sql(text("SELECT id,month_key,event_name,scheduled_at,manager_name FROM monthly_reward_events ORDER BY scheduled_at DESC,id DESC"), engine)
+    events = pd.read_sql(text("SELECT id,month_key,event_name,scheduled_at,manager_name FROM monthly_reward_events WHERE month_key=:month_key ORDER BY scheduled_at,id"), engine, params={"month_key": month_key})
     if events.empty:
         st.info("No reward distribution events have been scheduled yet.")
         return
@@ -228,6 +253,15 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
     add_pool = classified[classified["Eligible"]].copy()
     if add_manager != "All managers":
         add_pool = add_pool[add_pool["Manager"] == add_manager]
+    already_assigned = pd.read_sql(text("""
+        SELECT DISTINCT ec.creator_id FROM monthly_reward_event_creators ec
+        JOIN monthly_reward_events e ON e.id=ec.event_id WHERE e.month_key=:month_key
+    """), engine, params={"month_key": month_key})
+    if not already_assigned.empty:
+        add_pool = add_pool[~add_pool["Creator ID"].isin(already_assigned["creator_id"].astype(str))]
+    unavailable_locked = pd.read_sql(text("SELECT creator_id FROM monthly_reward_unavailable WHERE month_key=:month_key AND (override_granted=false OR reschedule_blocked=true)"), engine, params={"month_key": month_key})
+    if not unavailable_locked.empty:
+        add_pool = add_pool[~add_pool["Creator ID"].isin(unavailable_locked["creator_id"].astype(str))]
     label_map = {f"{r['Creator']} — {r['Manager']} — {r['Reward']}": r for r in add_pool.to_dict("records")}
     selected_add = st.multiselect("Add creators after scheduling", list(label_map), key=f"reward_add_{event_id}")
     if st.button("Add selected creators", key=f"reward_add_button_{event_id}", disabled=not selected_add):
@@ -247,30 +281,93 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
         FROM monthly_reward_event_creators WHERE event_id=:event_id ORDER BY reward_value DESC,username
     """), engine, params={"event_id": event_id})
     if people.empty:
-        st.warning("No creators are assigned to this reward event.")
-        return
-    original = people.set_index("creator_id")["delivered"].astype(bool)
-    editor = people.rename(columns={"username":"Creator","manager_name":"Manager","reward_name":"Reward","reward_value":"Prize value","qualified_milestone":"Milestone","delivered":"Given out","entry_source":"Added"})
-    edited = st.data_editor(editor, use_container_width=True, hide_index=True, disabled=["creator_id","Creator","Manager","Reward","Prize value","Milestone","Added"], column_config={"Given out": st.column_config.CheckboxColumn("Given out"), "Prize value": st.column_config.NumberColumn(format="%,d coins"), "Milestone": st.column_config.NumberColumn(format="%,d")}, key=f"reward_editor_{event_id}")
-    if st.button("Save payout updates", key=f"reward_save_{event_id}", type="primary"):
-        with engine.begin() as connection:
-            for row in edited.to_dict("records"):
-                delivered = bool(row["Given out"])
-                if delivered != bool(original.get(row["creator_id"], False)):
+        st.warning("No creators are assigned to this reward event yet.")
+    else:
+        original = people.set_index("creator_id")["delivered"].astype(bool)
+        editor = people.rename(columns={"username":"Creator","manager_name":"Manager","reward_name":"Reward","reward_value":"Prize value","qualified_milestone":"Milestone","delivered":"Given out","entry_source":"Added"})
+        edited = st.data_editor(editor, use_container_width=True, hide_index=True, disabled=["creator_id","Creator","Manager","Reward","Prize value","Milestone","Added"], column_config={"Given out": st.column_config.CheckboxColumn("Given out"), "Prize value": st.column_config.NumberColumn(format="%,d coins"), "Milestone": st.column_config.NumberColumn(format="%,d")}, key=f"reward_editor_{event_id}")
+        if st.button("Save payout updates", key=f"reward_save_{event_id}", type="primary"):
+            with engine.begin() as connection:
+                for row in edited.to_dict("records"):
+                    delivered = bool(row["Given out"])
+                    if delivered != bool(original.get(row["creator_id"], False)):
+                        connection.execute(text("""
+                            UPDATE monthly_reward_event_creators SET delivered=:delivered,
+                                delivered_at=CASE WHEN :delivered THEN now() ELSE NULL END
+                            WHERE event_id=:event_id AND creator_id=:creator_id
+                        """), {"delivered": delivered, "event_id": event_id, "creator_id": row["creator_id"]})
+            st.success("Payout status saved.")
+            st.rerun()
+
+        active_rows = editor[~editor["Given out"].astype(bool)].copy()
+        unavailable_labels = {f"{r['Creator']} — {r['Manager']} — {r['Reward']}": r for r in active_rows.to_dict("records")}
+        selected_unavailable = st.multiselect("Mark creators unavailable for this event", list(unavailable_labels), key=f"reward_unavailable_{event_id}")
+        if st.button("Move selected to unavailable", key=f"reward_unavailable_button_{event_id}", disabled=not selected_unavailable):
+            already_used = []
+            moved = 0
+            with engine.begin() as connection:
+                for label in selected_unavailable:
+                    row = unavailable_labels[label]
+                    prior = connection.execute(text("SELECT 1 FROM monthly_reward_unavailable WHERE month_key=:month_key AND creator_id=:creator_id"), {"month_key": month_key, "creator_id": row["creator_id"]}).first()
+                    if prior:
+                        connection.execute(text("""
+                            UPDATE monthly_reward_unavailable SET reschedule_blocked=true,
+                                override_granted=false,marked_at=now(),event_id=:event_id
+                            WHERE month_key=:month_key AND creator_id=:creator_id AND override_granted=true
+                        """), {"event_id": event_id, "month_key": month_key, "creator_id": row["creator_id"]})
+                        connection.execute(text("DELETE FROM monthly_reward_event_creators WHERE event_id=:event_id AND creator_id=:creator_id"), {"event_id": event_id, "creator_id": row["creator_id"]})
+                        already_used.append(row["Creator"] + " — blocked from further rescheduling")
+                        continue
                     connection.execute(text("""
-                        UPDATE monthly_reward_event_creators SET delivered=:delivered,
-                            delivered_at=CASE WHEN :delivered THEN now() ELSE NULL END
-                        WHERE event_id=:event_id AND creator_id=:creator_id
-                    """), {"delivered": delivered, "event_id": event_id, "creator_id": row["creator_id"]})
-        st.success("Payout status saved.")
-        st.rerun()
-    remove_labels = {f"{r['Creator']} — {r['Reward']}": r["creator_id"] for r in editor.to_dict("records")}
-    selected_remove = st.multiselect("Remove creators from this event", list(remove_labels), key=f"reward_remove_{event_id}")
-    if st.button("Remove selected creators", key=f"reward_remove_button_{event_id}", disabled=not selected_remove):
-        with engine.begin() as connection:
-            for label in selected_remove:
-                connection.execute(text("DELETE FROM monthly_reward_event_creators WHERE event_id=:event_id AND creator_id=:creator_id"), {"event_id": event_id, "creator_id": remove_labels[label]})
-        st.rerun()
+                        INSERT INTO monthly_reward_unavailable(month_key,creator_id,username,manager_name,reward_name,event_id)
+                        VALUES (:month_key,:creator_id,:username,:manager_name,:reward_name,:event_id)
+                    """), {"month_key": month_key, "creator_id": row["creator_id"], "username": row["Creator"], "manager_name": row["Manager"], "reward_name": row["Reward"], "event_id": event_id})
+                    connection.execute(text("DELETE FROM monthly_reward_event_creators WHERE event_id=:event_id AND creator_id=:creator_id"), {"event_id": event_id, "creator_id": row["creator_id"]})
+                    moved += 1
+            if already_used:
+                st.error("These creators already used their one unavailable allowance and are now blocked from further rescheduling: " + ", ".join(already_used))
+            if moved:
+                st.success(f"Moved {moved} creator(s) to the unavailable list. An owner or administrator must approve rescheduling, and unavailable cannot be used again this month.")
+                st.rerun()
+
+        remove_labels = {f"{r['Creator']} — {r['Reward']}": r["creator_id"] for r in editor.to_dict("records")}
+        selected_remove = st.multiselect("Remove creators from this event", list(remove_labels), key=f"reward_remove_{event_id}")
+        if st.button("Remove selected creators", key=f"reward_remove_button_{event_id}", disabled=not selected_remove):
+            with engine.begin() as connection:
+                for label in selected_remove:
+                    connection.execute(text("DELETE FROM monthly_reward_event_creators WHERE event_id=:event_id AND creator_id=:creator_id"), {"event_id": event_id, "creator_id": remove_labels[label]})
+            st.rerun()
+
+    st.markdown("#### Unavailable creators — one allowance per month")
+    unavailable = pd.read_sql(text("""
+        SELECT u.creator_id,u.username AS "Creator",u.manager_name AS "Manager",u.reward_name AS "Reward",
+               e.event_name AS "Unavailable for event",u.marked_at AS "Marked unavailable",
+               u.override_granted AS "Admin reschedule approved",u.reschedule_blocked AS "No more rescheduling",
+               u.overridden_by AS "Approved by"
+        FROM monthly_reward_unavailable u LEFT JOIN monthly_reward_events e ON e.id=u.event_id
+        WHERE u.month_key=:month_key ORDER BY u.marked_at DESC
+    """), engine, params={"month_key": month_key})
+    if unavailable.empty:
+        st.info("No creators have used their unavailable allowance this month.")
+    else:
+        _display_table(unavailable.drop(columns=["creator_id"]), min(440, 88 + len(unavailable) * 42))
+        can_override, actor_email = _signed_in_reward_admin(engine)
+        locked = unavailable[(~unavailable["Admin reschedule approved"].astype(bool)) & (~unavailable["No more rescheduling"].astype(bool))]
+        if can_override and not locked.empty:
+            override_map = {f"{r['Creator']} — {r['Manager']} — {r['Reward']}": r["creator_id"] for r in locked.to_dict("records")}
+            selected_override = st.multiselect("Owner/admin reschedule override", list(override_map), key=f"reward_override_{month_key}")
+            if st.button("Approve selected for rescheduling", key=f"reward_override_button_{month_key}", disabled=not selected_override):
+                with engine.begin() as connection:
+                    for label in selected_override:
+                        connection.execute(text("""
+                            UPDATE monthly_reward_unavailable SET override_granted=true,
+                                overridden_at=now(),overridden_by=:actor
+                            WHERE month_key=:month_key AND creator_id=:creator_id
+                        """), {"actor": actor_email, "month_key": month_key, "creator_id": override_map[label]})
+                st.success("Admin override approved. The selected creator(s) can now be added to another event.")
+                st.rerun()
+        elif not can_override and not locked.empty:
+            st.caption("Only an owner or administrator can approve these creators for rescheduling.")
 
 
 def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
