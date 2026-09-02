@@ -1278,6 +1278,7 @@ def main():
         on_change=_remember_tab_state,
         args=("main_dashboard_tabs", "tab"),
     )
+    active_main_tab = st.session_state.get("main_dashboard_tabs", default_main_tab)
 
 
 
@@ -2290,416 +2291,418 @@ def main():
 
 
     with rewards_tab:
-        render_monthly_mission_rewards(get_engine(), creators, manager_names)
+        if active_main_tab == "Monthly Mission Rewards":
+            render_monthly_mission_rewards(get_engine(), creators, manager_names)
 
     with event_tab:
-        st.subheader("Event Tool")
-        st.caption("Schedule community events on quarter-hour boundaries, select the creators to track, and automatically measure diamonds from the complete Goal reads saved at the start and end.")
+        if active_main_tab == "Event Tool":
+            st.subheader("Event Tool")
+            st.caption("Schedule community events on quarter-hour boundaries, select the creators to track, and automatically measure diamonds from the complete Goal reads saved at the start and end.")
 
-        event_left, event_right = st.columns([1, 1.25])
-        eastern_now = pd.Timestamp.now(tz="America/New_York")
-        next_slot = eastern_now.ceil("15min")
-        event_creator_choices = creators.copy()
-        if "creator_id" not in event_creator_choices.columns:
-            event_creator_choices["creator_id"] = event_creator_choices.get("username", pd.Series("", index=event_creator_choices.index)).astype(str)
-        event_creator_choices["creator_id"] = event_creator_choices["creator_id"].astype(str)
-        event_creator_choices["username"] = event_creator_choices.get("username", pd.Series("", index=event_creator_choices.index)).fillna("").astype(str)
-        event_creator_choices["event_manager"] = event_creator_choices.get("manager_name", event_creator_choices.get("manager", pd.Series("", index=event_creator_choices.index))).fillna("").astype(str)
-        event_creator_choices = event_creator_choices.drop_duplicates("creator_id").sort_values("username")
-        initial_creator_labels = {
-            str(row["creator_id"]): f"{row['username']} • {row['event_manager'] or 'Unassigned'}"
-            for _, row in event_creator_choices.iterrows()
-        }
-        with event_left:
-            st.markdown("### Schedule an event")
-            if st.button("Create another event", key="create_another_community_event", use_container_width=True):
-                st.session_state["community_event_form_version"] = st.session_state.get("community_event_form_version", 0) + 1
-                st.rerun()
-            event_form_version = st.session_state.get("community_event_form_version", 0)
-            with st.form(f"community_event_form_{event_form_version}", clear_on_submit=True):
-                event_name = st.text_input("Event name", placeholder="Monday Community Battle", key=f"community_event_name_{event_form_version}")
-                quarter_hour_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 15, 30, 45)]
-                format_event_time = lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0")
-                start_default_value = f"{next_slot.hour:02d}:{next_slot.minute:02d}"
-                start_date = st.date_input("Start date", value=next_slot.date())
-                start_time = st.selectbox(
-                    "Start time (ET)",
-                    quarter_hour_values,
-                    index=quarter_hour_values.index(start_default_value),
-                    format_func=format_event_time,
-                )
-                end_default = next_slot + pd.Timedelta(hours=2, minutes=30)
-                end_default_value = f"{end_default.hour:02d}:{end_default.minute:02d}"
-                end_date = st.date_input("End date", value=end_default.date())
-                end_time = st.selectbox(
-                    "End time (ET)",
-                    quarter_hour_values,
-                    index=quarter_hour_values.index(end_default_value),
-                    format_func=format_event_time,
-                )
-                initial_creator_ids = st.multiselect(
-                    "People to track",
-                    list(initial_creator_labels),
-                    format_func=lambda value: initial_creator_labels.get(value, value),
-                    help="Search for and add the creators participating in this event.",
-                )
-                event_submit = st.form_submit_button("Save event and people", type="primary", use_container_width=True)
-            if event_submit:
-                start_local = pd.Timestamp(f"{start_date} {start_time}").tz_localize("America/New_York")
-                end_local = pd.Timestamp(f"{end_date} {end_time}").tz_localize("America/New_York")
-                if not event_name.strip():
-                    st.error("Enter an event name.")
-                elif start_local.minute not in {0, 15, 30, 45} or end_local.minute not in {0, 15, 30, 45}:
-                    st.error("Start and end times must use :00, :15, :30, or :45.")
-                elif end_local <= start_local:
-                    st.error("The end time must be after the start time.")
-                else:
-                    new_event_id = create_community_event(event_name.strip(), start_local.tz_convert("UTC").isoformat(), end_local.tz_convert("UTC").isoformat())
-                    save_event_participants(new_event_id, initial_creator_ids, event_creator_choices)
-                    st.session_state["selected_community_event"] = new_event_id
-                    st.session_state["community_event_form_version"] = event_form_version + 1
-                    st.success(f"Event scheduled with {len(initial_creator_ids)} tracked creator(s). Complete Goal snapshots will save automatically.")
-                    st.rerun()
-
-        events = load_community_events()
-        with event_right:
-            st.markdown("### Event schedule")
-            if events.empty:
-                st.info("No events are scheduled yet.")
-                selected_event_id = None
-            else:
-                event_labels = {}
-                for _, event_row in events.iterrows():
-                    event_start = pd.to_datetime(event_row["start_at"], utc=True).tz_convert("America/New_York")
-                    event_end = pd.to_datetime(event_row["end_at"], utc=True).tz_convert("America/New_York")
-                    event_labels[str(event_row["event_id"])] = f"{event_row['event_name']} • {event_start:%b %d, %Y %I:%M %p}–{event_end:%I:%M %p} ET"
-                event_ids = list(event_labels)
-                preferred_event = st.session_state.get("selected_community_event") or st.query_params.get("event")
-                selected_index = event_ids.index(preferred_event) if preferred_event in event_ids else 0
-                selected_event_id = st.selectbox("Choose event", event_ids, index=selected_index, format_func=lambda value: event_labels[value], key="community_event_selector")
-                st.session_state["selected_community_event"] = selected_event_id
-            if st.query_params.get("event") != selected_event_id:
-                st.query_params["event"] = selected_event_id
-
-        if selected_event_id:
-            selected_event = events[events["event_id"].astype(str) == str(selected_event_id)].iloc[0]
-            event_start_utc = pd.to_datetime(selected_event["start_at"], utc=True)
-            event_end_utc = pd.to_datetime(selected_event["end_at"], utc=True)
-            now_utc = pd.Timestamp.now(tz="UTC")
-            live_status = "Scheduled" if now_utc < event_start_utc else ("Live" if now_utc < event_end_utc else "Completed")
-            status_color = "#6ee7ff" if live_status == "Live" else ("#63e6be" if live_status == "Completed" else "#ffcf5a")
-            st.markdown(
-                f'<div style="background:#0a223b;border:2px solid {status_color};border-radius:14px;padding:14px 16px;margin:14px 0;">'
-                f'<div style="color:#ffffff;font-size:1.35rem;font-weight:900;">{html_escape(str(selected_event["event_name"]))}</div>'
-                f'<div style="color:{status_color};font-weight:900;margin-top:3px;">{live_status}</div></div>',
-                unsafe_allow_html=True,
-            )
-
-            with st.expander("Delete this event"):
-                st.warning("Deleting this event permanently removes its participant list and saved results.")
-                confirm_event_delete = st.checkbox(
-                    "Yes, I am sure I want to delete this event.",
-                    key=f"confirm_delete_event_{selected_event_id}",
-                )
-                if st.button(
-                    "Delete event permanently",
-                    key=f"delete_event_{selected_event_id}",
-                    disabled=not confirm_event_delete,
-                    use_container_width=True,
-                ):
-                    delete_community_event(selected_event_id)
-                    st.session_state.pop("selected_community_event", None)
-                    st.success("Event deleted.")
-                    st.rerun()
-
-            creator_choices = creators.copy()
-            if "creator_id" not in creator_choices.columns:
-                creator_choices["creator_id"] = creator_choices.get("username", pd.Series("", index=creator_choices.index)).astype(str)
-            creator_choices["creator_id"] = creator_choices["creator_id"].astype(str)
-            creator_choices["username"] = creator_choices.get("username", pd.Series("", index=creator_choices.index)).fillna("").astype(str)
-            creator_choices["event_manager"] = creator_choices.get("manager_name", creator_choices.get("manager", pd.Series("", index=creator_choices.index))).fillna("").astype(str)
-            creator_choices = creator_choices.drop_duplicates("creator_id").sort_values("username")
-            current_participants = load_event_participants(selected_event_id)
-            current_ids = current_participants.get("creator_id", pd.Series(dtype="object")).astype(str).tolist()
-            creator_label_map = {
+            event_left, event_right = st.columns([1, 1.25])
+            eastern_now = pd.Timestamp.now(tz="America/New_York")
+            next_slot = eastern_now.ceil("15min")
+            event_creator_choices = creators.copy()
+            if "creator_id" not in event_creator_choices.columns:
+                event_creator_choices["creator_id"] = event_creator_choices.get("username", pd.Series("", index=event_creator_choices.index)).astype(str)
+            event_creator_choices["creator_id"] = event_creator_choices["creator_id"].astype(str)
+            event_creator_choices["username"] = event_creator_choices.get("username", pd.Series("", index=event_creator_choices.index)).fillna("").astype(str)
+            event_creator_choices["event_manager"] = event_creator_choices.get("manager_name", event_creator_choices.get("manager", pd.Series("", index=event_creator_choices.index))).fillna("").astype(str)
+            event_creator_choices = event_creator_choices.drop_duplicates("creator_id").sort_values("username")
+            initial_creator_labels = {
                 str(row["creator_id"]): f"{row['username']} • {row['event_manager'] or 'Unassigned'}"
-                for _, row in creator_choices.iterrows()
+                for _, row in event_creator_choices.iterrows()
             }
-            people_manager_values = creator_choices["event_manager"].replace("", "Unassigned")
-            people_manager_options = ["All managers"] + sorted(
-                manager for manager in people_manager_values.dropna().astype(str).unique()
-                if manager.strip()
-            )
-            st.markdown("### Add or Remove People")
-            st.caption("This list stays editable before and during the event. Add walk-ins or remove people, then save the updated tracking list.")
-            people_manager_filter = st.selectbox(
-                "Filter people by manager",
-                people_manager_options,
-                key=f"event_people_manager_{selected_event_id}",
-            )
-            if people_manager_filter == "All managers":
-                filtered_choice_ids = creator_choices["creator_id"].astype(str).tolist()
-            else:
-                filtered_choice_ids = creator_choices.loc[
-                    people_manager_values.astype(str) == people_manager_filter,
-                    "creator_id",
-                ].astype(str).tolist()
-            addable_ids = [creator_id for creator_id in filtered_choice_ids if creator_id not in current_ids]
-            people_to_add = st.multiselect(
-                "Select people to add",
-                addable_ids,
-                format_func=lambda value: creator_label_map.get(value, value),
-                key=f"event_people_add_{selected_event_id}_{people_manager_filter}",
-                placeholder="Search and select one or more creators",
-            )
-            add_column, remove_column = st.columns(2)
-            with add_column:
-                if st.button("Add selected people", type="primary", key=f"add_event_creators_{selected_event_id}", use_container_width=True):
-                    add_event_participants(selected_event_id, people_to_add, creator_choices)
-                    updated_total = len(set(current_ids).union(people_to_add))
-                    st.success(f"Added {len(people_to_add)} creator(s). {updated_total} people are now tracked.")
+            with event_left:
+                st.markdown("### Schedule an event")
+                if st.button("Create another event", key="create_another_community_event", use_container_width=True):
+                    st.session_state["community_event_form_version"] = st.session_state.get("community_event_form_version", 0) + 1
                     st.rerun()
-            with remove_column:
-                people_to_remove = st.multiselect(
-                    "Select tracked people to remove",
-                    current_ids,
-                    format_func=lambda value: creator_label_map.get(value, value),
-                    key=f"event_people_remove_{selected_event_id}",
-                    placeholder="Choose people to remove",
-                )
-                if st.button("Remove selected people", key=f"remove_event_creators_{selected_event_id}", use_container_width=True):
-                    remove_event_participants(selected_event_id, people_to_remove)
-                    updated_total = max(0, len(current_ids) - len(set(people_to_remove)))
-                    st.success(f"Removed {len(people_to_remove)} creator(s). {updated_total} people remain tracked.")
-                    st.rerun()
-
-            participants = load_event_participants(selected_event_id)
-            st.markdown(f"### People Being Tracked ({len(participants)})")
-            if participants.empty:
-                st.info("Select creators above, then save the tracking list.")
-            else:
-                tracked_display = participants[["username", "manager"]].rename(columns={"username": "Creator", "manager": "Manager"})
-                render_read_table(tracked_display, height=min(520, 80 + len(tracked_display) * 36))
-
-                snapshots = load_event_snapshots(selected_event_id)
-                start_snapshot = snapshots[snapshots["phase"].astype(str) == "start"][["creator_id", "diamonds"]].rename(columns={"diamonds": "Starting diamonds"}) if not snapshots.empty else pd.DataFrame(columns=["creator_id", "Starting diamonds"])
-                end_snapshot = snapshots[snapshots["phase"].astype(str) == "end"][["creator_id", "diamonds"]].rename(columns={"diamonds": "Ending diamonds"}) if not snapshots.empty else pd.DataFrame(columns=["creator_id", "Ending diamonds"])
-                current_goal = creator_choices[["creator_id", "diamonds"]].copy() if "diamonds" in creator_choices.columns else pd.DataFrame(columns=["creator_id", "diamonds"])
-                current_goal = current_goal.rename(columns={"diamonds": "Current diamonds"})
-                results = participants[["creator_id", "username", "manager"]].merge(start_snapshot, on="creator_id", how="left").merge(end_snapshot, on="creator_id", how="left").merge(current_goal, on="creator_id", how="left")
-                results["Starting diamonds"] = pd.to_numeric(results["Starting diamonds"], errors="coerce")
-                results["Current diamonds"] = pd.to_numeric(results["Current diamonds"], errors="coerce")
-                results["Ending diamonds"] = pd.to_numeric(results["Ending diamonds"], errors="coerce")
-                results["Ending diamonds"] = results["Ending diamonds"].fillna(results["Current diamonds"])
-                results["Total diamonds earned"] = (results["Ending diamonds"] - results["Starting diamonds"]).clip(lower=0)
-                results_display = results.rename(columns={"username": "Creator", "manager": "Manager"})
-                results_display = results_display[["Creator", "Manager", "Starting diamonds", "Ending diamonds", "Total diamonds earned"]].rename(columns={"Ending diamonds": "Current / ending diamonds"}).sort_values("Total diamonds earned", ascending=False)
-                st.markdown("### Live Event Results")
-                st.caption("Starting diamonds are saved at the official event start. During a live event, current diamonds show the latest Goal total; after the event, the saved ending snapshot is used.")
-                filter_left, filter_right = st.columns([2, 1])
-                with filter_left:
-                    event_creator_search = st.text_input(
-                        "Search people",
-                        placeholder="Search by creator name",
-                        key=f"event_results_search_{selected_event_id}",
+                event_form_version = st.session_state.get("community_event_form_version", 0)
+                with st.form(f"community_event_form_{event_form_version}", clear_on_submit=True):
+                    event_name = st.text_input("Event name", placeholder="Monday Community Battle", key=f"community_event_name_{event_form_version}")
+                    quarter_hour_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 15, 30, 45)]
+                    format_event_time = lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0")
+                    start_default_value = f"{next_slot.hour:02d}:{next_slot.minute:02d}"
+                    start_date = st.date_input("Start date", value=next_slot.date())
+                    start_time = st.selectbox(
+                        "Start time (ET)",
+                        quarter_hour_values,
+                        index=quarter_hour_values.index(start_default_value),
+                        format_func=format_event_time,
                     )
-                with filter_right:
-                    event_manager_options = ["All managers"] + sorted(
-                        manager for manager in results_display["Manager"].fillna("Unassigned").astype(str).unique()
-                        if manager.strip()
+                    end_default = next_slot + pd.Timedelta(hours=2, minutes=30)
+                    end_default_value = f"{end_default.hour:02d}:{end_default.minute:02d}"
+                    end_date = st.date_input("End date", value=end_default.date())
+                    end_time = st.selectbox(
+                        "End time (ET)",
+                        quarter_hour_values,
+                        index=quarter_hour_values.index(end_default_value),
+                        format_func=format_event_time,
                     )
-                    event_manager_filter = st.selectbox(
-                        "Manager",
-                        event_manager_options,
-                        key=f"event_results_manager_{selected_event_id}",
+                    initial_creator_ids = st.multiselect(
+                        "People to track",
+                        list(initial_creator_labels),
+                        format_func=lambda value: initial_creator_labels.get(value, value),
+                        help="Search for and add the creators participating in this event.",
                     )
-                filtered_event_results = results_display.copy()
-                if event_creator_search.strip():
-                    filtered_event_results = filtered_event_results[
-                        filtered_event_results["Creator"].fillna("").astype(str).str.contains(
-                            event_creator_search.strip(), case=False, na=False
-                        )
-                    ]
-                if event_manager_filter != "All managers":
-                    filtered_event_results = filtered_event_results[
-                        filtered_event_results["Manager"].fillna("Unassigned").astype(str) == event_manager_filter
-                    ]
-                total_battle_diamonds = int(results_display["Total diamonds earned"].fillna(0).sum())
-                result_a, result_b, result_c = st.columns(3)
-                result_a.metric("People shown", len(filtered_event_results))
-                result_b.metric("Total diamonds earned", f"{total_battle_diamonds:,}")
-                result_c.metric("Snapshots", f"{'Start' if not start_snapshot.empty else 'Waiting'} / {'End' if not end_snapshot.empty else 'Waiting'}")
-                st.markdown("#### People and Live Diamond Counts")
-                if filtered_event_results.empty:
-                    st.info("No tracked people match the current search and manager filters.")
-                else:
-                    event_card_rows = filtered_event_results.reset_index(drop=True)
-                    for card_start in range(0, len(event_card_rows), 4):
-                        card_columns = st.columns(4)
-                        for card_offset, card_column in enumerate(card_columns):
-                            card_index = card_start + card_offset
-                            if card_index >= len(event_card_rows):
-                                continue
-                            card_row = event_card_rows.iloc[card_index]
-                            earned_raw = pd.to_numeric(card_row.get("Total diamonds earned"), errors="coerce")
-                            current_raw = pd.to_numeric(card_row.get("Current / ending diamonds"), errors="coerce")
-                            earned_value = int(earned_raw) if pd.notna(earned_raw) else 0
-                            current_value = int(current_raw) if pd.notna(current_raw) else 0
-                            with card_column:
-                                st.metric(
-                                    str(card_row.get("Creator", "Creator")),
-                                    f"{earned_value:,}",
-                                    help="Diamonds earned during this event so far.",
-                                )
-                                st.caption(
-                                    f"{str(card_row.get('Manager', 'Unassigned')) or 'Unassigned'} · "
-                                    f"Current diamonds: {current_value:,}"
-                                )
-                render_read_table(filtered_event_results, height=min(650, 100 + len(filtered_event_results) * 38))
-                st.download_button(
-                    "Download event results",
-                    filtered_event_results.to_csv(index=False).encode("utf-8"),
-                    file_name=f"{str(selected_event['event_name']).strip().replace(' ', '_')}_results.csv",
-                    mime="text/csv",
-                    key=f"download_event_{selected_event_id}",
-                )
-
-
-                st.markdown("### Event Winner Wheel")
-                st.caption("Available on every event. Exclude any number of people, choose how many random winners to draw, and download the completed wheel replay for posting.")
-                wheel_names = sorted({str(name).strip() for name in results_display["Creator"].fillna("") if str(name).strip()})
-                saved_event_drawings = load_event_drawings(selected_event_id)
-                prior_event_winners = set()
-                if not saved_event_drawings.empty:
-                    for saved_winners in saved_event_drawings["winners_json"].fillna("[]"):
-                        try:
-                            prior_event_winners.update(str(name) for name in json.loads(saved_winners))
-                        except (TypeError, ValueError, json.JSONDecodeError):
-                            continue
-                with st.form(key=f"event_wheel_setup_{selected_event_id}", clear_on_submit=False):
-                    event_wheel_exclusions = st.multiselect(
-                        "Exclude people from this drawing",
-                        wheel_names,
-                        key=f"event_wheel_exclusions_{selected_event_id}",
-                        help="Select as many people as needed. Winners from earlier spins for this event are excluded automatically.",
-                    )
-                    available_wheel_names = [
-                        name for name in wheel_names
-                        if name not in set(event_wheel_exclusions) and name not in prior_event_winners
-                    ]
-                    if prior_event_winners:
-                        st.caption("Already selected and automatically excluded: " + ", ".join(sorted(prior_event_winners)))
-                    if event_wheel_exclusions:
-                        st.caption("Manually excluded: " + ", ".join(event_wheel_exclusions))
-                    maximum_winners = max(1, min(20, len(available_wheel_names)))
-                    winner_count_key = f"event_winner_count_{selected_event_id}"
-                    stored_winner_count = int(st.session_state.get(winner_count_key, min(2, maximum_winners)) or 1)
-                    if stored_winner_count > maximum_winners or stored_winner_count < 1:
-                        st.session_state[winner_count_key] = min(2, maximum_winners)
-                    event_winner_count = st.number_input(
-                        "Number of random winners",
-                        min_value=1,
-                        max_value=maximum_winners,
-                        value=min(2, maximum_winners),
-                        step=1,
-                        key=winner_count_key,
-                        disabled=not available_wheel_names,
-                    )
-                    st.markdown(f"**{len(available_wheel_names):,} names available for this wheel.**")
-                    if available_wheel_names:
-                        st.caption("Make all exclusions and choose the winner count, then press Prepare wheel once.")
+                    event_submit = st.form_submit_button("Save event and people", type="primary", use_container_width=True)
+                if event_submit:
+                    start_local = pd.Timestamp(f"{start_date} {start_time}").tz_localize("America/New_York")
+                    end_local = pd.Timestamp(f"{end_date} {end_time}").tz_localize("America/New_York")
+                    if not event_name.strip():
+                        st.error("Enter an event name.")
+                    elif start_local.minute not in {0, 15, 30, 45} or end_local.minute not in {0, 15, 30, 45}:
+                        st.error("Start and end times must use :00, :15, :30, or :45.")
+                    elif end_local <= start_local:
+                        st.error("The end time must be after the start time.")
                     else:
-                        st.info("No names remain in this event's wheel pool.")
-                    prepare_wheel = st.form_submit_button(
-                        "Prepare wheel",
-                        type="primary",
-                        disabled=not available_wheel_names,
+                        new_event_id = create_community_event(event_name.strip(), start_local.tz_convert("UTC").isoformat(), end_local.tz_convert("UTC").isoformat())
+                        save_event_participants(new_event_id, initial_creator_ids, event_creator_choices)
+                        st.session_state["selected_community_event"] = new_event_id
+                        st.session_state["community_event_form_version"] = event_form_version + 1
+                        st.success(f"Event scheduled with {len(initial_creator_ids)} tracked creator(s). Complete Goal snapshots will save automatically.")
+                        st.rerun()
+
+            events = load_community_events()
+            with event_right:
+                st.markdown("### Event schedule")
+                if events.empty:
+                    st.info("No events are scheduled yet.")
+                    selected_event_id = None
+                else:
+                    event_labels = {}
+                    for _, event_row in events.iterrows():
+                        event_start = pd.to_datetime(event_row["start_at"], utc=True).tz_convert("America/New_York")
+                        event_end = pd.to_datetime(event_row["end_at"], utc=True).tz_convert("America/New_York")
+                        event_labels[str(event_row["event_id"])] = f"{event_row['event_name']} • {event_start:%b %d, %Y %I:%M %p}–{event_end:%I:%M %p} ET"
+                    event_ids = list(event_labels)
+                    preferred_event = st.session_state.get("selected_community_event") or st.query_params.get("event")
+                    selected_index = event_ids.index(preferred_event) if preferred_event in event_ids else 0
+                    selected_event_id = st.selectbox("Choose event", event_ids, index=selected_index, format_func=lambda value: event_labels[value], key="community_event_selector")
+                    st.session_state["selected_community_event"] = selected_event_id
+                if st.query_params.get("event") != selected_event_id:
+                    st.query_params["event"] = selected_event_id
+
+            if selected_event_id:
+                selected_event = events[events["event_id"].astype(str) == str(selected_event_id)].iloc[0]
+                event_start_utc = pd.to_datetime(selected_event["start_at"], utc=True)
+                event_end_utc = pd.to_datetime(selected_event["end_at"], utc=True)
+                now_utc = pd.Timestamp.now(tz="UTC")
+                live_status = "Scheduled" if now_utc < event_start_utc else ("Live" if now_utc < event_end_utc else "Completed")
+                status_color = "#6ee7ff" if live_status == "Live" else ("#63e6be" if live_status == "Completed" else "#ffcf5a")
+                st.markdown(
+                    f'<div style="background:#0a223b;border:2px solid {status_color};border-radius:14px;padding:14px 16px;margin:14px 0;">'
+                    f'<div style="color:#ffffff;font-size:1.35rem;font-weight:900;">{html_escape(str(selected_event["event_name"]))}</div>'
+                    f'<div style="color:{status_color};font-weight:900;margin-top:3px;">{live_status}</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+                with st.expander("Delete this event"):
+                    st.warning("Deleting this event permanently removes its participant list and saved results.")
+                    confirm_event_delete = st.checkbox(
+                        "Yes, I am sure I want to delete this event.",
+                        key=f"confirm_delete_event_{selected_event_id}",
+                    )
+                    if st.button(
+                        "Delete event permanently",
+                        key=f"delete_event_{selected_event_id}",
+                        disabled=not confirm_event_delete,
                         use_container_width=True,
+                    ):
+                        delete_community_event(selected_event_id)
+                        st.session_state.pop("selected_community_event", None)
+                        st.success("Event deleted.")
+                        st.rerun()
+
+                creator_choices = creators.copy()
+                if "creator_id" not in creator_choices.columns:
+                    creator_choices["creator_id"] = creator_choices.get("username", pd.Series("", index=creator_choices.index)).astype(str)
+                creator_choices["creator_id"] = creator_choices["creator_id"].astype(str)
+                creator_choices["username"] = creator_choices.get("username", pd.Series("", index=creator_choices.index)).fillna("").astype(str)
+                creator_choices["event_manager"] = creator_choices.get("manager_name", creator_choices.get("manager", pd.Series("", index=creator_choices.index))).fillna("").astype(str)
+                creator_choices = creator_choices.drop_duplicates("creator_id").sort_values("username")
+                current_participants = load_event_participants(selected_event_id)
+                current_ids = current_participants.get("creator_id", pd.Series(dtype="object")).astype(str).tolist()
+                creator_label_map = {
+                    str(row["creator_id"]): f"{row['username']} • {row['event_manager'] or 'Unassigned'}"
+                    for _, row in creator_choices.iterrows()
+                }
+                people_manager_values = creator_choices["event_manager"].replace("", "Unassigned")
+                people_manager_options = ["All managers"] + sorted(
+                    manager for manager in people_manager_values.dropna().astype(str).unique()
+                    if manager.strip()
+                )
+                st.markdown("### Add or Remove People")
+                st.caption("This list stays editable before and during the event. Add walk-ins or remove people, then save the updated tracking list.")
+                people_manager_filter = st.selectbox(
+                    "Filter people by manager",
+                    people_manager_options,
+                    key=f"event_people_manager_{selected_event_id}",
+                )
+                if people_manager_filter == "All managers":
+                    filtered_choice_ids = creator_choices["creator_id"].astype(str).tolist()
+                else:
+                    filtered_choice_ids = creator_choices.loc[
+                        people_manager_values.astype(str) == people_manager_filter,
+                        "creator_id",
+                    ].astype(str).tolist()
+                addable_ids = [creator_id for creator_id in filtered_choice_ids if creator_id not in current_ids]
+                people_to_add = st.multiselect(
+                    "Select people to add",
+                    addable_ids,
+                    format_func=lambda value: creator_label_map.get(value, value),
+                    key=f"event_people_add_{selected_event_id}_{people_manager_filter}",
+                    placeholder="Search and select one or more creators",
+                )
+                add_column, remove_column = st.columns(2)
+                with add_column:
+                    if st.button("Add selected people", type="primary", key=f"add_event_creators_{selected_event_id}", use_container_width=True):
+                        add_event_participants(selected_event_id, people_to_add, creator_choices)
+                        updated_total = len(set(current_ids).union(people_to_add))
+                        st.success(f"Added {len(people_to_add)} creator(s). {updated_total} people are now tracked.")
+                        st.rerun()
+                with remove_column:
+                    people_to_remove = st.multiselect(
+                        "Select tracked people to remove",
+                        current_ids,
+                        format_func=lambda value: creator_label_map.get(value, value),
+                        key=f"event_people_remove_{selected_event_id}",
+                        placeholder="Choose people to remove",
                     )
-                if prepare_wheel:
-                    draw_count = min(int(event_winner_count), len(available_wheel_names))
-                    event_winners = pd.Series(available_wheel_names).sample(n=draw_count).tolist()
-                    saved_id = save_event_drawing(
-                        selected_event_id,
-                        sorted(set(event_wheel_exclusions).union(prior_event_winners)),
-                        available_wheel_names,
-                        event_winners,
-                    )
-                    st.session_state[f"selected_event_drawing_{selected_event_id}"] = saved_id
-                    st.rerun()
-                saved_event_drawings = load_event_drawings(selected_event_id)
-                if not saved_event_drawings.empty:
-                    drawing_labels = {}
-                    for _, drawing_row in saved_event_drawings.iterrows():
-                        created_label = pd.to_datetime(drawing_row["created_at"], utc=True).tz_convert("America/New_York").strftime("%b %-d, %Y %-I:%M %p")
-                        drawing_labels[str(drawing_row["drawing_id"])] = f"{created_label} — {int(drawing_row['winner_count'])} winner(s)"
-                    drawing_ids = list(drawing_labels)
-                    selected_drawing_id = st.selectbox(
-                        "View saved event drawing",
-                        drawing_ids,
-                        index=drawing_ids.index(st.session_state.get(f"selected_event_drawing_{selected_event_id}")) if st.session_state.get(f"selected_event_drawing_{selected_event_id}") in drawing_ids else 0,
-                        format_func=lambda value: drawing_labels[value],
-                        key=f"event_drawing_view_{selected_event_id}",
-                    )
-                    st.session_state[f"selected_event_drawing_{selected_event_id}"] = selected_drawing_id
-                    selected_drawing = saved_event_drawings[saved_event_drawings["drawing_id"].astype(str) == selected_drawing_id].iloc[0]
-                    drawing_candidates = json.loads(selected_drawing["candidates_json"] or "[]")
-                    drawing_winners = json.loads(selected_drawing["winners_json"] or "[]")
-                    drawing_exclusions = json.loads(selected_drawing["excluded_json"] or "[]")
-                    wheel_title = f"{selected_event['event_name']} — Event Winners"
-                    event_wheel_html = _wheel_replay_html(wheel_title, drawing_candidates, drawing_winners)
-                    st.components.v1.html(event_wheel_html, height=650, scrolling=False)
-                    winner_manager_map = dict(zip(results_display["Creator"].astype(str), results_display["Manager"].astype(str)))
-                    event_winner_table = pd.DataFrame({
-                        "Winner number": range(1, len(drawing_winners) + 1),
-                        "Creator": drawing_winners,
-                        "Manager": [winner_manager_map.get(str(name), "Unassigned") for name in drawing_winners],
-                    })
-                    render_read_table(event_winner_table, height=min(360, 90 + len(event_winner_table) * 38))
-                    if drawing_exclusions:
-                        st.caption("Excluded from this drawing: " + ", ".join(drawing_exclusions))
-                    replay_col, winners_col = st.columns(2)
-                    replay_col.download_button(
-                        "Download spinning wheel replay",
-                        event_wheel_html.encode("utf-8"),
-                        file_name=f"{str(selected_event['event_name']).strip().replace(' ', '_')}_wheel_replay.html",
-                        mime="text/html",
-                        key=f"download_event_wheel_{selected_drawing_id}",
-                        use_container_width=True,
-                    )
-                    winners_col.download_button(
-                        "Download winner results",
-                        event_winner_table.to_csv(index=False).encode("utf-8"),
-                        file_name=f"{str(selected_event['event_name']).strip().replace(' ', '_')}_winners.csv",
-                        mime="text/csv",
-                        key=f"download_event_winners_{selected_drawing_id}",
-                        use_container_width=True,
-                    )
-                    event_actor_email = google_signed_in_email()
-                    event_access = load_access_people()
-                    event_actor_role = ""
-                    if event_actor_email and not event_access.empty:
-                        event_actor_match = event_access[
-                            event_access["email"].fillna("").astype(str).str.casefold().eq(event_actor_email.casefold())
-                            & event_access["active"].fillna(False).astype(bool)
-                        ]
-                        if not event_actor_match.empty:
-                            event_actor_role = str(event_actor_match.iloc[0]["role"]).casefold()
-                    if event_actor_role in {"owner", "admin"}:
-                        with st.expander("Admin drawing controls"):
-                            clear_confirmed = st.checkbox(
-                                "I am sure I want to clear these saved winners",
-                                key=f"confirm_clear_event_winners_{selected_drawing_id}",
+                    if st.button("Remove selected people", key=f"remove_event_creators_{selected_event_id}", use_container_width=True):
+                        remove_event_participants(selected_event_id, people_to_remove)
+                        updated_total = max(0, len(current_ids) - len(set(people_to_remove)))
+                        st.success(f"Removed {len(people_to_remove)} creator(s). {updated_total} people remain tracked.")
+                        st.rerun()
+
+                participants = load_event_participants(selected_event_id)
+                st.markdown(f"### People Being Tracked ({len(participants)})")
+                if participants.empty:
+                    st.info("Select creators above, then save the tracking list.")
+                else:
+                    tracked_display = participants[["username", "manager"]].rename(columns={"username": "Creator", "manager": "Manager"})
+                    render_read_table(tracked_display, height=min(520, 80 + len(tracked_display) * 36))
+
+                    snapshots = load_event_snapshots(selected_event_id)
+                    start_snapshot = snapshots[snapshots["phase"].astype(str) == "start"][["creator_id", "diamonds"]].rename(columns={"diamonds": "Starting diamonds"}) if not snapshots.empty else pd.DataFrame(columns=["creator_id", "Starting diamonds"])
+                    end_snapshot = snapshots[snapshots["phase"].astype(str) == "end"][["creator_id", "diamonds"]].rename(columns={"diamonds": "Ending diamonds"}) if not snapshots.empty else pd.DataFrame(columns=["creator_id", "Ending diamonds"])
+                    current_goal = creator_choices[["creator_id", "diamonds"]].copy() if "diamonds" in creator_choices.columns else pd.DataFrame(columns=["creator_id", "diamonds"])
+                    current_goal = current_goal.rename(columns={"diamonds": "Current diamonds"})
+                    results = participants[["creator_id", "username", "manager"]].merge(start_snapshot, on="creator_id", how="left").merge(end_snapshot, on="creator_id", how="left").merge(current_goal, on="creator_id", how="left")
+                    results["Starting diamonds"] = pd.to_numeric(results["Starting diamonds"], errors="coerce")
+                    results["Current diamonds"] = pd.to_numeric(results["Current diamonds"], errors="coerce")
+                    results["Ending diamonds"] = pd.to_numeric(results["Ending diamonds"], errors="coerce")
+                    results["Ending diamonds"] = results["Ending diamonds"].fillna(results["Current diamonds"])
+                    results["Total diamonds earned"] = (results["Ending diamonds"] - results["Starting diamonds"]).clip(lower=0)
+                    results_display = results.rename(columns={"username": "Creator", "manager": "Manager"})
+                    results_display = results_display[["Creator", "Manager", "Starting diamonds", "Ending diamonds", "Total diamonds earned"]].rename(columns={"Ending diamonds": "Current / ending diamonds"}).sort_values("Total diamonds earned", ascending=False)
+                    st.markdown("### Live Event Results")
+                    st.caption("Starting diamonds are saved at the official event start. During a live event, current diamonds show the latest Goal total; after the event, the saved ending snapshot is used.")
+                    filter_left, filter_right = st.columns([2, 1])
+                    with filter_left:
+                        event_creator_search = st.text_input(
+                            "Search people",
+                            placeholder="Search by creator name",
+                            key=f"event_results_search_{selected_event_id}",
+                        )
+                    with filter_right:
+                        event_manager_options = ["All managers"] + sorted(
+                            manager for manager in results_display["Manager"].fillna("Unassigned").astype(str).unique()
+                            if manager.strip()
+                        )
+                        event_manager_filter = st.selectbox(
+                            "Manager",
+                            event_manager_options,
+                            key=f"event_results_manager_{selected_event_id}",
+                        )
+                    filtered_event_results = results_display.copy()
+                    if event_creator_search.strip():
+                        filtered_event_results = filtered_event_results[
+                            filtered_event_results["Creator"].fillna("").astype(str).str.contains(
+                                event_creator_search.strip(), case=False, na=False
                             )
-                            if st.button(
-                                "Clear these winners",
-                                key=f"clear_event_winners_{selected_drawing_id}",
-                                disabled=not clear_confirmed,
-                                use_container_width=True,
-                            ):
-                                delete_event_drawing(selected_event_id, selected_drawing_id)
-                                st.session_state.pop(f"selected_event_drawing_{selected_event_id}", None)
-                                st.rerun()
+                        ]
+                    if event_manager_filter != "All managers":
+                        filtered_event_results = filtered_event_results[
+                            filtered_event_results["Manager"].fillna("Unassigned").astype(str) == event_manager_filter
+                        ]
+                    total_battle_diamonds = int(results_display["Total diamonds earned"].fillna(0).sum())
+                    result_a, result_b, result_c = st.columns(3)
+                    result_a.metric("People shown", len(filtered_event_results))
+                    result_b.metric("Total diamonds earned", f"{total_battle_diamonds:,}")
+                    result_c.metric("Snapshots", f"{'Start' if not start_snapshot.empty else 'Waiting'} / {'End' if not end_snapshot.empty else 'Waiting'}")
+                    st.markdown("#### People and Live Diamond Counts")
+                    if filtered_event_results.empty:
+                        st.info("No tracked people match the current search and manager filters.")
+                    else:
+                        event_card_rows = filtered_event_results.reset_index(drop=True)
+                        for card_start in range(0, len(event_card_rows), 4):
+                            card_columns = st.columns(4)
+                            for card_offset, card_column in enumerate(card_columns):
+                                card_index = card_start + card_offset
+                                if card_index >= len(event_card_rows):
+                                    continue
+                                card_row = event_card_rows.iloc[card_index]
+                                earned_raw = pd.to_numeric(card_row.get("Total diamonds earned"), errors="coerce")
+                                current_raw = pd.to_numeric(card_row.get("Current / ending diamonds"), errors="coerce")
+                                earned_value = int(earned_raw) if pd.notna(earned_raw) else 0
+                                current_value = int(current_raw) if pd.notna(current_raw) else 0
+                                with card_column:
+                                    st.metric(
+                                        str(card_row.get("Creator", "Creator")),
+                                        f"{earned_value:,}",
+                                        help="Diamonds earned during this event so far.",
+                                    )
+                                    st.caption(
+                                        f"{str(card_row.get('Manager', 'Unassigned')) or 'Unassigned'} · "
+                                        f"Current diamonds: {current_value:,}"
+                                    )
+                    render_read_table(filtered_event_results, height=min(650, 100 + len(filtered_event_results) * 38))
+                    st.download_button(
+                        "Download event results",
+                        filtered_event_results.to_csv(index=False).encode("utf-8"),
+                        file_name=f"{str(selected_event['event_name']).strip().replace(' ', '_')}_results.csv",
+                        mime="text/csv",
+                        key=f"download_event_{selected_event_id}",
+                    )
+
+
+                    st.markdown("### Event Winner Wheel")
+                    st.caption("Available on every event. Exclude any number of people, choose how many random winners to draw, and download the completed wheel replay for posting.")
+                    wheel_names = sorted({str(name).strip() for name in results_display["Creator"].fillna("") if str(name).strip()})
+                    saved_event_drawings = load_event_drawings(selected_event_id)
+                    prior_event_winners = set()
+                    if not saved_event_drawings.empty:
+                        for saved_winners in saved_event_drawings["winners_json"].fillna("[]"):
+                            try:
+                                prior_event_winners.update(str(name) for name in json.loads(saved_winners))
+                            except (TypeError, ValueError, json.JSONDecodeError):
+                                continue
+                    with st.form(key=f"event_wheel_setup_{selected_event_id}", clear_on_submit=False):
+                        event_wheel_exclusions = st.multiselect(
+                            "Exclude people from this drawing",
+                            wheel_names,
+                            key=f"event_wheel_exclusions_{selected_event_id}",
+                            help="Select as many people as needed. Winners from earlier spins for this event are excluded automatically.",
+                        )
+                        available_wheel_names = [
+                            name for name in wheel_names
+                            if name not in set(event_wheel_exclusions) and name not in prior_event_winners
+                        ]
+                        if prior_event_winners:
+                            st.caption("Already selected and automatically excluded: " + ", ".join(sorted(prior_event_winners)))
+                        if event_wheel_exclusions:
+                            st.caption("Manually excluded: " + ", ".join(event_wheel_exclusions))
+                        maximum_winners = max(1, min(20, len(available_wheel_names)))
+                        winner_count_key = f"event_winner_count_{selected_event_id}"
+                        stored_winner_count = int(st.session_state.get(winner_count_key, min(2, maximum_winners)) or 1)
+                        if stored_winner_count > maximum_winners or stored_winner_count < 1:
+                            st.session_state[winner_count_key] = min(2, maximum_winners)
+                        event_winner_count = st.number_input(
+                            "Number of random winners",
+                            min_value=1,
+                            max_value=maximum_winners,
+                            value=min(2, maximum_winners),
+                            step=1,
+                            key=winner_count_key,
+                            disabled=not available_wheel_names,
+                        )
+                        st.markdown(f"**{len(available_wheel_names):,} names available for this wheel.**")
+                        if available_wheel_names:
+                            st.caption("Make all exclusions and choose the winner count, then press Prepare wheel once.")
+                        else:
+                            st.info("No names remain in this event's wheel pool.")
+                        prepare_wheel = st.form_submit_button(
+                            "Prepare wheel",
+                            type="primary",
+                            disabled=not available_wheel_names,
+                            use_container_width=True,
+                        )
+                    if prepare_wheel:
+                        draw_count = min(int(event_winner_count), len(available_wheel_names))
+                        event_winners = pd.Series(available_wheel_names).sample(n=draw_count).tolist()
+                        saved_id = save_event_drawing(
+                            selected_event_id,
+                            sorted(set(event_wheel_exclusions).union(prior_event_winners)),
+                            available_wheel_names,
+                            event_winners,
+                        )
+                        st.session_state[f"selected_event_drawing_{selected_event_id}"] = saved_id
+                        st.rerun()
+                    saved_event_drawings = load_event_drawings(selected_event_id)
+                    if not saved_event_drawings.empty:
+                        drawing_labels = {}
+                        for _, drawing_row in saved_event_drawings.iterrows():
+                            created_label = pd.to_datetime(drawing_row["created_at"], utc=True).tz_convert("America/New_York").strftime("%b %-d, %Y %-I:%M %p")
+                            drawing_labels[str(drawing_row["drawing_id"])] = f"{created_label} — {int(drawing_row['winner_count'])} winner(s)"
+                        drawing_ids = list(drawing_labels)
+                        selected_drawing_id = st.selectbox(
+                            "View saved event drawing",
+                            drawing_ids,
+                            index=drawing_ids.index(st.session_state.get(f"selected_event_drawing_{selected_event_id}")) if st.session_state.get(f"selected_event_drawing_{selected_event_id}") in drawing_ids else 0,
+                            format_func=lambda value: drawing_labels[value],
+                            key=f"event_drawing_view_{selected_event_id}",
+                        )
+                        st.session_state[f"selected_event_drawing_{selected_event_id}"] = selected_drawing_id
+                        selected_drawing = saved_event_drawings[saved_event_drawings["drawing_id"].astype(str) == selected_drawing_id].iloc[0]
+                        drawing_candidates = json.loads(selected_drawing["candidates_json"] or "[]")
+                        drawing_winners = json.loads(selected_drawing["winners_json"] or "[]")
+                        drawing_exclusions = json.loads(selected_drawing["excluded_json"] or "[]")
+                        wheel_title = f"{selected_event['event_name']} — Event Winners"
+                        event_wheel_html = _wheel_replay_html(wheel_title, drawing_candidates, drawing_winners)
+                        st.components.v1.html(event_wheel_html, height=650, scrolling=False)
+                        winner_manager_map = dict(zip(results_display["Creator"].astype(str), results_display["Manager"].astype(str)))
+                        event_winner_table = pd.DataFrame({
+                            "Winner number": range(1, len(drawing_winners) + 1),
+                            "Creator": drawing_winners,
+                            "Manager": [winner_manager_map.get(str(name), "Unassigned") for name in drawing_winners],
+                        })
+                        render_read_table(event_winner_table, height=min(360, 90 + len(event_winner_table) * 38))
+                        if drawing_exclusions:
+                            st.caption("Excluded from this drawing: " + ", ".join(drawing_exclusions))
+                        replay_col, winners_col = st.columns(2)
+                        replay_col.download_button(
+                            "Download spinning wheel replay",
+                            event_wheel_html.encode("utf-8"),
+                            file_name=f"{str(selected_event['event_name']).strip().replace(' ', '_')}_wheel_replay.html",
+                            mime="text/html",
+                            key=f"download_event_wheel_{selected_drawing_id}",
+                            use_container_width=True,
+                        )
+                        winners_col.download_button(
+                            "Download winner results",
+                            event_winner_table.to_csv(index=False).encode("utf-8"),
+                            file_name=f"{str(selected_event['event_name']).strip().replace(' ', '_')}_winners.csv",
+                            mime="text/csv",
+                            key=f"download_event_winners_{selected_drawing_id}",
+                            use_container_width=True,
+                        )
+                        event_actor_email = google_signed_in_email()
+                        event_access = load_access_people()
+                        event_actor_role = ""
+                        if event_actor_email and not event_access.empty:
+                            event_actor_match = event_access[
+                                event_access["email"].fillna("").astype(str).str.casefold().eq(event_actor_email.casefold())
+                                & event_access["active"].fillna(False).astype(bool)
+                            ]
+                            if not event_actor_match.empty:
+                                event_actor_role = str(event_actor_match.iloc[0]["role"]).casefold()
+                        if event_actor_role in {"owner", "admin"}:
+                            with st.expander("Admin drawing controls"):
+                                clear_confirmed = st.checkbox(
+                                    "I am sure I want to clear these saved winners",
+                                    key=f"confirm_clear_event_winners_{selected_drawing_id}",
+                                )
+                                if st.button(
+                                    "Clear these winners",
+                                    key=f"clear_event_winners_{selected_drawing_id}",
+                                    disabled=not clear_confirmed,
+                                    use_container_width=True,
+                                ):
+                                    delete_event_drawing(selected_event_id, selected_drawing_id)
+                                    st.session_state.pop(f"selected_event_drawing_{selected_event_id}", None)
+                                    st.rerun()
 
 
     with scouting_tab:
