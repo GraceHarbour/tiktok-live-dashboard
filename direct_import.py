@@ -54,14 +54,22 @@ def import_goals(cursor, candidate: dict[str, object]) -> tuple[int, int]:
             """insert into goal_creators
                (creator_id, username, manager, manager_name, group_name, diamonds,
                 valid_live_days, valid_live_hours, estimated_bonus, tier_status,
-                rank_up_progress, activeness_level, live_now)
-               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                rank_up_progress, activeness_level, live_now,
+                diamonds_display, valid_live_days_display, valid_live_duration_display,
+                bonus_display, rank_up_detail, activeness_display)
+               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 creator_id, username, manager, manager, manager, diamonds,
                 number(row.get("valid_live_days")), live_hours(row.get("valid_live_duration")),
                 number(row.get("bonus")), first_line(row.get("tier_status") or row.get("tier")),
                 first_line(row.get("rank_up_status")), number(row.get("activeness")),
                 int(bool(row.get("is_live"))),
+                str(row.get("diamonds_display") or row.get("diamonds") or "").strip(),
+                str(row.get("valid_live_days_display") or row.get("valid_live_days") or "").strip(),
+                str(row.get("valid_live_duration_display") or row.get("valid_live_duration") or "").strip(),
+                str(row.get("bonus_display") or row.get("bonus") or "").strip(),
+                str(row.get("rank_up_detail") or "").strip(),
+                str(row.get("activeness_display") or row.get("activeness") or "").strip(),
             ),
         )
         summaries[manager]["diamonds"] += diamonds 

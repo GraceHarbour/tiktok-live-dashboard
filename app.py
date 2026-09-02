@@ -1714,7 +1714,7 @@ def main():
                     })
                     if include_manager:
                         output.insert(2, "Manager", frame["_manager"].fillna("").astype(str).values)
-                    return output.sort_values("Diamonds", ascending=False)
+                    return output.assign(_sort_diamonds=numeric_series(frame, "diamonds").values).sort_values("_sort_diamonds", ascending=False).drop(columns="_sort_diamonds")
 
                 def goal_section(title, frame, empty_message, include_manager=False):
                     with st.container(border=True):
