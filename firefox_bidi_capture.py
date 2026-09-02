@@ -113,12 +113,19 @@ def click_next_page(bidi: Bidi, context: str, total: int) -> bool:
             f"""(() => {{
                 const pagination = Array.from(document.querySelectorAll('.semi-table-pagination-outer'))
                     .find(node => new RegExp('of\\\\s*{total}\\\\b').test(node.innerText || ''));
-                const next = pagination && pagination.querySelector(
-                    'button[aria-label="Next"]:not(:disabled), '
-                    + '[role="button"][aria-label="Next"]:not([aria-disabled="true"])'
-                );
-                if (!next) return false;
-                next.click();
+        const active = pagination && pagination.querySelector(
+          '.semi-page-item-active, [aria-current="page"]'
+        );
+        const nextNumber = active ? Number((active.innerText || '').trim()) + 1 : NaN;
+        const direct = Number.isFinite(nextNumber)
+          ? pagination.querySelector('[aria-label="Page ' + nextNumber + '"]')
+          : null;
+        const next = direct || (pagination && pagination.querySelector(
+          '.semi-page-next:not(.semi-page-item-disabled), '
+          + 'button[aria-label="Next page"]:not(:disabled)'
+        ));
+        if (!next) return false;
+        next.click();
                 return true;
             }})()""",
         )
@@ -208,20 +215,25 @@ def main() -> int:
             output.with_name("firefox-creator-pagination-diagnostics.json").write_text(
                 json.dumps(pagination_diagnostics(bidi, context), indent=2), encoding="utf-8"
             )
+            current_lines = [line.strip() for line in text.splitlines() if line.strip()]
+            current_action = current_lines.index("Action")
+            current_creator_marker = tuple(current_lines[current_action + 1:current_action + 3])
             if not click_next_page(bidi, context, total):
                 raise RuntimeError(f"Firefox could not advance past Creator page ending at {end}.")
             next_deadline = time.time() + 30
             while time.time() < next_deadline:
                 next_text = str(evaluate(bidi, context, "document.body ? document.body.innerText : ''"))
                 next_range = page_range(next_text)
-                if next_range and next_range[0] > _start:
-                    # Pagination updates before the virtualized table rows.
-                    time.sleep(2)
-                    text = str(evaluate(bidi, context, "document.body ? document.body.innerText : ''"))
-                    break
-                time.sleep(1)
+                next_lines = [line.strip() for line in next_text.splitlines() if line.strip()]
+                if next_range and next_range[0] > _start and "Action" in next_lines:
+                    next_action = next_lines.index("Action")
+                    next_creator_marker = tuple(next_lines[next_action + 1:next_action + 3])
+                    if next_creator_marker != current_creator_marker:
+                        text = next_text
+                        break
+                time.sleep(0.25)
             else:
-                raise RuntimeError(f"Firefox did not load the Creator page after {end}.")
+                    raise RuntimeError(f"Firefox did not load the Creator page after {end}.")
         output.write_text(pages[0]["text"], encoding="utf-8")
         output.with_name("firefox-creator-layout.json").write_text(
             json.dumps(pages[0]["layout"]), encoding="utf-8"

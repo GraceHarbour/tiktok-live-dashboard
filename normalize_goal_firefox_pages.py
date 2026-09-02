@@ -20,6 +20,24 @@ for page in pages:
         if len(item) < 14 or 'Email' not in item or 'Group' not in item:
             raise RuntimeError(f'Unexpected Creator row: {item!r}')
         email_at, group_at = item.index('Email'), item.index('Group')
+        avatar_url = ''
+        creator_nodes = [
+            node for node in page.get('layout', [])
+            if node.get('text') == item[0] and 300 <= float(node.get('x', 0)) <= 520
+        ]
+        if creator_nodes:
+            creator_y = float(creator_nodes[0].get('y', 0))
+            avatar_candidates = [
+                image for image in page.get('images', [])
+                if 250 <= float(image.get('x', 0)) <= 520
+                and abs(float(image.get('y', 0)) - creator_y) <= 45
+                and image.get('src')
+            ]
+            if avatar_candidates:
+                avatar_url = min(
+                    avatar_candidates,
+                    key=lambda image: abs(float(image.get('y', 0)) - creator_y),
+                )['src']
         if email_at < 2 or group_at != email_at + 2 or len(item) < group_at + 9:
             raise RuntimeError(f'Unexpected Creator fields: {item!r}')
         tail = item[group_at + 2:]

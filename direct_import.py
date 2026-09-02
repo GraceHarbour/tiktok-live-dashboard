@@ -57,7 +57,7 @@ def import_goals(cursor, candidate: dict[str, object]) -> tuple[int, int]:
                 rank_up_progress, activeness_level, live_now,
                 diamonds_display, valid_live_days_display, valid_live_duration_display,
                 bonus_display, rank_up_detail, activeness_display, avatar_url)
-               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 creator_id, username, manager, manager, manager, diamonds,
                 number(row.get("valid_live_days")), live_hours(row.get("valid_live_duration")),
