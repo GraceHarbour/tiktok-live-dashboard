@@ -562,7 +562,10 @@ def delete_community_event(event_id):
 
 
 def load_event_drawings(event_id):
-    with get_engine().connect() as connection:
+    engine = get_engine()
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE IF NOT EXISTS community_event_drawings (drawing_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, excluded_json TEXT NOT NULL, candidates_json TEXT NOT NULL, winners_json TEXT NOT NULL, winner_count INTEGER NOT NULL, created_at TEXT NOT NULL)"))
+    with engine.connect() as connection:
         return pd.read_sql(
             text("SELECT * FROM community_event_drawings WHERE event_id = :event_id ORDER BY created_at DESC"),
             connection,
