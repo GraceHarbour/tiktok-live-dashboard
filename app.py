@@ -980,7 +980,7 @@ def business_records(frame):
         values = payload.get("row") or []
         if not headers or not values:
             continue
-        row = {str(header): values[index] if index < len(values) else "" for index, header in enumerate(headers)}
+        row = {"Picture": str(payload.get("profile_url") or ""), **{str(header): values[index] if index < len(values) else "" for index, header in enumerate(headers)}}
         row["Section"] = str(source.get("section") or "Business Essentials")
         if str(row.get("Record type", "")).casefold() == "overview":
             continue
