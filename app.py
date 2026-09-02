@@ -1238,7 +1238,7 @@ def main():
         # a visitor request: it can block a Streamlit session behind a database lock.
         managers = load_goal_managers()
         creators = load_goal_creators()
-        business_source = load_business_essentials() if requested_main_tab in {"Dashboard", "Business Essentials"} else pd.DataFrame()
+        business_source = load_business_essentials() if requested_main_tab in {"Dashboard", "Business Essentials", "Creator Focus"} else pd.DataFrame()
         access_people = load_access_people() if requested_main_tab == "Access & Data" else pd.DataFrame()
         monthly_metrics = load_monthly_metrics() if requested_main_tab in {"Dashboard", "Goal Management"} else pd.DataFrame()
         manager_logo_files = {"agency":"agency-logo.png","chersade":"cher.jpg","ladykmo":"ladykmo.jpg","glittersunfun":"glittersunfun.jpg","joedickerson":"joe-dickerson.jpg","leslieclark":"leslie-clark.jpg","oglittlesouthernguyandgal":"og-little-southern-guy-and-gal.jpg","pap":"pap.jpg","tonipeters":"toni-peters.jpg","lacie":"lacie.jpg","ariana":"ariana.jpg","arianasahm":"ariana.jpg","amazinggrace":"amazinggrace.jpg","amazinggraceof3":"amazinggrace.jpg"}
