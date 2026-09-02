@@ -1438,7 +1438,7 @@ def main():
                             unsafe_allow_html=True,
                         )
 
-                    focus_one, focus_today, focus_two, focus_three = st.columns(4)
+                    focus_one, focus_today = st.columns(2)
                     focus_card(
                         focus_one,
                         "Current Diamonds",
@@ -1453,6 +1453,7 @@ def main():
                         "#64d8ff",
                         "Current total minus the last successful 8:00 PM Eastern Goal update",
                     )
+                    focus_two, focus_three = st.columns(2)
                     focus_card(
                         focus_two,
                         "Minimum Diamond Goal",
