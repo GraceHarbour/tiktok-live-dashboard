@@ -435,7 +435,10 @@ def load_goal_creators():
 
 @st.cache_data(ttl=60)
 def load_goal_diamond_snapshots():
-    with get_engine().connect() as connection:
+    engine = get_engine()
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE IF NOT EXISTS goal_diamond_snapshots (captured_at TEXT PRIMARY KEY, total_diamonds BIGINT NOT NULL, source_file TEXT, creator_rows INTEGER)"))
+    with engine.connect() as connection:
         return pd.read_sql(text("SELECT captured_at, total_diamonds FROM goal_diamond_snapshots ORDER BY captured_at"), connection)
 
 
@@ -2592,20 +2595,22 @@ def main():
                 if event_wheel_exclusions:
                     st.caption("Manually excluded: " + ", ".join(event_wheel_exclusions))
                 maximum_winners = max(1, min(20, len(available_wheel_names)))
+                winner_count_key = f"event_winner_count_{selected_event_id}"
+                stored_winner_count = int(st.session_state.get(winner_count_key, min(2, maximum_winners)) or 1)
+                if stored_winner_count > maximum_winners or stored_winner_count < 1:
+                    st.session_state[winner_count_key] = min(2, maximum_winners)
                 event_winner_count = st.number_input(
                     "Number of random winners",
                     min_value=1,
                     max_value=maximum_winners,
                     value=min(2, maximum_winners),
                     step=1,
-                    key=f"event_winner_count_{selected_event_id}",
+                    key=winner_count_key,
                     disabled=not available_wheel_names,
                 )
                 st.markdown(f"**{len(available_wheel_names):,} names available for this wheel.**")
-                if available_wheel_names and saved_event_drawings.empty:
-                    preview_title = f"{selected_event['event_name']} — Event Winner Wheel"
-                    preview_wheel_html = _wheel_replay_html(preview_title, available_wheel_names, [])
-                    st.components.v1.html(preview_wheel_html, height=650, scrolling=False)
+                if available_wheel_names:
+                    st.caption("Choose the winner count, then prepare the wheel. The wheel opens below and waits for you to press Spin for Winner 1, Winner 2, and each following winner.")
                 else:
                     st.info("No names remain in this event's wheel pool.")
                 if st.button(
