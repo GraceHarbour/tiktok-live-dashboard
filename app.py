@@ -1707,7 +1707,6 @@ def main():
                         "Diamonds": frame.get("diamonds_display", numeric_series(frame, "diamonds").astype("int64")),
                         "Valid go LIVE days": frame.get("valid_live_days_display", numeric_series(frame, "valid_live_days").astype("int64")),
                         "Valid LIVE duration": frame.get("valid_live_duration_display", numeric_series(frame, "valid_live_hours").map(lambda value: f"{value:g}h")),
-                        "Estimated bonus": frame.get("bonus_display", numeric_series(frame, "estimated_bonus").map(lambda value: "$" + f"{value:,.2f}")),
                         "Tier": frame.get("tier_status", pd.Series("", index=frame.index)),
                         "Rank-up incentive progress": frame.get("rank_up_progress", pd.Series("", index=frame.index)),
                         "Rank-up requirement": frame.get("rank_up_detail", pd.Series("", index=frame.index)),
