@@ -304,12 +304,13 @@ def capture_grid(page, source: str, goal_view: str, visible_text: str) -> dict[s
         text.strip()
         for text in grid.locator('[role="columnheader"], th, [class*="header"], [class*="Header"]').all_inner_texts()
     ]
-    if source == "goals" and goal_view == "creators" and not any("creator" in header.lower() for header in headers):
-        # Use only the columns shown in the Creator view. Do not invent a
-        # manager, email, or ID column that Backstage did not present.
+    if source == "goals" and goal_view == "creators":
+        # TikTok renders nested/duplicate header elements. Use the fixed visible
+        # Creator-grid order so every captured cell stays aligned.
         headers = [
-            "Creator", "Diamonds", "Valid go LIVE days", "Valid LIVE duration",
-            "Bonus contribution", "Tier", "Activeness",
+            "Creator", "Manager", "Diamonds", "Valid go LIVE days",
+            "Valid LIVE duration", "Estimated bonus", "Tier",
+            "Rank-up incentive progress", "Activeness level", "Action",
         ]
     if source == "scouting_applied":
         headers = ["Creator", "Applied to join", "Last 30 days data", "Assigned to", "Source", "Leads expire in", "Leads added", "Action"]

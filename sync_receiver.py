@@ -53,6 +53,8 @@ def hours(value: object) -> float:
 
 def display_tier_status(outcome: str, tier: str) -> str:
     lowered = outcome.casefold()
+    if "/" in outcome:
+        return outcome
     if "ranked up" in lowered:
         return f"Ranked up to {tier.casefold()}" if tier else "Ranked up"
     if "maintain" in lowered and "not" not in lowered:
@@ -84,7 +86,8 @@ def creator_frames(payload: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFra
     if indexes["creator"] is None:
         raise ValueError("Snapshot is missing the Creator column.")
     if indexes["tier_status"] is None:
-        raise ValueError("Snapshot is missing the Tier status column.")
+        # Current TikTok Creator view combines status and tier in the Tier cell.
+        indexes["tier_status"] = indexes["tier"]
 
     records: list[dict[str, object]] = []
     for raw in rows:
