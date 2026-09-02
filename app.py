@@ -624,6 +624,14 @@ def save_event_drawing(event_id, excluded_names, candidate_names, winner_names):
         )
     return drawing_id
 
+
+def delete_event_drawing(event_id, drawing_id):
+    with get_engine().begin() as connection:
+        connection.execute(
+            text("DELETE FROM community_event_drawings WHERE event_id = :event_id AND drawing_id = :drawing_id"),
+            {"event_id": str(event_id), "drawing_id": str(drawing_id)},
+        )
+
 def numeric_series(frame, column):
     if column not in frame.columns:
         return pd.Series(0, index=frame.index, dtype="float64")
@@ -2666,6 +2674,31 @@ def main():
                         key=f"download_event_winners_{selected_drawing_id}",
                         use_container_width=True,
                     )
+                    event_actor_email = google_signed_in_email()
+                    event_access = load_access_people()
+                    event_actor_role = ""
+                    if event_actor_email and not event_access.empty:
+                        event_actor_match = event_access[
+                            event_access["email"].fillna("").astype(str).str.casefold().eq(event_actor_email.casefold())
+                            & event_access["active"].fillna(False).astype(bool)
+                        ]
+                        if not event_actor_match.empty:
+                            event_actor_role = str(event_actor_match.iloc[0]["role"]).casefold()
+                    if event_actor_role in {"owner", "admin"}:
+                        with st.expander("Admin drawing controls"):
+                            clear_confirmed = st.checkbox(
+                                "I am sure I want to clear these saved winners",
+                                key=f"confirm_clear_event_winners_{selected_drawing_id}",
+                            )
+                            if st.button(
+                                "Clear these winners",
+                                key=f"clear_event_winners_{selected_drawing_id}",
+                                disabled=not clear_confirmed,
+                                use_container_width=True,
+                            ):
+                                delete_event_drawing(selected_event_id, selected_drawing_id)
+                                st.session_state.pop(f"selected_event_drawing_{selected_event_id}", None)
+                                st.rerun()
 
 
     with scouting_tab:
