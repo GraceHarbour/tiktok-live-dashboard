@@ -2527,6 +2527,12 @@ def main():
                     disabled=not available_wheel_names,
                 )
                 st.markdown(f"**{len(available_wheel_names):,} names available for this wheel.**")
+                if available_wheel_names:
+                    preview_title = f"{selected_event['event_name']} — Event Winner Wheel"
+                    preview_wheel_html = _wheel_replay_html(preview_title, available_wheel_names, [])
+                    st.components.v1.html(preview_wheel_html, height=650, scrolling=False)
+                else:
+                    st.info("No names remain in this event's wheel pool.")
                 if st.button(
                     "Spin wheel and select winners",
                     type="primary",
