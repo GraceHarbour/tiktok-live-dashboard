@@ -25,6 +25,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
 import yaml
 from pathlib import Path
 from dotenv import load_dotenv
@@ -2302,10 +2303,12 @@ def main():
                     event_end = pd.to_datetime(event_row["end_at"], utc=True).tz_convert("America/New_York")
                     event_labels[str(event_row["event_id"])] = f"{event_row['event_name']} • {event_start:%b %d, %Y %I:%M %p}–{event_end:%I:%M %p} ET"
                 event_ids = list(event_labels)
-                preferred_event = st.session_state.get("selected_community_event")
+                preferred_event = st.session_state.get("selected_community_event") or st.query_params.get("event")
                 selected_index = event_ids.index(preferred_event) if preferred_event in event_ids else 0
                 selected_event_id = st.selectbox("Choose event", event_ids, index=selected_index, format_func=lambda value: event_labels[value], key="community_event_selector")
                 st.session_state["selected_community_event"] = selected_event_id
+            if st.query_params.get("event") != selected_event_id:
+                st.query_params["event"] = selected_event_id
 
         if selected_event_id:
             selected_event = events[events["event_id"].astype(str) == str(selected_event_id)].iloc[0]
@@ -2859,6 +2862,9 @@ def main():
                                 st.rerun()
                             except Exception:
                                 st.error("That account could not be restored. Please try again.")
+
+
+    _install_refresh_state_memory()
 
 
 if __name__ == "__main__":

@@ -357,7 +357,12 @@ def _event_section(engine, classified: pd.DataFrame, manager_names: list[str], m
         st.info("No reward distribution events have been scheduled yet.")
         return
     events["label"] = events.apply(lambda r: f"{r['event_name']} — {pd.Timestamp(r['scheduled_at']).tz_convert(eastern).strftime('%b %-d, %Y, %-I:%M %p')} to {pd.Timestamp(r['ends_at']).tz_convert(eastern).strftime('%-I:%M %p') if pd.notna(r['ends_at']) else 'end time not set'} ({r['manager_name']})", axis=1)
-    selected_label = st.selectbox("View reward event", events["label"].tolist())
+    reward_event_labels = events["label"].tolist()
+    saved_reward_event = st.query_params.get("reward_event")
+    reward_event_index = reward_event_labels.index(saved_reward_event) if saved_reward_event in reward_event_labels else 0
+    selected_label = st.selectbox("View reward event", reward_event_labels, index=reward_event_index)
+    if st.query_params.get("reward_event") != selected_label:
+        st.query_params["reward_event"] = selected_label
     event = events[events["label"] == selected_label].iloc[0]
     event_id = int(event["id"])
 
@@ -612,8 +617,13 @@ def _drawing_wheel_section(engine, month_key: str, drawing_lists: dict[str, pd.D
     st.markdown("### Spin Wheel Drawing")
     st.caption("Choose a qualifying list. Drawing 1 selects 3 winners; Drawings 2 and 3 select 1 winner each. Winners are removed from that drawing's future wheel pool for the month.")
     c1, c2, c3 = st.columns([1.2, 1.4, 0.8])
-    drawing_label = c1.selectbox("Drawing list", list(drawing_lists), key="monthly_wheel_list")
+    drawing_options = list(drawing_lists)
+    saved_drawing_list = st.query_params.get("drawing_list")
+    drawing_index = drawing_options.index(saved_drawing_list) if saved_drawing_list in drawing_options else 0
+    drawing_label = c1.selectbox("Drawing list", drawing_options, index=drawing_index, key="monthly_wheel_list")
     drawing_label = st.session_state.get("monthly_wheel_list", drawing_label)
+    if st.query_params.get("drawing_list") != drawing_label:
+        st.query_params["drawing_list"] = drawing_label
     prize_name = {"Drawing 1": "$50 Choice", "Drawing 2": "Interstellar — $100", "Drawing 3": "Leopard — $150"}.get(drawing_label, drawing_label)
     c2.metric("Prize", prize_name)
     spin_count = {"Drawing 1": 3, "Drawing 2": 1, "Drawing 3": 1}.get(drawing_label, 1)
