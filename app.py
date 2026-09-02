@@ -25,7 +25,6 @@ import requests
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-import streamlit.components.v1 as components
 import yaml
 from pathlib import Path
 from dotenv import load_dotenv
@@ -1041,50 +1040,10 @@ def download_frame_csv(frame: pd.DataFrame, label: str, file_name: str, key: str
     )
 
 
-def _install_refresh_state_memory() -> None:
-    """Restore the active main/sub-tab after a full browser refresh."""
-    components.html(
-        """
-<script>
-(() => {
-  const key = "ghm-dashboard-tab-state-v1";
-  let saved = {};
-  try { saved = JSON.parse(window.parent.localStorage.getItem(key) || "{}"); } catch (_) {}
-  const doc = window.parent.document;
-  const groups = () => Array.from(doc.querySelectorAll('[data-testid="stTabs"]'));
-  const label = (tab) => (tab.innerText || tab.textContent || "").trim();
-  const remember = () => {
-    const next = {};
-    groups().forEach((group) => {
-      const tabs = Array.from(group.querySelectorAll('[role="tab"]'));
-      const signature = tabs.map(label).join("|");
-      const active = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
-      if (signature && active) next[signature] = label(active);
-    });
-    try { window.parent.localStorage.setItem(key, JSON.stringify(next)); } catch (_) {}
-  };
-  const restore = () => groups().forEach((group) => {
-    const tabs = Array.from(group.querySelectorAll('[role="tab"]'));
-    const wanted = saved[tabs.map(label).join("|")];
-    const target = tabs.find((tab) => label(tab) === wanted);
-    if (target && target.getAttribute("aria-selected") !== "true") target.click();
-    tabs.forEach((tab) => {
-      if (!tab.dataset.ghmRefreshMemory) {
-        tab.dataset.ghmRefreshMemory = "1";
-        tab.addEventListener("click", () => window.setTimeout(remember, 0));
-      }
-    });
-  });
-  let attempts = 0;
-  const timer = window.setInterval(() => {
-    restore();
-    if (++attempts >= 40) window.clearInterval(timer);
-  }, 125);
-})();
-</script>
-        """,
-        height=0,
-    )
+def _remember_tab_state(widget_key: str, query_key: str) -> None:
+    selected = st.session_state.get(widget_key)
+    if selected:
+        st.query_params[query_key] = selected
 
 
 def main():
@@ -1257,7 +1216,7 @@ def main():
 
 
 
-    manager_tab, goals_tab, business_tab, maintenance_tab, battle_tab, rewards_tab, event_tab, scouting_tab, prior_month_tab, tier_guide_tab, access_tab = st.tabs([
+    main_tab_labels = [
         "Dashboard",
         "Goal Management",
         "Business Essentials",
@@ -1269,7 +1228,16 @@ def main():
         "Goal Management Prior Month",
         "Tier & Level Guide",
         "Access & Data",
-    ])
+    ]
+    remembered_main_tab = st.query_params.get("tab")
+    default_main_tab = remembered_main_tab if remembered_main_tab in main_tab_labels else "Dashboard"
+    manager_tab, goals_tab, business_tab, maintenance_tab, battle_tab, rewards_tab, event_tab, scouting_tab, prior_month_tab, tier_guide_tab, access_tab = st.tabs(
+        main_tab_labels,
+        default=default_main_tab,
+        key="main_dashboard_tabs",
+        on_change=_remember_tab_state,
+        args=("main_dashboard_tabs", "tab"),
+    )
 
 
 
@@ -2756,7 +2724,16 @@ def main():
                     }, index=display_frame.index)
                 st.markdown("<div class='gh-scout-table'>" + display_frame.to_html(index=False, escape=True) + "</div>", unsafe_allow_html=True)
 
-            applied_scouting_tab, invitation_scouting_tab = st.tabs(["⚡ Applied — Quick Response", "Invitations"])
+            scouting_tab_labels = ["⚡ Applied — Quick Response", "Invitations"]
+            remembered_scouting_tab = st.query_params.get("scouting_tab")
+            default_scouting_tab = remembered_scouting_tab if remembered_scouting_tab in scouting_tab_labels else scouting_tab_labels[0]
+            applied_scouting_tab, invitation_scouting_tab = st.tabs(
+                scouting_tab_labels,
+                default=default_scouting_tab,
+                key="scouting_detail_tabs",
+                on_change=_remember_tab_state,
+                args=("scouting_detail_tabs", "scouting_tab"),
+            )
             with applied_scouting_tab:
                 render_scouting_source("scouting_applied", "Applied")
             with invitation_scouting_tab:
@@ -2908,9 +2885,6 @@ def main():
                                 st.rerun()
                             except Exception:
                                 st.error("That account could not be restored. Please try again.")
-
-
-    _install_refresh_state_memory()
 
 
 if __name__ == "__main__":

@@ -829,7 +829,16 @@ def _render_monthly_prizes(engine, creators: pd.DataFrame, manager_names: list[s
 
 
 def render_monthly_mission_rewards(engine, creators: pd.DataFrame, manager_names: list[str]) -> None:
-    mission_tab, prizes_tab = st.tabs(["Mission Rewards", "Monthly Prizes"])
+    reward_tab_labels = ["Mission Rewards", "Monthly Prizes"]
+    remembered_reward_tab = st.query_params.get("reward_tab")
+    default_reward_tab = remembered_reward_tab if remembered_reward_tab in reward_tab_labels else "Mission Rewards"
+    mission_tab, prizes_tab = st.tabs(
+        reward_tab_labels,
+        default=default_reward_tab,
+        key="monthly_reward_tabs",
+        on_change=_remember_tab_state,
+        args=("monthly_reward_tabs", "reward_tab"),
+    )
     with mission_tab:
         _render_mission_rewards(engine, creators, manager_names)
     with prizes_tab:
