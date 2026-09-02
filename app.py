@@ -1295,6 +1295,12 @@ def main():
                         / focus_elapsed_reporting_days
                         * focus_total_reporting_days
                     ) if focus_current_diamonds and focus_elapsed_reporting_days > 0 else 0.0
+                    focus_remaining_reporting_days = max(0, focus_total_reporting_days - focus_elapsed_reporting_days)
+                    focus_daily_divisor = max(1, focus_remaining_reporting_days)
+                    focus_minimum_gap = max(0, int(focus_minimum_goal) - focus_current_diamonds)
+                    focus_total_gap = max(0, int(focus_total_goal) - focus_current_diamonds)
+                    focus_minimum_daily_needed = ((focus_minimum_gap + focus_daily_divisor - 1) // focus_daily_divisor) if focus_minimum_goal > 0 else 0
+                    focus_total_daily_needed = ((focus_total_gap + focus_daily_divisor - 1) // focus_daily_divisor) if focus_total_goal > 0 else 0
                     if focus_elapsed_reporting_days == 0:
                         focus_diamond_color = "#6ee7ff"
                         focus_diamond_status = "Pacing begins after the first completed 8:00 PM read"
@@ -1393,8 +1399,20 @@ def main():
                         focus_diamond_color,
                         f"{focus_diamond_status} • Projected month-end {focus_projected_diamonds:,.2f}",
                     )
-                    focus_card(focus_two, "Minimum Diamond Goal", f"{focus_minimum_goal:,}", "#f5c542", "15% above prior month")
-                    focus_card(focus_three, "Total Diamond Goal", f"{focus_total_goal:,}", "#f5c542", "Agency monthly target")
+                    focus_card(
+                        focus_two,
+                        "Minimum Diamond Goal",
+                        f"{focus_minimum_goal:,}",
+                        "#f5c542",
+                        f"Need {focus_minimum_daily_needed:,} diamonds per remaining day • {focus_remaining_reporting_days} days left",
+                    )
+                    focus_card(
+                        focus_three,
+                        "Total Diamond Goal",
+                        f"{focus_total_goal:,}",
+                        "#f5c542",
+                        f"Need {focus_total_daily_needed:,} diamonds per remaining day • {focus_remaining_reporting_days} days left",
+                    )
                     focus_four, focus_five = st.columns(2)
                     focus_card(focus_four, "Maintenance Level", f"{focus_maintenance_rate:.2f}%", focus_maintenance_color, f"{focus_maintenance_status} • Green at 50%")
                     focus_card(focus_five, "Current Graduation Rate", f"{focus_graduation_rate:.2f}%", focus_graduation_color, f"{focus_reached_count:,} current • 15% goal {focus_graduation_goal:,} • Need {focus_graduation_needed:,} more")
