@@ -1441,7 +1441,7 @@ def main():
                     focus_one, focus_two, focus_three, focus_today = st.columns(4)
                     focus_card(
                         focus_one,
-                        "Monthly Diamonds",
+                        "Current Diamonds",
                         f"{focus_current_diamonds:,}",
                         focus_diamond_color,
                         f"{focus_diamond_status} • Projected month-end {focus_projected_diamonds:,.2f}",
