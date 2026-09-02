@@ -26,6 +26,12 @@ MILESTONES = [
 ]
 
 
+def _remember_tab_state(widget_key: str, query_key: str) -> None:
+    selected = st.session_state.get(widget_key)
+    if selected:
+        st.query_params[query_key] = selected
+
+
 def _ensure_tables(engine) -> None:
     with engine.begin() as connection:
         connection.execute(text("""
