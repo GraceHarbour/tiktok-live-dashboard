@@ -1041,6 +1041,52 @@ def download_frame_csv(frame: pd.DataFrame, label: str, file_name: str, key: str
     )
 
 
+def _install_refresh_state_memory() -> None:
+    """Restore the active main/sub-tab after a full browser refresh."""
+    components.html(
+        """
+<script>
+(() => {
+  const key = "ghm-dashboard-tab-state-v1";
+  let saved = {};
+  try { saved = JSON.parse(window.parent.localStorage.getItem(key) || "{}"); } catch (_) {}
+  const doc = window.parent.document;
+  const groups = () => Array.from(doc.querySelectorAll('[data-testid="stTabs"]'));
+  const label = (tab) => (tab.innerText || tab.textContent || "").trim();
+  const remember = () => {
+    const next = {};
+    groups().forEach((group) => {
+      const tabs = Array.from(group.querySelectorAll('[role="tab"]'));
+      const signature = tabs.map(label).join("|");
+      const active = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
+      if (signature && active) next[signature] = label(active);
+    });
+    try { window.parent.localStorage.setItem(key, JSON.stringify(next)); } catch (_) {}
+  };
+  const restore = () => groups().forEach((group) => {
+    const tabs = Array.from(group.querySelectorAll('[role="tab"]'));
+    const wanted = saved[tabs.map(label).join("|")];
+    const target = tabs.find((tab) => label(tab) === wanted);
+    if (target && target.getAttribute("aria-selected") !== "true") target.click();
+    tabs.forEach((tab) => {
+      if (!tab.dataset.ghmRefreshMemory) {
+        tab.dataset.ghmRefreshMemory = "1";
+        tab.addEventListener("click", () => window.setTimeout(remember, 0));
+      }
+    });
+  });
+  let attempts = 0;
+  const timer = window.setInterval(() => {
+    restore();
+    if (++attempts >= 40) window.clearInterval(timer);
+  }, 125);
+})();
+</script>
+        """,
+        height=0,
+    )
+
+
 def main():
     st.markdown(
         """
