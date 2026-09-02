@@ -1638,11 +1638,14 @@ def main():
             selected_manager_rows = managers if goal_manager_choice == "All managers" else managers[managers["_manager"] == goal_manager_choice]
             new_creators = monthly_metric_value(monthly_metrics, "new_creators", int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0)
 
-            first, second, third, fourth = st.columns(4)
+            goal_visible_total = int(visible_diamonds.sum())
+            goal_diamonds_today, goal_daily_baseline = diamonds_since_daily_cutoff(int(numeric_series(creators, "diamonds").sum()))
+            first, second, third, fourth, eighth = st.columns(5)
             first.metric("Creators", f"{len(visible):,}")
-            second.metric("Diamonds", f"{int(visible_diamonds.sum()):,}")
-            third.metric("New creators", f"{new_creators:,}")
-            fourth.metric("Above 200k diamonds", f"{above_200k:,}")
+            second.metric("Total Diamonds", f"{goal_visible_total:,}")
+            third.metric("Diamonds Today", f"{goal_diamonds_today:,}", help="Agency diamonds earned since the previous 8:00 PM Eastern cutoff.")
+            fourth.metric("New creators", f"{new_creators:,}")
+            eighth.metric("Above 200k diamonds", f"{above_200k:,}")
 
             fifth, sixth, seventh = st.columns(3)
 
