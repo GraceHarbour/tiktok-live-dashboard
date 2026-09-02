@@ -487,11 +487,19 @@ def diamonds_since_daily_cutoff(current_total):
 
 
 
+
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def cached_wheel_replay_html(title, candidates, winners):
+    return _wheel_replay_html(title, list(candidates), list(winners))
+
+@st.cache_data(ttl=30, show_spinner=False)
 def load_community_events():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT * FROM community_events ORDER BY start_at DESC"), connection)
 
 
+@st.cache_data(ttl=30, show_spinner=False)
 def load_event_participants(event_id):
     with get_engine().connect() as connection:
         return pd.read_sql(
@@ -501,6 +509,7 @@ def load_event_participants(event_id):
         )
 
 
+@st.cache_data(ttl=30, show_spinner=False)
 def load_event_snapshots(event_id):
     with get_engine().connect() as connection:
         return pd.read_sql(
@@ -593,10 +602,9 @@ def delete_community_event(event_id):
 
 
 
+@st.cache_data(ttl=30, show_spinner=False)
 def load_event_drawings(event_id):
     engine = get_engine()
-    with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE IF NOT EXISTS community_event_drawings (drawing_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, excluded_json TEXT NOT NULL, candidates_json TEXT NOT NULL, winners_json TEXT NOT NULL, winner_count INTEGER NOT NULL, created_at TEXT NOT NULL)"))
     with engine.connect() as connection:
         return pd.read_sql(
             text("SELECT * FROM community_event_drawings WHERE event_id = :event_id ORDER BY created_at DESC"),
@@ -2383,6 +2391,8 @@ def main():
                         else:
                             new_event_id = create_community_event(event_name.strip(), start_local.tz_convert("UTC").isoformat(), end_local.tz_convert("UTC").isoformat())
                             save_event_participants(new_event_id, initial_creator_ids, event_creator_choices)
+                            load_community_events.clear()
+                            load_event_participants.clear()
                             st.session_state["selected_community_event"] = new_event_id
                             st.session_state["community_event_form_version"] = event_form_version + 1
                             st.success(f"Event scheduled with {len(initial_creator_ids)} tracked creator(s). Complete Goal snapshots will save automatically.")
@@ -2435,6 +2445,10 @@ def main():
                             use_container_width=True,
                         ):
                             delete_community_event(selected_event_id)
+                            load_community_events.clear()
+                            load_event_participants.clear()
+                            load_event_snapshots.clear()
+                            load_event_drawings.clear()
                             st.session_state.pop("selected_community_event", None)
                             st.success("Event deleted.")
                             st.rerun()
@@ -2483,6 +2497,7 @@ def main():
                     with add_column:
                         if st.button("Add selected people", type="primary", key=f"add_event_creators_{selected_event_id}", use_container_width=True):
                             add_event_participants(selected_event_id, people_to_add, creator_choices)
+                            load_event_participants.clear()
                             updated_total = len(set(current_ids).union(people_to_add))
                             st.success(f"Added {len(people_to_add)} creator(s). {updated_total} people are now tracked.")
                             st.rerun()
@@ -2496,6 +2511,7 @@ def main():
                         )
                         if st.button("Remove selected people", key=f"remove_event_creators_{selected_event_id}", use_container_width=True):
                             remove_event_participants(selected_event_id, people_to_remove)
+                            load_event_participants.clear()
                             updated_total = max(0, len(current_ids) - len(set(people_to_remove)))
                             st.success(f"Removed {len(people_to_remove)} creator(s). {updated_total} people remain tracked.")
                             st.rerun()
@@ -2652,6 +2668,7 @@ def main():
                                 available_wheel_names,
                                 event_winners,
                             )
+                            load_event_drawings.clear()
                             st.session_state[f"selected_event_drawing_{selected_event_id}"] = saved_id
                             st.rerun()
                         saved_event_drawings = load_event_drawings(selected_event_id)
@@ -2674,7 +2691,7 @@ def main():
                             drawing_winners = json.loads(selected_drawing["winners_json"] or "[]")
                             drawing_exclusions = json.loads(selected_drawing["excluded_json"] or "[]")
                             wheel_title = f"{selected_event['event_name']} — Event Winners"
-                            event_wheel_html = _wheel_replay_html(wheel_title, drawing_candidates, drawing_winners)
+                            event_wheel_html = cached_wheel_replay_html(wheel_title, tuple(drawing_candidates), tuple(drawing_winners))
                             st.components.v1.html(event_wheel_html, height=650, scrolling=False)
                             winner_manager_map = dict(zip(results_display["Creator"].astype(str), results_display["Manager"].astype(str)))
                             event_winner_table = pd.DataFrame({
