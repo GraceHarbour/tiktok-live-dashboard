@@ -2580,46 +2580,47 @@ def main():
                             prior_event_winners.update(str(name) for name in json.loads(saved_winners))
                         except (TypeError, ValueError, json.JSONDecodeError):
                             continue
-                event_wheel_exclusions = st.multiselect(
-                    "Exclude people from this drawing",
-                    wheel_names,
-                    key=f"event_wheel_exclusions_{selected_event_id}",
-                    help="Select as many people as needed. Winners from earlier spins for this event are excluded automatically.",
-                )
-                available_wheel_names = [
-                    name for name in wheel_names
-                    if name not in set(event_wheel_exclusions) and name not in prior_event_winners
-                ]
-                if prior_event_winners:
-                    st.caption("Already selected and automatically excluded: " + ", ".join(sorted(prior_event_winners)))
-                if event_wheel_exclusions:
-                    st.caption("Manually excluded: " + ", ".join(event_wheel_exclusions))
-                maximum_winners = max(1, min(20, len(available_wheel_names)))
-                winner_count_key = f"event_winner_count_{selected_event_id}"
-                stored_winner_count = int(st.session_state.get(winner_count_key, min(2, maximum_winners)) or 1)
-                if stored_winner_count > maximum_winners or stored_winner_count < 1:
-                    st.session_state[winner_count_key] = min(2, maximum_winners)
-                event_winner_count = st.number_input(
-                    "Number of random winners",
-                    min_value=1,
-                    max_value=maximum_winners,
-                    value=min(2, maximum_winners),
-                    step=1,
-                    key=winner_count_key,
-                    disabled=not available_wheel_names,
-                )
-                st.markdown(f"**{len(available_wheel_names):,} names available for this wheel.**")
-                if available_wheel_names:
-                    st.caption("Choose the winner count, then prepare the wheel. The wheel opens below and waits for you to press Spin for Winner 1, Winner 2, and each following winner.")
-                else:
-                    st.info("No names remain in this event's wheel pool.")
-                if st.button(
-                    "Spin wheel and select winners",
-                    type="primary",
-                    key=f"spin_event_wheel_{selected_event_id}",
-                    disabled=not available_wheel_names,
-                    use_container_width=True,
-                ):
+                with st.form(key=f"event_wheel_setup_{selected_event_id}", clear_on_submit=False):
+                    event_wheel_exclusions = st.multiselect(
+                        "Exclude people from this drawing",
+                        wheel_names,
+                        key=f"event_wheel_exclusions_{selected_event_id}",
+                        help="Select as many people as needed. Winners from earlier spins for this event are excluded automatically.",
+                    )
+                    available_wheel_names = [
+                        name for name in wheel_names
+                        if name not in set(event_wheel_exclusions) and name not in prior_event_winners
+                    ]
+                    if prior_event_winners:
+                        st.caption("Already selected and automatically excluded: " + ", ".join(sorted(prior_event_winners)))
+                    if event_wheel_exclusions:
+                        st.caption("Manually excluded: " + ", ".join(event_wheel_exclusions))
+                    maximum_winners = max(1, min(20, len(available_wheel_names)))
+                    winner_count_key = f"event_winner_count_{selected_event_id}"
+                    stored_winner_count = int(st.session_state.get(winner_count_key, min(2, maximum_winners)) or 1)
+                    if stored_winner_count > maximum_winners or stored_winner_count < 1:
+                        st.session_state[winner_count_key] = min(2, maximum_winners)
+                    event_winner_count = st.number_input(
+                        "Number of random winners",
+                        min_value=1,
+                        max_value=maximum_winners,
+                        value=min(2, maximum_winners),
+                        step=1,
+                        key=winner_count_key,
+                        disabled=not available_wheel_names,
+                    )
+                    st.markdown(f"**{len(available_wheel_names):,} names available for this wheel.**")
+                    if available_wheel_names:
+                        st.caption("Make all exclusions and choose the winner count, then press Prepare wheel once.")
+                    else:
+                        st.info("No names remain in this event's wheel pool.")
+                    prepare_wheel = st.form_submit_button(
+                        "Prepare wheel",
+                        type="primary",
+                        disabled=not available_wheel_names,
+                        use_container_width=True,
+                    )
+                if prepare_wheel:
                     draw_count = min(int(event_winner_count), len(available_wheel_names))
                     event_winners = pd.Series(available_wheel_names).sample(n=draw_count).tolist()
                     saved_id = save_event_drawing(
@@ -2630,7 +2631,6 @@ def main():
                     )
                     st.session_state[f"selected_event_drawing_{selected_event_id}"] = saved_id
                     st.rerun()
-
                 saved_event_drawings = load_event_drawings(selected_event_id)
                 if not saved_event_drawings.empty:
                     drawing_labels = {}
