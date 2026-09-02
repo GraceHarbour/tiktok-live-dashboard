@@ -1233,7 +1233,13 @@ def main():
         creators = load_goal_creators()
         business_source = load_business_essentials() if requested_main_tab in {"Dashboard", "Business Essentials"} else pd.DataFrame()
         access_people = load_access_people() if requested_main_tab == "Access & Data" else pd.DataFrame()
-        monthly_metrics = load_monthly_metrics() if requested_main_tab == "Dashboard" else pd.DataFrame()
+        monthly_metrics = load_monthly_metrics() if requested_main_tab in {"Dashboard", "Goal Management"} else pd.DataFrame()
+        manager_logo_files = {"agency":"agency-logo.png","chersade":"cher.jpg","ladykmo":"ladykmo.jpg","glittersunfun":"glittersunfun.jpg","joedickerson":"joe-dickerson.jpg","leslieclark":"leslie-clark.jpg","oglittlesouthernguyandgal":"og-little-southern-guy-and-gal.jpg","pap":"pap.jpg","tonipeters":"toni-peters.jpg","lacie":"lacie.jpg","ariana":"ariana.jpg","arianasahm":"ariana.jpg","amazinggrace":"amazinggrace.jpg","amazinggraceof3":"amazinggrace.jpg"}
+        maintenance_data = pd.DataFrame()
+        if requested_main_tab == "Creator Focus":
+            maintenance_payloads = pd.read_sql(text("SELECT payload FROM maintenance_rate_rows ORDER BY row_index"), get_engine())
+            if not maintenance_payloads.empty:
+                maintenance_data = pd.DataFrame(maintenance_payloads["payload"].tolist())
     except Exception as exc:
         print(f"DASHBOARD_BOOT_FAILURE class={type(exc).__name__} sqlstate={getattr(getattr(exc, 'orig', None), 'sqlstate', None)} detail={exc}")
         st.error("The dashboard could not read its data store. Please try refreshing in a moment.")
