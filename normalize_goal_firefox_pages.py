@@ -50,6 +50,7 @@ for page in pages:
         rows.append({
             'creator': item[0],
             'creator_id': item[1] if item[1].isdigit() else item[0].casefold(),
+            'avatar_url': avatar_url,
             'manager': item[2] if email_at > 2 else 'Unassigned',
             'manager_role': ' '.join(item[3:email_at]) if email_at > 3 else '',
             'manager_email': item[email_at + 1],

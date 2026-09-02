@@ -56,7 +56,7 @@ def import_goals(cursor, candidate: dict[str, object]) -> tuple[int, int]:
                 valid_live_days, valid_live_hours, estimated_bonus, tier_status,
                 rank_up_progress, activeness_level, live_now,
                 diamonds_display, valid_live_days_display, valid_live_duration_display,
-                bonus_display, rank_up_detail, activeness_display)
+                bonus_display, rank_up_detail, activeness_display, avatar_url)
                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 creator_id, username, manager, manager, manager, diamonds,
@@ -70,6 +70,7 @@ def import_goals(cursor, candidate: dict[str, object]) -> tuple[int, int]:
                 str(row.get("bonus_display") or row.get("bonus") or "").strip(),
                 str(row.get("rank_up_detail") or "").strip(),
                 str(row.get("activeness_display") or row.get("activeness") or "").strip(),
+                str(row.get("avatar_url") or "").strip(),
             ),
         )
         summaries[manager]["diamonds"] += diamonds 

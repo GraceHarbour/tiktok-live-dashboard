@@ -83,6 +83,14 @@ def visible_layout(bidi: Bidi, context: str) -> list[dict[str, Any]]:
     return json.loads(raw)
 
 
+def visible_images(bidi: Bidi, context: str) -> list[dict[str, Any]]:
+    raw = str(evaluate(bidi, context, """JSON.stringify([...document.images]
+      .map(img => { const r=img.getBoundingClientRect(); return {src: img.currentSrc || img.src,
+        x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height)}; })
+      .filter(i => i.src && i.width > 0 && i.height > 0))"""))
+    return json.loads(raw)
+
+
 def page_range(text: str) -> tuple[int, int, int] | None:
     matches = re.findall(r"Showing\s+(\d+)\s*(?:-|to)\s*(\d+)\s+of\s+(\d+)", text, re.I)
     if matches:
@@ -192,7 +200,7 @@ def main() -> int:
             showing = page_range(text)
             if not showing:
                 raise RuntimeError("Firefox did not expose the Creator pagination range.")
-            pages.append({"showing": showing, "text": text, "layout": visible_layout(bidi, context)})
+            pages.append({"showing": showing, "text": text, "layout": visible_layout(bidi, context), "images": visible_images(bidi, context)})
             pages_output.write_text(json.dumps(pages), encoding="utf-8")
             _start, end, total = showing
             if end >= total:
