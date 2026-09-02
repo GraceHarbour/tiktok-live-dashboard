@@ -1438,7 +1438,7 @@ def main():
                             unsafe_allow_html=True,
                         )
 
-                    focus_one, focus_two, focus_three, focus_today = st.columns(4)
+                    focus_one, focus_today, focus_two, focus_three = st.columns(4)
                     focus_card(
                         focus_one,
                         "Current Diamonds",
