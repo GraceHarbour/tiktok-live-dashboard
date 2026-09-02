@@ -196,6 +196,11 @@ def replace_dashboard_data(engine, creators, managers, source_name):
             text("INSERT INTO data_updates VALUES (:updated_at,:source_file,:creator_rows)"),
             {"updated_at": now.isoformat(), "source_file": source_name, "creator_rows": int(len(creators))},
         )
+        connection.execute(text("CREATE TABLE IF NOT EXISTS goal_diamond_snapshots (captured_at TEXT PRIMARY KEY, total_diamonds BIGINT NOT NULL, source_file TEXT, creator_rows INTEGER)"))
+        connection.execute(
+            text("INSERT INTO goal_diamond_snapshots (captured_at,total_diamonds,source_file,creator_rows) VALUES (:captured_at,:total_diamonds,:source_file,:creator_rows)"),
+            {"captured_at": now.isoformat(), "total_diamonds": int(pd.to_numeric(creators["diamonds"], errors="coerce").fillna(0).sum()), "source_file": source_name, "creator_rows": int(len(creators))},
+        )
 
 
 def creator_data_url():

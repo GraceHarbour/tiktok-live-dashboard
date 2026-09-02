@@ -269,6 +269,7 @@ def ensure_schema():
         "CREATE TABLE IF NOT EXISTS goal_creators (creator_id TEXT PRIMARY KEY, username TEXT, manager TEXT, manager_name TEXT, group_name TEXT, diamonds INTEGER, valid_live_days INTEGER, valid_live_hours REAL, estimated_bonus REAL, tier_status TEXT, rank_up_progress TEXT, activeness_level INTEGER, live_now INTEGER)",
         "CREATE TABLE IF NOT EXISTS goal_managers (manager TEXT PRIMARY KEY, manager_name TEXT, role TEXT, group_name TEXT, diamonds INTEGER, diamond_goal INTEGER, new_creators INTEGER, new_creator_goal INTEGER, managed_creators INTEGER)",
         "CREATE TABLE IF NOT EXISTS data_updates (updated_at TEXT, source_file TEXT, creator_rows INTEGER)",
+        "CREATE TABLE IF NOT EXISTS goal_diamond_snapshots (captured_at TEXT PRIMARY KEY, total_diamonds BIGINT NOT NULL, source_file TEXT, creator_rows INTEGER)",
         "CREATE TABLE IF NOT EXISTS collector_runs (started_at TEXT, finished_at TEXT, status TEXT, detail TEXT, creator_rows INTEGER)",
         "CREATE TABLE IF NOT EXISTS community_events (event_id TEXT PRIMARY KEY, event_name TEXT NOT NULL, start_at TEXT NOT NULL, end_at TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS community_event_participants (event_id TEXT NOT NULL, creator_id TEXT NOT NULL, username TEXT, manager TEXT, added_at TEXT NOT NULL, PRIMARY KEY (event_id, creator_id))",
@@ -430,6 +431,34 @@ def load_goal_managers():
 def load_goal_creators():
     with get_engine().connect() as connection:
         return pd.read_sql(text("SELECT * FROM goal_creators"), connection)
+
+
+@st.cache_data(ttl=60)
+def load_goal_diamond_snapshots():
+    with get_engine().connect() as connection:
+        return pd.read_sql(text("SELECT captured_at, total_diamonds FROM goal_diamond_snapshots ORDER BY captured_at"), connection)
+
+
+def diamonds_since_daily_cutoff(current_total):
+    snapshots = load_goal_diamond_snapshots()
+    if snapshots.empty:
+        return 0, None
+    captured = pd.to_datetime(snapshots["captured_at"], utc=True, errors="coerce")
+    snapshots = snapshots.assign(captured=captured).dropna(subset=["captured"])
+    if snapshots.empty:
+        return 0, None
+    now_et = pd.Timestamp.now(tz="America/New_York")
+    cutoff = now_et.normalize() + pd.Timedelta(hours=20)
+    if now_et < cutoff:
+        cutoff -= pd.Timedelta(days=1)
+    snapshot_et = snapshots["captured"].dt.tz_convert("America/New_York")
+    before = snapshots[snapshot_et <= cutoff]
+    after = snapshots[snapshot_et > cutoff]
+    baseline = before.iloc[-1] if not before.empty else snapshots.iloc[0]
+    if int(baseline["total_diamonds"]) > int(current_total) and not after.empty:
+        baseline = after.iloc[0]
+    earned = max(0, int(current_total) - int(baseline["total_diamonds"]))
+    return earned, baseline["captured"].tz_convert("America/New_York")
 
 
 
@@ -1483,11 +1512,14 @@ def main():
                     st.caption("Manager-specific results. Maintaining/Ranking Up uses 45%/50% thresholds; Graduation uses 10%/15% thresholds.")
 
             st.subheader("Goal Management overview")
-            a, b, c, d = st.columns(4)
+            dashboard_total_diamonds = int(dashboard_diamonds.sum())
+            dashboard_diamonds_today, dashboard_daily_baseline = diamonds_since_daily_cutoff(dashboard_total_diamonds)
+            a, b, c, d, h = st.columns(5)
             a.metric("Creators", f"{len(dashboard_creators):,}")
-            b.metric("Diamonds", f"{int(dashboard_diamonds.sum()):,}")
-            c.metric("New creators", f"{dashboard_new_creators:,}")
-            d.metric("Above 200k diamonds", f"{int(dashboard_diamonds.ge(200_000).sum()):,}")
+            b.metric("Total Diamonds", f"{dashboard_total_diamonds:,}")
+            c.metric("Diamonds Today", f"{dashboard_diamonds_today:,}", help="Diamonds earned since the previous 8:00 PM Eastern cutoff.")
+            d.metric("New creators", f"{dashboard_new_creators:,}")
+            h.metric("Above 200k diamonds", f"{int(dashboard_diamonds.ge(200_000).sum()):,}")
             e, f, g = st.columns(3)
             e.metric("Maintaining tier", f"{int(dashboard_maintained.sum()):,}")
             f.metric("Ranking up", f"{int(dashboard_ranked.sum()):,}")
