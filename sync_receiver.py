@@ -41,6 +41,12 @@ def number(value: object) -> float:
     return float(match.group(0).replace(",", "")) if match else 0.0
 
 
+def progress_value(value: object) -> float:
+    raw = first_line(value)
+    match = re.search(r"progress\s*[-\d.]+%\s*(-?[\d,]+(?:\.\d+)?)", raw, flags=re.I)
+    return float(match.group(1).replace(",", "")) if match else number(raw)
+
+
 def hours(value: object) -> float:
     text = first_line(value)
     result = 0.0
@@ -107,8 +113,8 @@ def creator_frames(payload: dict[str, object]) -> tuple[pd.DataFrame, pd.DataFra
             "manager": manager,
             "manager_name": manager,
             "group_name": "",
-            "diamonds": int(number(value_at(raw, indexes["diamonds"]))),
-            "valid_live_days": int(number(value_at(raw, indexes["days"]))),
+            "diamonds": int(progress_value(value_at(raw, indexes["diamonds"]))),
+            "valid_live_days": int(progress_value(value_at(raw, indexes["days"]))),
             "valid_live_hours": hours(value_at(raw, indexes["duration"])),
             "estimated_bonus": number(value_at(raw, indexes["bonus"])),
             "tier_status": display_tier_status(outcome, tier),

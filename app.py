@@ -1070,7 +1070,14 @@ def render_read_table(frame: pd.DataFrame, *, height: int | None = None) -> None
         return
     visible = frame.copy().fillna("")
     max_height = f"max-height: {height}px;" if height else "max-height: 760px;"
-    html_table = visible.to_html(index=False, escape=True, classes="gh-data-table")
+    if "Picture" in visible.columns:
+        safe = visible.map(lambda value: html_escape(str(value)))
+        safe["Picture"] = visible["Picture"].map(
+            lambda value: f'<img src="{html_escape(str(value), quote=True)}" alt="Creator" style="width:46px;height:46px;border-radius:50%;object-fit:cover;border:2px solid #f5c542">' if str(value).strip() else ""
+        )
+        html_table = safe.to_html(index=False, escape=False, classes="gh-data-table")
+    else:
+        html_table = visible.to_html(index=False, escape=True, classes="gh-data-table")
     st.markdown(f'<div class="gh-data-panel" tabindex="0" aria-label="Scrollable creator data table" style="{max_height}">{html_table}</div>', unsafe_allow_html=True)
 
 
@@ -1684,8 +1691,19 @@ def main():
                 seventh.metric("Tier not maintained", f"{int(not_maintained_mask.sum()):,}")
 
                 def creator_goal_display(frame, include_manager=False):
+                    avatar_rows = pd.DataFrame()
+                    try:
+                        avatar_rows = pd.read_sql(text("SELECT username, avatar_url, captured_at FROM monthly_reward_results WHERE avatar_url <> '' ORDER BY captured_at DESC"), get_engine())
+                    except Exception:
+                        pass
+                    avatar_map = {}
+                    if not avatar_rows.empty:
+                        avatar_rows["_key"] = avatar_rows["username"].fillna("").astype(str).str.strip().str.casefold()
+                        avatar_map = avatar_rows.drop_duplicates("_key").set_index("_key")["avatar_url"].to_dict()
+                    creator_names = frame.get("username", frame.get("creator_id", pd.Series("", index=frame.index))).fillna("").astype(str)
                     output = pd.DataFrame({
-                        "Creator": frame.get("username", frame.get("creator_id", pd.Series("", index=frame.index))),
+                        "Picture": creator_names.str.strip().str.casefold().map(avatar_map).fillna(""),
+                        "Creator": creator_names,
                         "Diamonds": numeric_series(frame, "diamonds").astype("int64"),
                         "Valid go LIVE days": numeric_series(frame, "valid_live_days").astype("int64"),
                         "Valid LIVE duration": numeric_series(frame, "valid_live_hours"),
