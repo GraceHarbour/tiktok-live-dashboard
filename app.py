@@ -1432,13 +1432,21 @@ def main():
                             unsafe_allow_html=True,
                         )
 
-                    focus_one, focus_two, focus_three = st.columns(3)
+                    focus_diamonds_today, focus_daily_baseline = diamonds_since_daily_cutoff(focus_current_diamonds)
+                    focus_one, focus_two, focus_three, focus_today = st.columns(4)
                     focus_card(
                         focus_one,
                         "Current Diamonds",
                         f"{focus_current_diamonds:,}",
                         focus_diamond_color,
                         f"{focus_diamond_status} • Projected month-end {focus_projected_diamonds:,.2f}",
+                    )
+                    focus_card(
+                        focus_today,
+                        "Diamonds Since 8 PM",
+                        f"{focus_diamonds_today:,}",
+                        "#64d8ff",
+                        "Current total minus the last successful 8:00 PM Eastern Goal update",
                     )
                     focus_card(
                         focus_two,
@@ -1525,11 +1533,9 @@ def main():
 
             st.subheader("Goal Management overview")
             dashboard_total_diamonds = int(dashboard_diamonds.sum())
-            dashboard_diamonds_today, dashboard_daily_baseline = diamonds_since_daily_cutoff(dashboard_total_diamonds)
-            a, b, c, d, h = st.columns(5)
+            a, b, d, h = st.columns(4)
             a.metric("Creators", f"{len(dashboard_creators):,}")
             b.metric("Total Diamonds", f"{dashboard_total_diamonds:,}")
-            c.metric("Diamonds Today", f"{dashboard_diamonds_today:,}", help="Diamonds earned since the previous 8:00 PM Eastern cutoff.")
             d.metric("New creators", f"{dashboard_new_creators:,}")
             h.metric("Above 200k diamonds", f"{int(dashboard_diamonds.ge(200_000).sum()):,}")
             e, f, g = st.columns(3)
