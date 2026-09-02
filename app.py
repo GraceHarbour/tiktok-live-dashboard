@@ -1313,6 +1313,12 @@ def main():
                     focus_minimum_goal = monthly_metric_value(monthly_metrics, "minimum_diamond_goal", 0)
                     focus_prior_diamonds = monthly_metric_value(monthly_metrics, "prior_month_diamonds", 0)
                     focus_current_diamonds = int(dashboard_diamonds.sum())
+                    focus_diamonds_today, focus_daily_baseline = diamonds_since_daily_cutoff(focus_current_diamonds)
+                    focus_pacing_diamonds = (
+                        max(0, focus_current_diamonds - focus_diamonds_today)
+                        if focus_daily_baseline is not None
+                        else 0
+                    )
                     focus_today = pd.Timestamp.now(tz="America/New_York")
                     # A reporting day is complete only at the next 8:00 PM ET boundary.
                     # Never project from a partial day.
@@ -1332,10 +1338,10 @@ def main():
                         max(0, int((focus_today - focus_reporting_start).total_seconds() // 86_400)),
                     )
                     focus_projected_diamonds = (
-                        focus_current_diamonds
+                        focus_pacing_diamonds
                         / focus_elapsed_reporting_days
                         * focus_total_reporting_days
-                    ) if focus_current_diamonds and focus_elapsed_reporting_days > 0 else 0.0
+                    ) if focus_pacing_diamonds and focus_elapsed_reporting_days > 0 else 0.0
                     focus_remaining_reporting_days = max(0, focus_total_reporting_days - focus_elapsed_reporting_days)
                     focus_daily_divisor = max(1, focus_remaining_reporting_days)
                     focus_minimum_gap = max(0, int(focus_minimum_goal) - focus_current_diamonds)
@@ -1432,7 +1438,6 @@ def main():
                             unsafe_allow_html=True,
                         )
 
-                    focus_diamonds_today, focus_daily_baseline = diamonds_since_daily_cutoff(focus_current_diamonds)
                     focus_one, focus_two, focus_three, focus_today = st.columns(4)
                     focus_card(
                         focus_one,
