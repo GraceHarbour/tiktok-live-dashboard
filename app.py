@@ -451,14 +451,21 @@ def diamonds_since_daily_cutoff(current_total):
     if snapshots.empty:
         return 0, None
     snapshot_et = snapshots["captured"].dt.tz_convert("America/New_York")
-    reporting_cutoffs = (snapshot_et - pd.Timedelta(hours=20)).dt.normalize() + pd.Timedelta(hours=20)
+    # Goal reads are scheduled at :59 and can finish on either side of 8:00 PM.
+    # Treat the first successful read from 7:45 PM onward as that day's official
+    # 8:00 PM close. This prevents the daily counter from resetting at 8:59 PM.
+    cutoff_capture_window = pd.Timedelta(hours=19, minutes=45)
+    reporting_cutoffs = (
+        (snapshot_et - cutoff_capture_window).dt.normalize()
+        + pd.Timedelta(hours=20)
+    )
     newest_cutoff = reporting_cutoffs.max()
     current_day_reads = snapshots[reporting_cutoffs == newest_cutoff]
     # The first successful goals read in the newest 8:00 PM ET reporting block is official.
     # Later 15-minute reads update Diamonds Today but do not move pacing.
     baseline = current_day_reads.iloc[0] if not current_day_reads.empty else snapshots.iloc[-1]
     earned = max(0, int(current_total) - int(baseline["total_diamonds"]))
-    return earned, baseline["captured"].tz_convert("America/New_York")
+    return earned, newest_cutoff
 
 
 
