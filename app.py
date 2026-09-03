@@ -3190,6 +3190,31 @@ def main():
                 with st.container(border=True):
                     st.markdown(f"#### {str(battle_row['event_name']).replace('[BATTLE] ', '')}")
                     st.markdown(f"**Agency creator:** {creator_names}")
+                event_name = str(battle_row["event_name"])
+                if "throwback thursday" in event_name.lower():
+                    st.caption("No 18+ requirement · Power-ups allowed")
+                with st.expander("Edit tracked creators"):
+                    creator_options = creators.get("creator_id", pd.Series(dtype=str)).dropna().astype(str).tolist()
+                    creator_labels = {
+                        str(row.get("creator_id", "")): f"{row.get('username', row.get('creator_id', 'Unknown'))} — {row.get('manager_name', row.get('manager', 'Unassigned'))}"
+                        for _, row in creators.iterrows()
+                        if str(row.get("creator_id", "")).strip()
+                    }
+                    selected_now = participants.get("creator_id", pd.Series(dtype=str)).dropna().astype(str).tolist()
+                    selected_now = [creator_id for creator_id in selected_now if creator_id in creator_options]
+                    selected_creators = st.multiselect(
+                        "Creators to track",
+                        creator_options,
+                        default=selected_now,
+                        format_func=lambda creator_id: creator_labels.get(str(creator_id), str(creator_id)),
+                        key=f"battle_creator_editor_{battle_row['event_id']}",
+                        placeholder="Search by creator name",
+                    )
+                    if st.button("Save creator assignment", key=f"save_battle_creators_{battle_row['event_id']}", type="primary"):
+                        save_event_participants(str(battle_row["event_id"]), selected_creators, creators)
+                        load_event_participants.clear()
+                        st.success("Tracked creators updated.")
+                        st.rerun()
                     st.markdown(f"**Start:** {start_et:%A, %B %d at %I:%M %p} ET / {start_ct:%I:%M %p} CT")
                     st.markdown(f"**Result read:** {end_et:%I:%M %p} ET / {end_ct:%I:%M %p} CT")
             st.markdown("### Battle Results and Creator Averages")
