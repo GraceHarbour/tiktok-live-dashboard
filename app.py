@@ -5,6 +5,7 @@ import json
 from html import escape as html_escape
 import os
 import re
+import html
 import requests
 
 
@@ -3076,20 +3077,90 @@ def main():
             now_utc = pd.Timestamp.now(tz="UTC")
             upcoming_battles = battle_events[battle_events["_start"].ge(now_utc)].copy() if not battle_events.empty else pd.DataFrame()
             completed_battles = battle_events[battle_events["_end"].lt(now_utc)].copy() if not battle_events.empty else pd.DataFrame()
-            st.markdown("### Current and Future Battles")
-            if upcoming_battles.empty:
-                st.info("No future confirmed battles are scheduled.")
-            else:
-                for _, battle_row in upcoming_battles.iterrows():
-                    start_et = battle_row["_start"].tz_convert("America/New_York")
-                    end_et = battle_row["_end"].tz_convert("America/New_York")
-                    participants = load_event_participants(str(battle_row["event_id"]))
-                    creator_names = ", ".join(participants.get("username", pd.Series(dtype=str)).dropna().astype(str).tolist()) or "No creator selected"
-                    with st.container(border=True):
-                        st.markdown(f"#### {str(battle_row['event_name']).replace('[BATTLE] ', '')}")
-                        st.markdown(f"**Agency creator:** {creator_names}")
-                        st.markdown(f"**Start:** {start_et:%A, %B %d at %I:%M %p} ET")
-                        st.markdown(f"**Result read:** {end_et:%I:%M %p} ET")
+            st.markdown("### Next Battle")
+        if upcoming_battles.empty:
+            st.info("No future confirmed battles are scheduled.")
+        else:
+            next_battle = upcoming_battles.iloc[0]
+            next_start_et = next_battle["_start"].tz_convert("America/New_York")
+            next_end_et = next_battle["_end"].tz_convert("America/New_York")
+            next_participants = load_event_participants(str(next_battle["event_id"]))
+            next_creators = ", ".join(next_participants.get("username", pd.Series(dtype=str)).dropna().astype(str).tolist()) or "Creator match pending"
+            next_title = str(next_battle["event_name"]).replace("[BATTLE] ", "")
+            st.markdown(
+                f"""<div style="padding:22px 24px;border-radius:18px;border:2px solid #48a9ff;background:linear-gradient(135deg,#0b2d52,#161c3b);box-shadow:0 10px 28px rgba(0,0,0,.28);margin-bottom:18px;">
+                <div style="color:#7fc8ff;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">Up Next</div>
+                <div style="color:white;font-size:1.55rem;font-weight:900;margin:5px 0 10px;">{html.escape(next_title)}</div>
+                <div style="color:white;font-size:1.05rem;"><b>{next_start_et:%A, %B %d · %I:%M %p}–{next_end_et:%I:%M %p} ET</b></div>
+                <div style="color:#dcecff;margin-top:6px;">Tracking: {html.escape(next_creators)}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("### Monthly Battle Calendar")
+        if battle_events.empty:
+            st.info("The calendar will appear when battles are scheduled.")
+        else:
+            calendar_frame = battle_events.copy()
+            calendar_frame["_start_et"] = calendar_frame["_start"].dt.tz_convert("America/New_York")
+            calendar_frame["_month"] = calendar_frame["_start_et"].dt.strftime("%Y-%m")
+            month_keys = sorted(calendar_frame["_month"].dropna().unique().tolist())
+            current_month_key = pd.Timestamp.now(tz="America/New_York").strftime("%Y-%m")
+            default_month_index = month_keys.index(current_month_key) if current_month_key in month_keys else max(len(month_keys) - 1, 0)
+            calendar_month = st.selectbox(
+                "Calendar month",
+                month_keys,
+                index=default_month_index,
+                format_func=lambda value: pd.Timestamp(f"{value}-01").strftime("%B %Y"),
+                key="battle_calendar_month",
+            )
+            month_start = pd.Timestamp(f"{calendar_month}-01")
+            month_end = month_start + pd.offsets.MonthEnd(0)
+            first_grid_day = month_start - pd.Timedelta(days=month_start.weekday())
+            last_grid_day = month_end + pd.Timedelta(days=(6 - month_end.weekday()))
+            month_battles = calendar_frame[calendar_frame["_month"].eq(calendar_month)].copy()
+            calendar_cells = []
+            for calendar_day in pd.date_range(first_grid_day, last_grid_day, freq="D"):
+                day_rows = month_battles[month_battles["_start_et"].dt.date.eq(calendar_day.date())]
+                is_selected_month = calendar_day.month == month_start.month
+                entries = []
+                for _, calendar_battle in day_rows.sort_values("_start_et").iterrows():
+                    battle_time = calendar_battle["_start_et"].strftime("%-I:%M %p")
+                    battle_name = str(calendar_battle["event_name"]).replace("[BATTLE] ", "")
+                    entries.append(f'<div class="battle-cal-event"><b>{html.escape(battle_time)}</b><br>{html.escape(battle_name)}</div>')
+                day_class = "battle-cal-day" + ("" if is_selected_month else " outside-month") + (" has-battle" if entries else "")
+                calendar_cells.append(f'<div class="{day_class}"><div class="battle-cal-number">{calendar_day.day}</div>{"".join(entries)}</div>')
+            weekday_headers = "".join(f'<div class="battle-cal-weekday">{day}</div>' for day in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
+            st.markdown(
+                f"""<style>
+                .battle-calendar{{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px;min-width:900px}}
+                .battle-calendar-wrap{{overflow-x:auto;padding-bottom:8px}}
+                .battle-cal-weekday{{color:#a9d8ff;font-weight:900;text-align:center;padding:8px}}
+                .battle-cal-day{{min-height:122px;padding:10px;border-radius:12px;background:#102744;border:1px solid #28537c;color:white}}
+                .battle-cal-day.outside-month{{opacity:.34}}
+                .battle-cal-day.has-battle{{border:2px solid #48a9ff;background:linear-gradient(145deg,#10345c,#201f4a)}}
+                .battle-cal-number{{font-size:1.05rem;font-weight:900;color:#d8ecff;margin-bottom:7px}}
+                .battle-cal-event{{font-size:.82rem;line-height:1.3;background:#075da3;color:white;border-radius:9px;padding:7px;margin-top:6px;box-shadow:0 3px 10px rgba(0,0,0,.2)}}
+                </style><div class="battle-calendar-wrap"><div class="battle-calendar">{weekday_headers}{"".join(calendar_cells)}</div></div>""",
+                unsafe_allow_html=True,
+            )
+            st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern Time.")
+
+
+        st.markdown("### Current and Future Battles")
+        if upcoming_battles.empty:
+            st.info("No future confirmed battles are scheduled.")
+        else:
+            for _, battle_row in upcoming_battles.iterrows():
+                start_et = battle_row["_start"].tz_convert("America/New_York")
+                end_et = battle_row["_end"].tz_convert("America/New_York")
+                participants = load_event_participants(str(battle_row["event_id"]))
+                creator_names = ", ".join(participants.get("username", pd.Series(dtype=str)).dropna().astype(str).tolist()) or "No creator selected"
+                with st.container(border=True):
+                    st.markdown(f"#### {str(battle_row['event_name']).replace('[BATTLE] ', '')}")
+                    st.markdown(f"**Agency creator:** {creator_names}")
+                    st.markdown(f"**Start:** {start_et:%A, %B %d at %I:%M %p} ET")
+                    st.markdown(f"**Result read:** {end_et:%I:%M %p} ET")
             st.markdown("### Battle Results and Creator Averages")
             if battle_events.empty:
                 st.info("Results will appear after a scheduled battle completes.")
