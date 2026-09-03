@@ -3025,47 +3025,57 @@ def main():
                 battle_creator_frame["creator_id"] = battle_creator_frame["creator_id"].astype(str)
                 battle_creator_frame["username"] = battle_creator_frame.get("username", pd.Series("", index=battle_creator_frame.index)).fillna("").astype(str)
                 battle_creator_frame = battle_creator_frame[battle_creator_frame["username"].str.strip().ne("")].drop_duplicates("creator_id")
-            with st.container(border=True):
-                st.markdown("### Add a Future Battle")
-                with st.form("battle_schedule_form", clear_on_submit=True):
-                    battle_form_left, battle_form_middle, battle_form_right = st.columns(3)
-                    with battle_form_left:
-                        battle_title = st.text_input("Battle name", placeholder="Confirmed Battle")
-                        battle_date = st.date_input("Battle date", value=(pd.Timestamp.now(tz="America/New_York") + pd.Timedelta(days=1)).date())
-                    with battle_form_middle:
-                        battle_time_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 15, 30, 45)]
-                        battle_start_text = st.selectbox(
-                            "Start time (ET)",
-                            battle_time_values,
-                            index=battle_time_values.index("20:00"),
-                            format_func=lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0"),
-                        )
-                        battle_opponent = st.text_input("Opponent", placeholder="Opponent username")
-                    with battle_form_right:
-                        battle_creator_options = battle_creator_frame["creator_id"].tolist() if not battle_creator_frame.empty else []
-                        battle_creator_labels = dict(zip(battle_creator_frame["creator_id"], battle_creator_frame["username"])) if battle_creator_options else {}
-                        battle_creator_ids = st.multiselect(
-                            "Agency creator(s) to track",
-                            battle_creator_options,
-                            format_func=lambda value: battle_creator_labels.get(value, value),
-                        )
-                    save_battle = st.form_submit_button("Save battle", type="primary", use_container_width=True)
-                if save_battle:
-                    if not battle_title.strip() or not battle_creator_ids:
-                        st.error("Enter a battle name and select at least one agency creator.")
-                    else:
-                        start_et = pd.Timestamp(f"{battle_date} {battle_start_text}", tz="America/New_York")
-                        end_et = start_et + pd.Timedelta(minutes=30)
-                        event_label = f"[BATTLE] {battle_title.strip()}"
-                        if battle_opponent.strip():
-                            event_label += f" vs {battle_opponent.strip().lstrip('@')}"
-                        battle_event_id = create_community_event(event_label, start_et.tz_convert("UTC").isoformat(), end_et.tz_convert("UTC").isoformat())
-                        save_event_participants(battle_event_id, battle_creator_ids, battle_creator_frame)
-                        load_community_events.clear()
-                        load_event_participants.clear()
-                        load_event_snapshots.clear()
-                        st.success("Battle saved. Start and 30-minute readings are scheduled.")
-                        st.rerun()
+            battle_mtd_diamonds = int(numeric_series(battle_creator_frame, "diamonds").fillna(0).sum()) if not battle_creator_frame.empty else 0
+        st.markdown(
+            f"""<div style="padding:20px 24px;border-radius:18px;border:2px solid #48a9ff;background:linear-gradient(135deg,#0b2d52,#171c3c);box-shadow:0 10px 26px rgba(0,0,0,.25);margin:12px 0 20px;">
+            <div style="color:#a9d8ff;font-size:1rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">Total Diamonds Month to Date</div>
+            <div style="color:white;font-size:2.5rem;font-weight:950;line-height:1.1;margin-top:7px;">{battle_mtd_diamonds:,}</div>
+            <div style="color:#dcecff;margin-top:6px;">Current monthly goal-read total</div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+        with st.container(border=True):
+            st.markdown("### Add a Future Battle")
+            with st.form("battle_schedule_form", clear_on_submit=True):
+                battle_form_left, battle_form_middle, battle_form_right = st.columns(3)
+                with battle_form_left:
+                    battle_title = st.text_input("Battle name", placeholder="Confirmed Battle")
+                    battle_date = st.date_input("Battle date", value=(pd.Timestamp.now(tz="America/New_York") + pd.Timedelta(days=1)).date())
+                with battle_form_middle:
+                    battle_time_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 15, 30, 45)]
+                    battle_start_text = st.selectbox(
+                        "Start time (ET)",
+                        battle_time_values,
+                        index=battle_time_values.index("20:00"),
+                        format_func=lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0"),
+                    )
+                    battle_opponent = st.text_input("Opponent", placeholder="Opponent username")
+                with battle_form_right:
+                    battle_creator_options = battle_creator_frame["creator_id"].tolist() if not battle_creator_frame.empty else []
+                    battle_creator_labels = dict(zip(battle_creator_frame["creator_id"], battle_creator_frame["username"])) if battle_creator_options else {}
+                    battle_creator_ids = st.multiselect(
+                        "Agency creator(s) to track",
+                        battle_creator_options,
+                        format_func=lambda value: battle_creator_labels.get(value, value),
+                    )
+                save_battle = st.form_submit_button("Save battle", type="primary", use_container_width=True)
+            if save_battle:
+                if not battle_title.strip() or not battle_creator_ids:
+                    st.error("Enter a battle name and select at least one agency creator.")
+                else:
+                    start_et = pd.Timestamp(f"{battle_date} {battle_start_text}", tz="America/New_York")
+                    end_et = start_et + pd.Timedelta(minutes=30)
+                    event_label = f"[BATTLE] {battle_title.strip()}"
+                    if battle_opponent.strip():
+                        event_label += f" vs {battle_opponent.strip().lstrip('@')}"
+                    battle_event_id = create_community_event(event_label, start_et.tz_convert("UTC").isoformat(), end_et.tz_convert("UTC").isoformat())
+                    save_event_participants(battle_event_id, battle_creator_ids, battle_creator_frame)
+                    load_community_events.clear()
+                    load_event_participants.clear()
+                    load_event_snapshots.clear()
+                    st.success("Battle saved. Start and 30-minute readings are scheduled.")
+                    st.rerun()
             battle_events = load_community_events()
             if battle_events.empty:
                 battle_events = pd.DataFrame()
