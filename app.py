@@ -2117,6 +2117,16 @@ def main():
                             for _, row in creators[[battle_creator_column, "_manager"]].dropna(subset=[battle_creator_column]).iterrows()
                         }
 
+                focus_maintenance_rows = pd.read_sql(
+                    text("SELECT payload FROM maintenance_rate_rows ORDER BY row_index"),
+                    get_engine(),
+                )
+                maintenance_data = (
+                    pd.DataFrame(focus_maintenance_rows["payload"].tolist())
+                    if not focus_maintenance_rows.empty
+                    else pd.DataFrame()
+                )
+
                 maintenance_battle_rows = []
                 if not maintenance_data.empty:
                     for _, source_row in maintenance_data.iterrows():
