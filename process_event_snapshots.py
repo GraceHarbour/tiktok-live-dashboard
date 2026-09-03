@@ -78,44 +78,30 @@ def main() -> None:
         with connection.cursor() as cursor:
             for statement in SCHEMA:
                 cursor.execute(statement)
-            cursor.execute("SELECT updated_at FROM data_updates ORDER BY updated_at::timestamptz DESC LIMIT 1")
-            update_row = cursor.fetchone()
-            latest_goal_update = parse_utc(update_row[0]) if update_row else None
             cursor.execute("SELECT event_id, event_name, start_at, end_at FROM community_events ORDER BY start_at")
             events = cursor.fetchall()
             for event_id, event_name, start_at, end_at in events:
                 start_value = parse_utc(start_at)
                 end_value = parse_utc(end_at)
-            arm_at = start_value - timedelta(minutes=15)
-            start_read_due = start_value - timedelta(minutes=5)
-            is_battle = str(event_name or "").strip().upper().startswith("[BATTLE]")
-            final_read_due = (
-                start_value + timedelta(minutes=30)
-                if is_battle
-                else end_value + timedelta(minutes=15)
-            )
-            final_read_ready = now >= final_read_due
-            if arm_at <= now < start_read_due:
-                cursor.execute(
-                    "UPDATE community_events SET status = %s WHERE event_id = %s AND status NOT IN ('live', 'completed')",
-                    ("armed", event_id),
-                )
-            if now >= start_read_due:
-                rows = snapshot(cursor, event_id, "start", captured_at)
-                if rows:
-                    captured.append(f"{event_name}: start ({rows} creators)")
-                cursor.execute(
-                    "UPDATE community_events SET status = %s WHERE event_id = %s",
-                    (("completed" if final_read_ready else "live", event_id)),
-                )
-            if final_read_ready:
-                rows = snapshot(cursor, event_id, "end", captured_at)
-                if rows:
-                    captured.append(f"{event_name}: end ({rows} creators)")
-                cursor.execute(
-                    "UPDATE community_events SET status = 'completed' WHERE event_id = %s",
-                    (event_id,),
-                )
+                arm_at = start_value - timedelta(minutes=15)
+                start_read_due = start_value - timedelta(minutes=5)
+                is_battle = str(event_name or "").strip().upper().startswith("[BATTLE]")
+                final_read_due = start_value + timedelta(minutes=30) if is_battle else end_value + timedelta(minutes=15)
+                if now < arm_at:
+                    continue
+                if now < start_read_due:
+                    cursor.execute("UPDATE community_events SET status = 'armed' WHERE event_id = %s AND status NOT IN ('live', 'completed')", (event_id,))
+                    continue
+                start_rows = snapshot(cursor, event_id, "start", captured_at)
+                if start_rows:
+                    captured.append(f"{event_name}: start ({start_rows} creators)")
+                if now < final_read_due:
+                    cursor.execute("UPDATE community_events SET status = 'live' WHERE event_id = %s", (event_id,))
+                    continue
+                end_rows = snapshot(cursor, event_id, "end", captured_at)
+                if end_rows:
+                    captured.append(f"{event_name}: end ({end_rows} creators)")
+                cursor.execute("UPDATE community_events SET status = 'completed' WHERE event_id = %s", (event_id,))
     print("; ".join(captured) if captured else "No event snapshots due.")
 
 
