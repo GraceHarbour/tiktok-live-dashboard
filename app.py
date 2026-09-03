@@ -2163,20 +2163,20 @@ def main():
                         else:
                             pace_status = "Needs help"
                             manager_action = "Increase LIVE time and diamonds"
-                            maintenance_battle_rows.append({
-                                "Priority": pace_status,
-                                "Creator": creator_name,
-                                "Manager": manager_name,
-                                "Manager action": manager_action,
-                                "Current / goal": f"{current_value:,} / {target_value:,}",
-                                "Projected finish": f"{projected_value:,}",
-                                "Still needed": f"{remaining_value:,}",
-                                "Daily pace needed": f"{daily_needed:,}",
-                                "Daily pace gap": f"{daily_gap:,}",
-                                "Valid LIVE days": valid_days,
-                                "_pace_gap": daily_gap,
-                                "_remaining": remaining_value,
-                            })
+                        maintenance_battle_rows.append({
+                            "Priority": pace_status,
+                            "Creator": creator_name,
+                            "Manager": manager_name,
+                            "Manager action": manager_action,
+                            "Current / goal": f"{current_value:,} / {target_value:,}",
+                            "Projected finish": f"{projected_value:,}",
+                            "Still needed": f"{remaining_value:,}",
+                            "Daily pace needed": f"{daily_needed:,}",
+                            "Daily pace gap": f"{daily_gap:,}",
+                            "Valid LIVE days": valid_days,
+                            "_pace_gap": daily_gap,
+                            "_remaining": remaining_value,
+                        })
                 maintenance_battle = pd.DataFrame(maintenance_battle_rows)
 
                 battle_business = business.copy()
