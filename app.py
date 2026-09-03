@@ -455,11 +455,11 @@ def diamonds_since_daily_cutoff(current_total):
     if now_et < cutoff:
         cutoff -= pd.Timedelta(days=1)
     snapshot_et = snapshots["captured"].dt.tz_convert("America/New_York")
-    before = snapshots[snapshot_et <= cutoff]
-    after = snapshots[snapshot_et > cutoff]
-    baseline = before.iloc[-1] if not before.empty else snapshots.iloc[0]
-    if int(baseline["total_diamonds"]) > int(current_total) and not after.empty:
-        baseline = after.iloc[0]
+    before = snapshots[snapshot_et < cutoff]
+    after = snapshots[snapshot_et >= cutoff]
+    # The first successful goals read after 8:00 PM ET is the official day-end baseline.
+    # Later 15-minute reads update Diamonds Today but must not move pacing until tomorrow.
+    baseline = after.iloc[0] if not after.empty else (before.iloc[-1] if not before.empty else snapshots.iloc[0])
     earned = max(0, int(current_total) - int(baseline["total_diamonds"]))
     return earned, baseline["captured"].tz_convert("America/New_York")
 
@@ -1358,7 +1358,7 @@ def main():
                         focus_total_reporting_days = int((focus_reporting_end - focus_reporting_start).total_seconds() / 86_400)
                         focus_elapsed_reporting_days = min(
                             focus_total_reporting_days,
-                            max(0, int((focus_today - focus_reporting_start).total_seconds() // 86_400)),
+                            max(0, int(((focus_daily_baseline or focus_reporting_start) - focus_reporting_start).total_seconds() // 86_400)),
                         )
                         focus_projected_diamonds = (
                             focus_pacing_diamonds
