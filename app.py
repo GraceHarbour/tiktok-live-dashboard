@@ -3019,7 +3019,7 @@ def main():
     if active_main_tab == "Battle Schedule":
         with battle_schedule_tab:
             st.subheader("Battle Schedule")
-            st.caption("All times are Eastern Time. Each tracked creator is captured at battle start and again 30 minutes later from the first successful goal read.")
+            st.caption("All times are shown in Eastern and Central Time. Each tracked creator is captured at battle start and again 30 minutes later from the first successful goal read.")
             battle_creator_frame = creators.copy()
             if not battle_creator_frame.empty and "creator_id" in battle_creator_frame.columns:
                 battle_creator_frame["creator_id"] = battle_creator_frame["creator_id"].astype(str)
@@ -3094,6 +3094,8 @@ def main():
             next_battle = upcoming_battles.iloc[0]
             next_start_et = next_battle["_start"].tz_convert("America/New_York")
             next_end_et = next_battle["_end"].tz_convert("America/New_York")
+            next_start_ct = next_battle["_start"].tz_convert("America/Chicago")
+            next_end_ct = next_battle["_end"].tz_convert("America/Chicago")
             next_participants = load_event_participants(str(next_battle["event_id"]))
             next_creators = ", ".join(next_participants.get("username", pd.Series(dtype=str)).dropna().astype(str).tolist()) or "Creator match pending"
             next_title = str(next_battle["event_name"]).replace("[BATTLE] ", "")
@@ -3101,7 +3103,7 @@ def main():
                 f"""<div style="padding:22px 24px;border-radius:18px;border:2px solid #48a9ff;background:linear-gradient(135deg,#0b2d52,#161c3b);box-shadow:0 10px 28px rgba(0,0,0,.28);margin-bottom:18px;">
                 <div style="color:#7fc8ff;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">Up Next</div>
                 <div style="color:white;font-size:1.55rem;font-weight:900;margin:5px 0 10px;">{html.escape(next_title)}</div>
-                <div style="color:white;font-size:1.05rem;"><b>{next_start_et:%A, %B %d · %I:%M %p}–{next_end_et:%I:%M %p} ET</b></div>
+                <div style="color:white;font-size:1.05rem;"><b>{next_start_et:%A, %B %d · %I:%M %p}–{next_end_et:%I:%M %p} ET / {next_start_ct:%I:%M %p}–{next_end_ct:%I:%M %p} CT</b></div>
                 <div style="color:#dcecff;margin-top:6px;">Tracking: {html.escape(next_creators)}</div>
                 </div>""",
                 unsafe_allow_html=True,
@@ -3135,9 +3137,10 @@ def main():
                 is_selected_month = calendar_day.month == month_start.month
                 entries = []
                 for _, calendar_battle in day_rows.sort_values("_start_et").iterrows():
-                    battle_time = calendar_battle["_start_et"].strftime("%-I:%M %p")
+                    battle_time_et = calendar_battle["_start_et"].strftime("%-I:%M %p")
+                    battle_time_ct = calendar_battle["_start"].tz_convert("America/Chicago").strftime("%-I:%M %p")
                     battle_name = str(calendar_battle["event_name"]).replace("[BATTLE] ", "")
-                    entries.append(f'<div class="battle-cal-event"><b>{html.escape(battle_time)}</b><br>{html.escape(battle_name)}</div>')
+                    entries.append(f'<div class="battle-cal-event"><b>{html.escape(battle_time_et)} ET / {html.escape(battle_time_ct)} CT</b><br>{html.escape(battle_name)}</div>')
                 day_class = "battle-cal-day" + ("" if is_selected_month else " outside-month") + (" has-battle" if entries else "")
                 calendar_cells.append(f'<div class="{day_class}"><div class="battle-cal-number">{calendar_day.day}</div>{"".join(entries)}</div>')
             weekday_headers = "".join(f'<div class="battle-cal-weekday">{day}</div>' for day in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
@@ -3154,7 +3157,7 @@ def main():
                 </style><div class="battle-calendar-wrap"><div class="battle-calendar">{weekday_headers}{"".join(calendar_cells)}</div></div>""",
                 unsafe_allow_html=True,
             )
-            st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern Time.")
+            st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern and Central Time.")
 
 
         st.markdown("### Current and Future Battles")
@@ -3169,8 +3172,8 @@ def main():
                 with st.container(border=True):
                     st.markdown(f"#### {str(battle_row['event_name']).replace('[BATTLE] ', '')}")
                     st.markdown(f"**Agency creator:** {creator_names}")
-                    st.markdown(f"**Start:** {start_et:%A, %B %d at %I:%M %p} ET")
-                    st.markdown(f"**Result read:** {end_et:%I:%M %p} ET")
+                    st.markdown(f"**Start:** {start_et:%A, %B %d at %I:%M %p} ET / {start_ct:%I:%M %p} CT")
+                    st.markdown(f"**Result read:** {end_et:%I:%M %p} ET / {end_ct:%I:%M %p} CT")
             st.markdown("### Battle Results and Creator Averages")
             if battle_events.empty:
                 st.info("Results will appear after a scheduled battle completes.")
