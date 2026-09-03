@@ -1999,6 +1999,70 @@ def main():
                         "Status": status,
                     })
 
+                maintenance_now = pd.Timestamp.now(tz="America/New_York")
+                maintenance_month_start = maintenance_now.normalize().replace(day=1)
+                maintenance_cycle_start = maintenance_month_start - pd.Timedelta(hours=4)
+                maintenance_cycle_end = maintenance_month_start + pd.offsets.MonthBegin(1) - pd.Timedelta(hours=4)
+                maintenance_total_days = max(int((maintenance_cycle_end - maintenance_cycle_start).total_seconds() // 86_400), 1)
+                maintenance_completed_days = min(
+                    maintenance_total_days,
+                    max(0, int((maintenance_now - maintenance_cycle_start).total_seconds() // 86_400)),
+                )
+                maintenance_elapsed_days = max(maintenance_completed_days, 1)
+                maintenance_days_remaining = max(maintenance_total_days - maintenance_completed_days, 1)
+                maintenance_pace_rows = []
+                for _, source_row in maintenance_data.iterrows():
+                    raw = re.sub(r"\s+", " ", str(source_row.get("raw_row", "")).replace(chr(20), " ").replace("\n", " ")).strip()
+                    progress_match = re.search(r"([\d,]+)\s*/\s*([\d,]+)", raw)
+                    if not progress_match:
+                        continue
+                    current_value = int(progress_match.group(1).replace(",", ""))
+                    target_value = int(progress_match.group(2).replace(",", ""))
+                    maintained_value = bool(source_row.get("maintained_tier", False)) or bool(re.search(r"Ranked up|Maintained tier", raw, flags=re.IGNORECASE))
+                    projected_value = int(round(current_value / maintenance_elapsed_days * maintenance_total_days)) if maintenance_completed_days else 0
+                    remaining_value = max(0, target_value - current_value)
+                    daily_needed = int((remaining_value / maintenance_days_remaining) + 0.999999)
+                    is_pacing = maintained_value or current_value >= target_value or (maintenance_completed_days > 0 and projected_value >= target_value)
+                    valid_days_match = re.search(r"(\d+)\s*d", raw, flags=re.IGNORECASE)
+                    maintenance_pace_rows.append({
+                        "Creator": str(source_row.get("creator", "")).strip(),
+                        "Current / Goal": f"{current_value:,} / {target_value:,}",
+                        "Projected Finish": f"{projected_value:,}" if maintenance_completed_days else "Pending first 8 PM read",
+                        "Still Needed": f"{remaining_value:,}",
+                        "Daily Needed": f"{daily_needed:,}",
+                        "Valid LIVE Days": int(valid_days_match.group(1)) if valid_days_match else 0,
+                        "Pacing Status": "Maintained" if maintained_value or current_value >= target_value else ("Pacing to maintain" if is_pacing else "Not pacing"),
+                        "_is_pacing": is_pacing,
+                        "_remaining": remaining_value,
+                        "_projected": projected_value,
+                    })
+                maintenance_pace_frame = pd.DataFrame(maintenance_pace_rows)
+                st.markdown("### Creator Maintenance Pacing")
+                st.caption(
+                    f"Based on {maintenance_completed_days} completed 8:00 PM ET reporting day(s) in a {maintenance_total_days}-day month."
+                )
+                pacing_column, not_pacing_column = st.columns(2)
+                with pacing_column:
+                    pacing_creators = maintenance_pace_frame[maintenance_pace_frame.get("_is_pacing", pd.Series(dtype=bool)).eq(True)].copy()
+                    pacing_creators = pacing_creators.sort_values(["_projected", "Creator"], ascending=[False, True]) if not pacing_creators.empty else pacing_creators
+                    with st.container(border=True):
+                        st.markdown(f"#### ✅ Pacing to Maintain ({len(pacing_creators):,})")
+                        st.caption("Creators projected to reach their maintenance requirement, including creators already secured.")
+                        if pacing_creators.empty:
+                            st.info("No creators are currently pacing to maintain.")
+                        else:
+                            render_read_table(pacing_creators.drop(columns=["_is_pacing", "_remaining", "_projected"], errors="ignore"), height=560)
+                with not_pacing_column:
+                    not_pacing_creators = maintenance_pace_frame[maintenance_pace_frame.get("_is_pacing", pd.Series(dtype=bool)).eq(False)].copy()
+                    not_pacing_creators = not_pacing_creators.sort_values(["_remaining", "Creator"], ascending=[True, True]) if not not_pacing_creators.empty else not_pacing_creators
+                    with st.container(border=True):
+                        st.markdown(f"#### ⚠️ Not Pacing to Maintain ({len(not_pacing_creators):,})")
+                        st.caption("Closest remaining diamond gap appears first so managers know who to push.")
+                        if not_pacing_creators.empty:
+                            st.success("Every maintenance creator is currently on pace.")
+                        else:
+                            render_read_table(not_pacing_creators.drop(columns=["_is_pacing", "_remaining", "_projected"], errors="ignore"), height=560)
+                st.markdown("### Complete Maintenance Read")
                 render_read_table(pd.DataFrame(clean_rows), height=720)
             else:
                 st.info("Maintenance source pages have not supplied a complete read yet. The dashboard remains online, and these boxes will populate automatically as soon as the scheduled maintenance reader imports its next complete run.")
