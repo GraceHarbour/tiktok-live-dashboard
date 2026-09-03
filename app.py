@@ -433,7 +433,6 @@ def load_goal_creators():
         return pd.read_sql(text("SELECT * FROM goal_creators"), connection)
 
 
-@st.cache_data(ttl=60)
 def load_goal_diamond_snapshots():
     engine = get_engine()
     with engine.begin() as connection:
