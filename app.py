@@ -450,16 +450,13 @@ def diamonds_since_daily_cutoff(current_total):
     snapshots = snapshots.assign(captured=captured).dropna(subset=["captured"])
     if snapshots.empty:
         return 0, None
-    now_et = pd.Timestamp.now(tz="America/New_York")
-    cutoff = now_et.normalize() + pd.Timedelta(hours=20)
-    if now_et < cutoff:
-        cutoff -= pd.Timedelta(days=1)
     snapshot_et = snapshots["captured"].dt.tz_convert("America/New_York")
-    before = snapshots[snapshot_et < cutoff]
-    after = snapshots[snapshot_et >= cutoff]
-    # The first successful goals read after 8:00 PM ET is the official day-end baseline.
-    # Later 15-minute reads update Diamonds Today but must not move pacing until tomorrow.
-    baseline = after.iloc[0] if not after.empty else (before.iloc[-1] if not before.empty else snapshots.iloc[0])
+    reporting_cutoffs = (snapshot_et - pd.Timedelta(hours=20)).dt.normalize() + pd.Timedelta(hours=20)
+    newest_cutoff = reporting_cutoffs.max()
+    current_day_reads = snapshots[reporting_cutoffs == newest_cutoff]
+    # The first successful goals read in the newest 8:00 PM ET reporting block is official.
+    # Later 15-minute reads update Diamonds Today but do not move pacing.
+    baseline = current_day_reads.iloc[0] if not current_day_reads.empty else snapshots.iloc[-1]
     earned = max(0, int(current_total) - int(baseline["total_diamonds"]))
     return earned, baseline["captured"].tz_convert("America/New_York")
 
