@@ -2165,6 +2165,7 @@ def main():
                                 "Daily pace gap": f"{daily_gap:,}",
                                 "Valid LIVE days": valid_days,
                                 "_pace_gap": daily_gap,
+                                "_remaining": remaining_value,
                             })
                 maintenance_battle = pd.DataFrame(maintenance_battle_rows)
 
@@ -2209,6 +2210,10 @@ def main():
                 maintenance_achieved = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("Achieved").sum())
                 maintenance_on_pace = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("On pace").sum())
                 maintenance_help = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("Needs help").sum())
+                maintenance_total = len(maintenance_battle)
+                maintenance_target_count = (maintenance_total * 50 + 99) // 100 if maintenance_total else 0
+                maintenance_projected_count = min(maintenance_total, maintenance_achieved + maintenance_on_pace)
+                maintenance_priority_needed = max(0, maintenance_target_count - maintenance_projected_count)
                 graduation_on_pace = int(battle_active["_priority"].eq("On pace").sum()) if not battle_active.empty else 0
                 graduation_help = int(battle_active["_priority"].eq("Needs help").sum()) if not battle_active.empty else 0
                 battle_tier_text = creators.get("tier_status", pd.Series("", index=creators.index)).fillna("").astype(str).str.lower()
@@ -2228,7 +2233,7 @@ def main():
                   <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needs help</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{maintenance_help:,}</div></div>
                   <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{graduation_on_pace:,}</div></div>
                   <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation wins needed</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_wins_needed:,}</div></div>
-                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Agency wins to 50%</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_agency_wins_needed:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needed to 50%</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{maintenance_priority_needed:,}</div></div>
                 </div>
                 """, unsafe_allow_html=True)
                 if battle_pacing_ready:
@@ -2307,12 +2312,30 @@ def main():
 
                 battle_view = st.radio("Focus list", ["Maintenance", "Graduation"], horizontal=True, key="battle_focus_view")
                 if battle_view == "Maintenance":
-                    st.markdown("### Maintenance Focus List")
+                    st.markdown("### Maintenance Pacing — 50% Target")
                     if maintenance_battle.empty:
-                        st.info("No maintenance battle records are available for this manager.")
+                        st.info("No maintenance pacing records are available for this manager.")
                     else:
+                        st.caption(
+                            f"Target: {maintenance_target_count:,} of {maintenance_total:,} creators. "
+                            f"{maintenance_achieved:,} achieved, {maintenance_on_pace:,} on pace, "
+                            f"and {maintenance_priority_needed:,} additional creator(s) needed to project at or above 50%."
+                        )
+                        closest_to_target = maintenance_battle[maintenance_battle["Priority"].eq("Needs help")].copy()
+                        if maintenance_priority_needed > 0 and not closest_to_target.empty:
+                            closest_to_target = closest_to_target.sort_values(
+                                ["_remaining", "_pace_gap", "Creator"], ascending=[True, True, True]
+                            ).head(maintenance_priority_needed)
+                            st.markdown("#### Closest creators to move us above 50%")
+                            st.caption("Work this list first. These creators have the smallest remaining maintenance diamond gaps.")
+                            render_battle_creator_cards(closest_to_target, "Maintenance")
+                        elif maintenance_priority_needed == 0:
+                            st.success("Achieved and on-pace creators already project at or above the 50% maintenance target.")
+                        st.markdown("#### Full maintenance pacing list")
                         battle_order = pd.Categorical(maintenance_battle["Priority"], ["Pending", "Needs help", "On pace", "Achieved"], ordered=True)
-                        maintenance_battle = maintenance_battle.assign(_order=battle_order).sort_values(["_order", "_pace_gap"], ascending=[True, False]).drop(columns=["_order", "_pace_gap"])
+                        maintenance_battle = maintenance_battle.assign(_order=battle_order).sort_values(
+                            ["_order", "_remaining", "_pace_gap"], ascending=[True, True, True]
+                        ).drop(columns=["_order"])
                         render_battle_creator_cards(maintenance_battle, "Maintenance")
                 else:
                     st.markdown("### Graduation Focus List")
