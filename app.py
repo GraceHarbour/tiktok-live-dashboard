@@ -3025,12 +3025,21 @@ def main():
                 battle_creator_frame["creator_id"] = battle_creator_frame["creator_id"].astype(str)
                 battle_creator_frame["username"] = battle_creator_frame.get("username", pd.Series("", index=battle_creator_frame.index)).fillna("").astype(str)
                 battle_creator_frame = battle_creator_frame[battle_creator_frame["username"].str.strip().ne("")].drop_duplicates("creator_id")
-            battle_mtd_diamonds = int(numeric_series(battle_creator_frame, "diamonds").fillna(0).sum()) if not battle_creator_frame.empty else 0
+            with get_engine().connect() as battle_total_connection:
+                battle_mtd_diamonds = int(battle_total_connection.execute(text("""
+                    SELECT COALESCE(SUM(GREATEST(ending.diamonds - starting.diamonds, 0)), 0)
+                    FROM community_event_snapshots starting
+                    JOIN community_event_snapshots ending ON ending.event_id = starting.event_id AND ending.creator_id = starting.creator_id AND ending.phase = 'end'
+                    JOIN community_events scheduled ON scheduled.event_id = starting.event_id
+                    WHERE starting.phase = 'start' AND scheduled.event_name LIKE '[BATTLE]%'
+                      AND (scheduled.start_at::timestamptz AT TIME ZONE 'America/New_York') >= date_trunc('month', now() AT TIME ZONE 'America/New_York')
+                      AND (scheduled.start_at::timestamptz AT TIME ZONE 'America/New_York') < date_trunc('month', now() AT TIME ZONE 'America/New_York') + interval '1 month'
+                """)).scalar() or 0)
         st.markdown(
             f"""<div style="padding:20px 24px;border-radius:18px;border:2px solid #48a9ff;background:linear-gradient(135deg,#0b2d52,#171c3c);box-shadow:0 10px 26px rgba(0,0,0,.25);margin:12px 0 20px;">
-            <div style="color:#a9d8ff;font-size:1rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">Total Diamonds Month to Date</div>
+            <div style="color:#a9d8ff;font-size:1rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">Battle Diamonds Month to Date</div>
             <div style="color:white;font-size:2.5rem;font-weight:950;line-height:1.1;margin-top:7px;">{battle_mtd_diamonds:,}</div>
-            <div style="color:#dcecff;margin-top:6px;">Current monthly goal-read total</div>
+            <div style="color:#dcecff;margin-top:6px;">Diamonds earned during completed tracked battles this month</div>
             </div>""",
             unsafe_allow_html=True,
         )
@@ -3167,6 +3176,8 @@ def main():
             for _, battle_row in upcoming_battles.iterrows():
                 start_et = battle_row["_start"].tz_convert("America/New_York")
                 end_et = battle_row["_end"].tz_convert("America/New_York")
+                start_ct = battle_row["_start"].tz_convert("America/Chicago")
+                end_ct = battle_row["_end"].tz_convert("America/Chicago")
                 participants = load_event_participants(str(battle_row["event_id"]))
                 creator_names = ", ".join(participants.get("username", pd.Series(dtype=str)).dropna().astype(str).tolist()) or "No creator selected"
                 with st.container(border=True):
