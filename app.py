@@ -3215,8 +3215,10 @@ def main():
                         load_event_participants.clear()
                         st.success("Tracked creators updated.")
                         st.rerun()
-                    st.markdown(f"**Start:** {start_et:%A, %B %d at %I:%M %p} ET / {start_ct:%I:%M %p} CT")
-                    st.markdown(f"**Result read:** {end_et:%I:%M %p} ET / {end_ct:%I:%M %p} CT")
+                    st.markdown(f"**Date:** {start_et:%A, %B %d, %Y}")
+            st.markdown(f"**Battle time:** {start_et:%I:%M %p} to {end_et:%I:%M %p} ET / {start_ct:%I:%M %p} to {end_ct:%I:%M %p} CT")
+            st.markdown(f"**Starting read:** {(start_et - pd.Timedelta(minutes=5)):%I:%M %p} ET")
+            st.markdown(f"**Ending read:** {(start_et + pd.Timedelta(minutes=30)):%I:%M %p} ET")
             st.markdown("### Battle Results and Creator Averages")
             if battle_events.empty:
                 st.info("Results will appear after a scheduled battle completes.")
