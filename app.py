@@ -1862,8 +1862,8 @@ def main():
                 graduation_pages = graduation_rows["Source page"].nunique() if "Source page" in graduation_rows.columns else 0
                 reward_pages = reward_rows["Source page"].nunique() if "Source page" in reward_rows.columns else 0
 
-                # Agency graduation focus list: hold a 165-creator minimum base, then follow the live evaluated count.
-                evaluated_base = max(165, len(graduation_rows)) if choice == "All managers" else len(graduation_rows)
+                # Business Essentials uses the actual evaluated creator count from the selected month.
+                evaluated_base = len(graduation_rows)
                 graduation_target = (evaluated_base * 15 + 99) // 100
                 focus_needed = max(0, graduation_target - reached_count)
                 today_et = pd.Timestamp.now(tz="America/New_York")
