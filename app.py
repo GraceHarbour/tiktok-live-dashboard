@@ -452,9 +452,9 @@ def diamonds_since_daily_cutoff(current_total):
         return 0, None
     snapshot_et = snapshots["captured"].dt.tz_convert("America/New_York")
     # Goal reads are scheduled at :59 and can finish on either side of 8:00 PM.
-    # Treat the first successful read from 7:45 PM onward as that day's official
+    # Treat the first successful read from 7:55 PM onward as that day's official
     # 8:00 PM close. This prevents the daily counter from resetting at 8:59 PM.
-    cutoff_capture_window = pd.Timedelta(hours=19, minutes=45)
+    cutoff_capture_window = pd.Timedelta(hours=19, minutes=55)
     reporting_cutoffs = (
         (snapshot_et - cutoff_capture_window).dt.normalize()
         + pd.Timedelta(hours=20)
