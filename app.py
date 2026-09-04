@@ -450,13 +450,13 @@ def diamonds_since_daily_cutoff(current_total):
     snapshots = snapshots.assign(captured=captured).dropna(subset=["captured"]).sort_values("captured")
     if snapshots.empty:
         return 0, None
-    now_et = pd.Timestamp.now(tz="America/New_York")
-    cutoff_date = (now_et if now_et.hour >= 20 else now_et - pd.Timedelta(days=1)).date()
     captured_et = snapshots["captured"].dt.tz_convert("America/New_York")
-    cutoff_mask = (captured_et.dt.date == cutoff_date) & (captured_et.dt.hour == 20) & (captured_et.dt.minute <= 20)
+    cutoff_candidate_mask = (captured_et.dt.hour == 20) & (captured_et.dt.minute <= 20)
+    if not cutoff_candidate_mask.any():
+        return 0, None
+    cutoff_date = max(captured_et[cutoff_candidate_mask].dt.date)
+    cutoff_mask = cutoff_candidate_mask & (captured_et.dt.date == cutoff_date)
     cutoff_reads = snapshots[cutoff_mask]
-    if cutoff_reads.empty:
-        return 0, pd.Timestamp(cutoff_date, tz="America/New_York") + pd.Timedelta(hours=20)
     baseline = cutoff_reads.iloc[0]
     latest_total = max(int(current_total), int(snapshots.iloc[-1]["total_diamonds"]))
     earned = max(0, latest_total - int(baseline["total_diamonds"]))
