@@ -3185,7 +3185,8 @@ def main():
                     if "throwback thursday" in event_name.lower():
                         st.caption("No 18+ requirement · Power-ups allowed")
                     st.markdown(f"**Date:** {start_et:%A, %B %d, %Y}")
-                    st.markdown(f"**Battle time:** {start_et:%I:%M %p} to {end_et:%I:%M %p} ET / {start_ct:%I:%M %p} to {end_ct:%I:%M %p} CT")
+                    st.markdown(f"**Battle start:** {start_et:%I:%M %p} ET / {start_ct:%I:%M %p} CT")
+                    st.markdown("**Battle format:** Single · 30 minutes")
                     st.markdown(f"**Starting read:** {(start_et - pd.Timedelta(minutes=5)):%I:%M %p} ET")
                     st.markdown(f"**Ending read:** {(start_et + pd.Timedelta(minutes=30)):%I:%M %p} ET")
                     with st.expander("Edit this battle's date, time, and creators"):
