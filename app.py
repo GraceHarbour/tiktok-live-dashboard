@@ -447,80 +447,19 @@ def diamonds_since_daily_cutoff(current_total):
     if snapshots.empty:
         return 0, None
     captured = pd.to_datetime(snapshots["captured_at"], utc=True, errors="coerce")
-    snapshots = snapshots.assign(captured=captured).dropna(subset=["captured"])
+    snapshots = snapshots.assign(captured=captured).dropna(subset=["captured"]).sort_values("captured")
     if snapshots.empty:
         return 0, None
-    snapshot_et = snapshots["captured"].dt.tz_convert("America/New_York")
-    # Goal reads are scheduled at :59 and can finish on either side of 8:00 PM.
-    # Treat the first successful read from 7:55 PM onward as that day's official
-    # 8:00 PM close. This prevents the daily counter from resetting at 8:59 PM.
-    cutoff_capture_window = pd.Timedelta(hours=19, minutes=55)
-    reporting_cutoffs = (
-        (snapshot_et - cutoff_capture_window).dt.normalize()
-        + pd.Timedelta(hours=20)
-    )
-    newest_cutoff = reporting_cutoffs.max()
-    current_day_reads = snapshots[reporting_cutoffs == newest_cutoff]
-    # The first successful goals read in the newest 8:00 PM ET reporting block is official.
-    # Later 15-minute reads update Diamonds Today but do not move pacing.
-    baseline = current_day_reads.iloc[0] if not current_day_reads.empty else snapshots.iloc[-1]
+    now_et = pd.Timestamp.now(tz="America/New_York")
+    today_window = now_et.normalize() + pd.Timedelta(hours=19, minutes=55)
+    window_start_et = today_window if now_et >= today_window else today_window - pd.Timedelta(days=1)
+    window_start_utc = window_start_et.tz_convert("UTC")
+    current_day_reads = snapshots[snapshots["captured"] >= window_start_utc]
+    if current_day_reads.empty:
+        return 0, window_start_et.normalize() + pd.Timedelta(hours=20)
+    baseline = current_day_reads.iloc[0]
     earned = max(0, int(current_total) - int(baseline["total_diamonds"]))
-    return earned, newest_cutoff
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-@st.cache_data(show_spinner=False, max_entries=32)
-def cached_wheel_replay_html(title, candidates, winners):
-    return _wheel_replay_html(title, list(candidates), list(winners))
-
-@st.cache_data(ttl=30, show_spinner=False)
-def load_community_events():
-    with get_engine().connect() as connection:
-        return pd.read_sql(text("SELECT * FROM community_events ORDER BY start_at DESC"), connection)
-
-
-@st.cache_data(ttl=30, show_spinner=False)
-def load_event_participants(event_id):
-    with get_engine().connect() as connection:
-        return pd.read_sql(
-            text("SELECT * FROM community_event_participants WHERE event_id = :event_id ORDER BY username"),
-            connection,
-            params={"event_id": event_id},
-        )
-
-
-@st.cache_data(ttl=30, show_spinner=False)
-def load_event_snapshots(event_id):
-    with get_engine().connect() as connection:
-        return pd.read_sql(
-            text("SELECT * FROM community_event_snapshots WHERE event_id = :event_id"),
-            connection,
-            params={"event_id": event_id},
-        )
+    return earned, window_start_et.normalize() + pd.Timedelta(hours=20)
 
 
 def create_community_event(event_name, start_at, end_at):
