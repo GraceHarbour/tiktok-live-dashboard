@@ -2038,7 +2038,7 @@ def main():
                 st.caption(
                     f"Based on {maintenance_completed_days} completed 8:00 PM ET reporting day(s) in a {maintenance_total_days}-day month."
                 )
-                pacing_column, not_pacing_column = st.columns(2)
+                pacing_column = st.container(); not_pacing_column = st.container()
                 with pacing_column:
                     pacing_creators = maintenance_pace_frame[maintenance_pace_frame.get("_is_pacing", pd.Series(dtype=bool)).eq(True)].copy()
                     pacing_creators = pacing_creators.sort_values(["_projected", "Creator"], ascending=[False, True]) if not pacing_creators.empty else pacing_creators
