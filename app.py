@@ -3225,13 +3225,18 @@ def main():
             else:
                 battle_ids = battle_events["event_id"].astype(str).tolist()
                 live_battles = battle_events[battle_events["status"].fillna("").astype(str).eq("live")]
-                default_battle_id = str(live_battles.iloc[-1]["event_id"]) if not live_battles.empty else battle_ids[-1]
+                completed_battles = battle_events[battle_events["status"].fillna("").astype(str).eq("completed")]
+                default_battle_id = (
+                    str(live_battles.iloc[-1]["event_id"]) if not live_battles.empty
+                    else str(completed_battles.iloc[-1]["event_id"]) if not completed_battles.empty
+                    else battle_ids[-1]
+                )
                 selected_battle_id = st.selectbox(
                     "Choose a battle",
                     battle_ids,
                     index=battle_ids.index(default_battle_id),
                     format_func=lambda value: str(battle_events[battle_events["event_id"].astype(str).eq(value)].iloc[0]["event_name"]).replace("[BATTLE] ", ""),
-                    key="battle_schedule_selector_live_v2",
+                    key="battle_schedule_selector_live_v3",
                 )
                 selected_status = str(battle_events[battle_events["event_id"].astype(str).eq(selected_battle_id)].iloc[0]["status"] or "")
                 if selected_status == "live":
