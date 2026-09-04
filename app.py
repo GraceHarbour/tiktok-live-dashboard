@@ -3152,6 +3152,7 @@ def main():
                 unsafe_allow_html=True,
             )
             st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern and Central Time.")
+        battle_average_slot = st.container()
 
 
         st.markdown("### Current and Future Battles")
@@ -3265,26 +3266,27 @@ def main():
                     render_read_table(battle_results, height=360)
                 else:
                     st.info("The selected battle has no tracked creator yet.")
-                st.markdown("#### Creator Battle Average")
-        st.caption("Permanent all-time history across every completed battle. Results remain saved unless the related event is deleted.")
-        battle_average_search = st.text_input(
-            "Search creator battle averages",
-            placeholder="Type a creator name",
-            key="battle_average_creator_search",
-        ).strip()
-        if battle_average_search and not creator_averages.empty:
-            creator_averages = creator_averages[
-                creator_averages["Creator"].fillna("").astype(str).str.contains(
-                    battle_average_search, case=False, na=False, regex=False
-                )
-            ].copy()
-        if creator_averages.empty:
-            if battle_average_search:
-                st.info("No creator averages match that search.")
+                with battle_average_slot:
+                    st.markdown("#### Creator Battle Average")
+            st.caption("Permanent all-time history across every completed battle. Results remain saved unless the related event is deleted.")
+            battle_average_search = st.text_input(
+                "Search creator battle averages",
+                placeholder="Type a creator name",
+                key="battle_average_creator_search",
+            ).strip()
+            if battle_average_search and not creator_averages.empty:
+                creator_averages = creator_averages[
+                    creator_averages["Creator"].fillna("").astype(str).str.contains(
+                        battle_average_search, case=False, na=False, regex=False
+                    )
+                ].copy()
+            if creator_averages.empty:
+                if battle_average_search:
+                    st.info("No creator averages match that search.")
+                else:
+                    st.info("Averages will appear after each creator has a completed battle result.")
             else:
-                st.info("Averages will appear after each creator has a completed battle result.")
-        else:
-            render_read_table(creator_averages, height=420)
+                render_read_table(creator_averages, height=420)
 
     if active_main_tab == "Access & Data":
         with access_tab:
