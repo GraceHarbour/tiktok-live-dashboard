@@ -451,15 +451,17 @@ def diamonds_since_daily_cutoff(current_total):
     if snapshots.empty:
         return 0, None
     now_et = pd.Timestamp.now(tz="America/New_York")
-    today_window = now_et.normalize() + pd.Timedelta(hours=19, minutes=55)
-    window_start_et = today_window if now_et >= today_window else today_window - pd.Timedelta(days=1)
-    window_start_utc = window_start_et.tz_convert("UTC")
-    current_day_reads = snapshots[snapshots["captured"] >= window_start_utc]
-    if current_day_reads.empty:
-        return 0, window_start_et.normalize() + pd.Timedelta(hours=20)
-    baseline = current_day_reads.iloc[0]
-    earned = max(0, int(current_total) - int(baseline["total_diamonds"]))
-    return earned, window_start_et.normalize() + pd.Timedelta(hours=20)
+    cutoff_date = (now_et if now_et.hour >= 20 else now_et - pd.Timedelta(days=1)).date()
+    captured_et = snapshots["captured"].dt.tz_convert("America/New_York")
+    cutoff_mask = (captured_et.dt.date == cutoff_date) & (captured_et.dt.hour == 20) & (captured_et.dt.minute <= 20)
+    cutoff_reads = snapshots[cutoff_mask]
+    if cutoff_reads.empty:
+        return 0, pd.Timestamp(cutoff_date, tz="America/New_York") + pd.Timedelta(hours=20)
+    baseline = cutoff_reads.iloc[0]
+    latest_total = max(int(current_total), int(snapshots.iloc[-1]["total_diamonds"]))
+    earned = max(0, latest_total - int(baseline["total_diamonds"]))
+    cutoff_timestamp = pd.Timestamp(cutoff_date, tz="America/New_York") + pd.Timedelta(hours=20)
+    return earned, cutoff_timestamp
 
 
 @st.cache_data(show_spinner=False, max_entries=32)
