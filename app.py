@@ -2500,6 +2500,8 @@ def main():
                             st.rerun()
 
                 events = load_community_events()
+                if not events.empty and "event_name" in events.columns:
+                    events = events[~events["event_name"].fillna("").astype(str).str.startswith("[BATTLE]")].copy()
                 with event_right:
                     st.markdown("### Event schedule")
                     if events.empty:
