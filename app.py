@@ -1667,10 +1667,12 @@ def main():
 
                 goal_visible_total = int(visible_diamonds.sum())
                 goal_diamonds_today, goal_daily_baseline = diamonds_since_daily_cutoff(int(numeric_series(creators, "diamonds").sum()))
-                first, second, third, fourth, eighth = st.columns(5)
+                first, second, third = st.columns(3)
                 first.metric("Creators", f"{len(visible):,}")
                 second.metric("Total Diamonds", f"{goal_visible_total:,}")
                 third.metric("Diamonds Today", f"{goal_diamonds_today:,}", help="Agency diamonds earned since the previous 8:00 PM Eastern cutoff.")
+
+                fourth, eighth = st.columns(2)
                 fourth.metric("New creators", f"{new_creators:,}")
                 eighth.metric("Above 200k diamonds", f"{above_200k:,}")
 
