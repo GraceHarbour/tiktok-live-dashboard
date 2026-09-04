@@ -3164,7 +3164,7 @@ def main():
                 unsafe_allow_html=True,
             )
             st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern and Central Time.")
-        battle_average_slot = st.container()
+        battle_average_slot = st.empty()
 
 
         st.markdown("### Current and Future Battles")
@@ -3278,10 +3278,11 @@ def main():
                     render_read_table(battle_results, height=360)
                 else:
                     st.info("The selected battle has no tracked creator yet.")
-                with battle_average_slot:
+                battle_average_content = battle_average_slot.container()
+                with battle_average_content:
                     st.markdown("#### Creator Battle Average")
-            battle_average_slot.caption("Permanent all-time history across every completed battle. Results remain saved unless the related event is deleted.")
-            battle_average_search = battle_average_slot.text_input(
+            battle_average_content.caption("Permanent all-time history across every completed battle. Results remain saved unless the related event is deleted.")
+            battle_average_search = battle_average_content.text_input(
                 "Search creator battle averages",
                 placeholder="Type a creator name",
                 key="battle_average_creator_search",
@@ -3294,11 +3295,11 @@ def main():
                 ].copy()
             if creator_averages.empty:
                 if battle_average_search:
-                    battle_average_slot.info("No creator averages match that search.")
+                    battle_average_content.info("No creator averages match that search.")
                 else:
-                    battle_average_slot.info("Averages will appear after each creator has a completed battle result.")
+                    battle_average_content.info("Averages will appear after each creator has a completed battle result.")
             else:
-                render_read_table(creator_averages, height=420, target=battle_average_slot)
+                render_read_table(creator_averages, height=420, target=battle_average_content)
 
     if active_main_tab == "Access & Data":
         with access_tab:
