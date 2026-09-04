@@ -1048,7 +1048,7 @@ def save_shared_prior_month(file_name, sheet_name, columns, frame):
 
 
 
-def render_read_table(frame: pd.DataFrame, *, height: int | None = None) -> None:
+def render_read_table(frame: pd.DataFrame, *, height: int | None = None, target=None) -> None:
     """Render dashboard data as a high-contrast, readable table instead of Streamlit's white grid."""
     if frame is None or frame.empty:
         st.info("No records match this view.")
@@ -1063,7 +1063,7 @@ def render_read_table(frame: pd.DataFrame, *, height: int | None = None) -> None
         html_table = safe.to_html(index=False, escape=False, classes="gh-data-table")
     else:
         html_table = visible.to_html(index=False, escape=True, classes="gh-data-table")
-    st.markdown(f'<div class="gh-data-panel" tabindex="0" aria-label="Scrollable creator data table" style="{max_height}">{html_table}</div>', unsafe_allow_html=True)
+    (target or st).markdown(f'<div class="gh-data-panel" tabindex="0" aria-label="Scrollable creator data table" style="{max_height}">{html_table}</div>', unsafe_allow_html=True)
 
 
 def download_frame_csv(frame: pd.DataFrame, label: str, file_name: str, key: str) -> None:
@@ -3280,8 +3280,8 @@ def main():
                     st.info("The selected battle has no tracked creator yet.")
                 with battle_average_slot:
                     st.markdown("#### Creator Battle Average")
-            st.caption("Permanent all-time history across every completed battle. Results remain saved unless the related event is deleted.")
-            battle_average_search = st.text_input(
+            battle_average_slot.caption("Permanent all-time history across every completed battle. Results remain saved unless the related event is deleted.")
+            battle_average_search = battle_average_slot.text_input(
                 "Search creator battle averages",
                 placeholder="Type a creator name",
                 key="battle_average_creator_search",
@@ -3294,11 +3294,11 @@ def main():
                 ].copy()
             if creator_averages.empty:
                 if battle_average_search:
-                    st.info("No creator averages match that search.")
+                    battle_average_slot.info("No creator averages match that search.")
                 else:
-                    st.info("Averages will appear after each creator has a completed battle result.")
+                    battle_average_slot.info("Averages will appear after each creator has a completed battle result.")
             else:
-                render_read_table(creator_averages, height=420)
+                render_read_table(creator_averages, height=420, target=battle_average_slot)
 
     if active_main_tab == "Access & Data":
         with access_tab:
