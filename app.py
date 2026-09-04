@@ -1311,8 +1311,8 @@ def main():
                 dashboard_tier = dashboard_creators.get("tier_status", pd.Series("", index=dashboard_creators.index)).fillna("").astype(str).str.lower()
                 dashboard_rank = dashboard_creators.get("rank_up_progress", pd.Series("", index=dashboard_creators.index)).fillna("").astype(str).str.lower()
                 dashboard_not_maintained_text = dashboard_tier.str.contains("not maintained|not maintain", na=False) | dashboard_rank.str.contains("not maintained|not maintain", na=False)
-                dashboard_ranked = dashboard_tier.str.contains("ranked up|ranking up|rank up", na=False) | dashboard_rank.str.contains("rank up|ranked up|ranking up", na=False)
-                dashboard_maintained = ~dashboard_ranked & ~dashboard_not_maintained_text & (dashboard_tier.str.contains("maintained|maintain", na=False) | dashboard_rank.str.contains("maintain", na=False))
+                dashboard_ranked = dashboard_tier.str.contains(r"\branked up\b", na=False) | dashboard_rank.str.contains(r"\branked up\b", na=False)
+                dashboard_maintained = ~dashboard_ranked & ~dashboard_not_maintained_text & (dashboard_tier.str.contains(r"\bmaintained tier\b", na=False) | dashboard_rank.str.contains(r"\bmaintained tier\b", na=False))
                 dashboard_not_maintained = dashboard_not_maintained_text | ~(dashboard_ranked | dashboard_maintained)
                 dashboard_new_creators = monthly_metric_value(monthly_metrics, "new_creators", int(numeric_series(dashboard_managers, "new_creators").sum()) if not dashboard_managers.empty else 0)
                 if dashboard_choice == "Agency":
@@ -1649,16 +1649,16 @@ def main():
                 visible_diamonds = numeric_series(visible, "diamonds")
                 tier_text = visible.get("tier_status", pd.Series("", index=visible.index)).fillna("").astype(str).str.lower()
                 rank_text = visible.get("rank_up_progress", pd.Series("", index=visible.index)).fillna("").astype(str).str.lower()
-                ranked_up = int((tier_text.str.contains("rank") | rank_text.str.contains("rank")).sum())
-                maintained = int((tier_text.str.contains("maintain") | rank_text.str.contains("maintain")).sum())
+                ranked_up = int((tier_text.str.contains(r"\branked up\b") | rank_text.str.contains(r"\branked up\b")).sum())
+                maintained = int((tier_text.str.contains(r"\bmaintained tier\b") | rank_text.str.contains(r"\bmaintained tier\b")).sum())
                 above_200k = int((visible_diamonds >= 200000).sum())
                 selected_manager_rows = managers if goal_manager_choice == "All managers" else managers[managers["_manager"] == goal_manager_choice]
                 new_creators = monthly_metric_value(monthly_metrics, "new_creators", int(numeric_series(selected_manager_rows, "new_creators").sum()) if not selected_manager_rows.empty else 0)
                 not_maintained_text = tier_text.str.contains("not maintained") | rank_text.str.contains("not maintained")
 
-                ranked_mask = tier_text.str.contains("rank") | rank_text.str.contains("rank")
+                ranked_mask = tier_text.str.contains(r"\branked up\b") | rank_text.str.contains(r"\branked up\b")
                 maintained_mask = ~ranked_mask & ~not_maintained_text & (
-                    tier_text.str.contains("maintain") | rank_text.str.contains("maintain")
+                    tier_text.str.contains(r"\bmaintained tier\b") | rank_text.str.contains(r"\bmaintained tier\b")
                 )
                 not_maintained_mask = not_maintained_text | ~(ranked_mask | maintained_mask)
                 above_200k = int((visible_diamonds >= 200000).sum())
