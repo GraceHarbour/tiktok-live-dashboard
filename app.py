@@ -3181,35 +3181,38 @@ def main():
                 with st.container(border=True):
                     st.markdown(f"#### {str(battle_row['event_name']).replace('[BATTLE] ', '')}")
                     st.markdown(f"**Agency creator:** {creator_names}")
-                event_name = str(battle_row["event_name"])
-                if "throwback thursday" in event_name.lower():
-                    st.caption("No 18+ requirement · Power-ups allowed")
-                with st.expander("Edit tracked creators"):
-                    creator_options = creators.get("creator_id", pd.Series(dtype=str)).dropna().astype(str).tolist()
-                    creator_labels = {
-                        str(row.get("creator_id", "")): f"{row.get('username', row.get('creator_id', 'Unknown'))} — {row.get('manager_name', row.get('manager', 'Unassigned'))}"
-                        for _, row in creators.iterrows()
-                        if str(row.get("creator_id", "")).strip()
-                    }
-                    selected_now = participants.get("creator_id", pd.Series(dtype=str)).dropna().astype(str).tolist()
-                    selected_now = [creator_id for creator_id in selected_now if creator_id in creator_options]
-                    selected_creators = st.multiselect(
-                        "Creators to track",
-                        creator_options,
-                        default=selected_now,
-                        format_func=lambda creator_id: creator_labels.get(str(creator_id), str(creator_id)),
-                        key=f"battle_creator_editor_{battle_row['event_id']}",
-                        placeholder="Search by creator name",
-                    )
-                    if st.button("Save creator assignment", key=f"save_battle_creators_{battle_row['event_id']}", type="primary"):
-                        save_event_participants(str(battle_row["event_id"]), selected_creators, creators)
-                        load_event_participants.clear()
-                        st.success("Tracked creators updated.")
-                        st.rerun()
+                    event_name = str(battle_row["event_name"])
+                    if "throwback thursday" in event_name.lower():
+                        st.caption("No 18+ requirement · Power-ups allowed")
                     st.markdown(f"**Date:** {start_et:%A, %B %d, %Y}")
-            st.markdown(f"**Battle time:** {start_et:%I:%M %p} to {end_et:%I:%M %p} ET / {start_ct:%I:%M %p} to {end_ct:%I:%M %p} CT")
-            st.markdown(f"**Starting read:** {(start_et - pd.Timedelta(minutes=5)):%I:%M %p} ET")
-            st.markdown(f"**Ending read:** {(start_et + pd.Timedelta(minutes=30)):%I:%M %p} ET")
+                    st.markdown(f"**Battle time:** {start_et:%I:%M %p} to {end_et:%I:%M %p} ET / {start_ct:%I:%M %p} to {end_ct:%I:%M %p} CT")
+                    st.markdown(f"**Starting read:** {(start_et - pd.Timedelta(minutes=5)):%I:%M %p} ET")
+                    st.markdown(f"**Ending read:** {(start_et + pd.Timedelta(minutes=30)):%I:%M %p} ET")
+                    with st.expander("Edit this battle's date, time, and creators"):
+                        edit_date_col, edit_time_col = st.columns(2)
+                        with edit_date_col:
+                            edited_date = st.date_input("Battle date", value=start_et.date(), key=f"battle_date_editor_{battle_row['event_id']}")
+                        with edit_time_col:
+                            time_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in range(0, 60, 5)]
+                            current_time = start_et.strftime("%H:%M")
+                            if current_time not in time_values:
+                                time_values.append(current_time)
+                                time_values.sort()
+                            edited_time = st.selectbox("Start time (ET)", time_values, index=time_values.index(current_time), format_func=lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0"), key=f"battle_time_editor_{battle_row['event_id']}")
+                        creator_options = creators.get("creator_id", pd.Series(dtype=str)).dropna().astype(str).tolist()
+                        creator_labels = {str(row.get("creator_id", "")): f"{row.get('username', row.get('creator_id', 'Unknown'))} — {row.get('manager_name', row.get('manager', 'Unassigned'))}" for _, row in creators.iterrows() if str(row.get("creator_id", "")).strip()}
+                        selected_now = participants.get("creator_id", pd.Series(dtype=str)).dropna().astype(str).tolist()
+                        selected_now = [creator_id for creator_id in selected_now if creator_id in creator_options]
+                        selected_creators = st.multiselect("Creators to track", creator_options, default=selected_now, format_func=lambda creator_id: creator_labels.get(str(creator_id), str(creator_id)), key=f"battle_creator_editor_{battle_row['event_id']}", placeholder="Search by creator name")
+                        if st.button("Save battle changes", key=f"save_battle_changes_{battle_row['event_id']}", type="primary", use_container_width=True):
+                            edited_start_et = pd.Timestamp(f"{edited_date} {edited_time}", tz="America/New_York")
+                            edited_end_et = edited_start_et + pd.Timedelta(minutes=30)
+                            update_community_event_schedule(str(battle_row["event_id"]), edited_start_et.tz_convert("UTC").isoformat(), edited_end_et.tz_convert("UTC").isoformat())
+                            save_event_participants(str(battle_row["event_id"]), selected_creators, creators)
+                            load_community_events.clear()
+                            load_event_participants.clear()
+                            st.success("Battle date, start time, and tracked creators updated.")
+                            st.rerun()
             st.markdown("### Battle Results and Creator Averages")
             if battle_events.empty:
                 st.info("Results will appear after a scheduled battle completes.")
