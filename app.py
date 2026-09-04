@@ -462,6 +462,36 @@ def diamonds_since_daily_cutoff(current_total):
     return earned, window_start_et.normalize() + pd.Timedelta(hours=20)
 
 
+@st.cache_data(show_spinner=False, max_entries=32)
+def cached_wheel_replay_html(title, candidates, winners):
+    return _wheel_replay_html(title, list(candidates), list(winners))
+
+@st.cache_data(ttl=30, show_spinner=False)
+def load_community_events():
+    with get_engine().connect() as connection:
+        return pd.read_sql(text("SELECT * FROM community_events ORDER BY start_at DESC"), connection)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def load_event_participants(event_id):
+    with get_engine().connect() as connection:
+        return pd.read_sql(
+            text("SELECT * FROM community_event_participants WHERE event_id = :event_id ORDER BY username"),
+            connection,
+            params={"event_id": event_id},
+        )
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def load_event_snapshots(event_id):
+    with get_engine().connect() as connection:
+        return pd.read_sql(
+            text("SELECT * FROM community_event_snapshots WHERE event_id = :event_id"),
+            connection,
+            params={"event_id": event_id},
+        )
+
+
 def create_community_event(event_name, start_at, end_at):
     event_id = f"event-{pd.Timestamp.now(tz='UTC').value}"
     created_at = pd.Timestamp.now(tz="UTC").isoformat()
