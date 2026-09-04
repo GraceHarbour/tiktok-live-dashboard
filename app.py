@@ -1358,15 +1358,16 @@ def main():
                             focus_diamond_color = "#ff5c7a"
                             focus_diamond_status = "Pacing below minimum goal"
 
-                        focus_maintenance_rate = monthly_metric_float(monthly_metrics, "maintenance_rate", 0.0)
+                        focus_maintenance_rate = 0.0
+                        focus_maintenance_data = pd.DataFrame()
                         try:
-                            focus_maintenance_payloads = pd.read_sql(text("SELECT payload FROM maintenance_rate_rows ORDER BY row_index"), get_engine()) if not focus_maintenance_rate else pd.DataFrame()
-                            if not focus_maintenance_rate and not focus_maintenance_payloads.empty:
+                            focus_maintenance_payloads = pd.read_sql(text("SELECT payload FROM maintenance_rate_rows ORDER BY row_index"), get_engine())
+                            if not focus_maintenance_payloads.empty:
                                 focus_maintenance_data = pd.DataFrame(focus_maintenance_payloads["payload"].tolist())
                                 if not focus_maintenance_data.empty and "maintained_tier" in focus_maintenance_data.columns:
                                     focus_maintenance_rate = float(focus_maintenance_data["maintained_tier"].fillna(False).astype(bool).mean() * 100)
                         except Exception:
-                            focus_maintenance_rate = 0.0
+                            focus_maintenance_data = pd.DataFrame()
                         if focus_maintenance_rate >= 50:
                             focus_maintenance_color = "#40e39a"
                             focus_maintenance_status = "Goal achieved"
@@ -1406,14 +1407,18 @@ def main():
                             focus_graduation_color = "#ff5c7a"
                             focus_graduation_status = "Below 10%"
 
-                        # The combined maintenance/rank-up rate is based on the creators
-                        # evaluated in the current Goal Management dataset. The live
+                        # The combined maintenance/rank-up rate uses the dedicated reader and creators
+                        # evaluated in the current Maintenance Rate dataset. The live
                         # Manage Creators count remains a separate operational metric.
-                        focus_creator_total = len(dashboard_creators)
                         focus_active_creator_total = monthly_metric_value(monthly_metrics, "active_creators", 257)
+                        if not focus_maintenance_data.empty and "maintained_tier" in focus_maintenance_data.columns:
+                            focus_creator_total = len(focus_maintenance_data)
+                            focus_maintaining_or_ranked_count = int(focus_maintenance_data["maintained_tier"].fillna(False).astype(bool).sum())
+                        else:
+                            focus_creator_total = len(dashboard_creators)
+                            focus_maintaining_or_ranked = dashboard_maintained | dashboard_ranked
+                            focus_maintaining_or_ranked_count = int(focus_maintaining_or_ranked.sum())
                         focus_creator_half_goal = (focus_creator_total + 1) // 2
-                        focus_maintaining_or_ranked = dashboard_maintained | dashboard_ranked
-                        focus_maintaining_or_ranked_count = int(focus_maintaining_or_ranked.sum())
                         focus_maintaining_or_ranked_pct = (focus_maintaining_or_ranked_count / focus_creator_total * 100) if focus_creator_total else 0.0
                         focus_maintaining_needed = max(focus_creator_half_goal - focus_maintaining_or_ranked_count, 0)
 
