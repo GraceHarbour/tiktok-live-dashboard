@@ -443,26 +443,36 @@ def load_goal_diamond_snapshots():
 
 
 def diamonds_since_daily_cutoff(current_total):
-    snapshots = load_goal_diamond_snapshots()
-    if snapshots.empty:
+    # Select the newest saved Goal snapshot from the latest 8:00-8:20 PM
+    # Eastern cutoff window directly in PostgreSQL.
+    with get_engine().connect() as connection:
+        cutoff_rows = pd.read_sql(
+            text("""
+                SELECT captured_at, total_diamonds
+                FROM goal_diamond_snapshots
+                WHERE EXTRACT(HOUR FROM captured_at::timestamptz AT TIME ZONE 'America/New_York') = 20
+                  AND EXTRACT(MINUTE FROM captured_at::timestamptz AT TIME ZONE 'America/New_York') <= 20
+                ORDER BY captured_at::timestamptz DESC
+                LIMIT 1
+            """),
+            connection,
+        )
+        latest_rows = pd.read_sql(
+            text("""
+                SELECT total_diamonds
+                FROM goal_diamond_snapshots
+                ORDER BY captured_at::timestamptz DESC
+                LIMIT 1
+            """),
+            connection,
+        )
+    if cutoff_rows.empty:
         return 0, None
-    captured = pd.to_datetime(snapshots["captured_at"], utc=True, errors="coerce")
-    snapshots = snapshots.assign(captured=captured).dropna(subset=["captured"]).sort_values("captured")
-    if snapshots.empty:
-        return 0, None
-    captured_et = snapshots["captured"].dt.tz_convert("America/New_York")
-    cutoff_candidate_mask = (captured_et.dt.hour == 20) & (captured_et.dt.minute <= 20)
-    if not cutoff_candidate_mask.any():
-        return 0, None
-    cutoff_date = max(captured_et[cutoff_candidate_mask].dt.date)
-    cutoff_mask = cutoff_candidate_mask & (captured_et.dt.date == cutoff_date)
-    cutoff_reads = snapshots[cutoff_mask]
-    baseline = cutoff_reads.iloc[0]
-    latest_total = max(int(current_total), int(snapshots.iloc[-1]["total_diamonds"]))
-    earned = max(0, latest_total - int(baseline["total_diamonds"]))
-    cutoff_timestamp = pd.Timestamp(cutoff_date, tz="America/New_York") + pd.Timedelta(hours=20)
-    return earned, cutoff_timestamp
-
+    baseline_total = int(cutoff_rows.iloc[0]["total_diamonds"])
+    saved_latest = int(latest_rows.iloc[0]["total_diamonds"]) if not latest_rows.empty else 0
+    latest_total = max(int(current_total), saved_latest)
+    cutoff_et = pd.to_datetime(cutoff_rows.iloc[0]["captured_at"], utc=True).tz_convert("America/New_York")
+    return max(0, latest_total - baseline_total), cutoff_et
 
 @st.cache_data(show_spinner=False, max_entries=32)
 def cached_wheel_replay_html(title, candidates, winners):
