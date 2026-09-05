@@ -2910,6 +2910,17 @@ def main():
                     manager_choices = sorted(name for name in source_rows["assigned_manager"].unique() if name)
                     scouting_view = st.selectbox("Scouting page", ["Agency overview", *manager_choices], key=f"scouting_manager_{source_key}")
                     view_rows = source_rows if scouting_view == "Agency overview" else source_rows[source_rows["assigned_manager"] == scouting_view].copy()
+                # TikTok returns both Applied and Invitation Sent with the newest
+                # records first. Preserve that captured order after every filter.
+                if "source_order" in view_rows.columns:
+                    view_rows = view_rows.sort_values(
+                        ["source_order", "_event_at"],
+                        ascending=[True, False],
+                        na_position="last",
+                        kind="stable",
+                    )
+                else:
+                    view_rows = view_rows.sort_values("_event_at", ascending=False, na_position="last", kind="stable")
                     scouting_photo_keys = {
                         "bluecollarsquad00@gmail.com": "chersade",
                         "ladykmo@outlook.com": "ladykmo",
