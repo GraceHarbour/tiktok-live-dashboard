@@ -3274,15 +3274,21 @@ def main():
                     else battle_ids[-1]
                 )
                 requested_battle_id = str(st.query_params.get("event", "") or "")
+                selector_key = "battle_schedule_selector_live_v4"
+                link_request_key = "battle_schedule_link_request"
                 if requested_battle_id in battle_ids:
                     default_battle_id = requested_battle_id
+                    if st.session_state.get(link_request_key) != requested_battle_id:
+                        st.session_state[selector_key] = requested_battle_id
+                        st.session_state[link_request_key] = requested_battle_id
+                elif st.session_state.get(selector_key) not in battle_ids:
+                    st.session_state[selector_key] = default_battle_id
                 st.markdown('<div id="battle-results"></div>', unsafe_allow_html=True)
                 selected_battle_id = st.selectbox(
                     "Choose a battle",
                     battle_ids,
-                    index=battle_ids.index(default_battle_id),
                     format_func=lambda value: str(battle_events[battle_events["event_id"].astype(str).eq(value)].iloc[0]["event_name"]).replace("[BATTLE] ", ""),
-                    key="battle_schedule_selector_live_v4",
+                    key=selector_key,
                 )
                 selected_status = str(battle_events[battle_events["event_id"].astype(str).eq(selected_battle_id)].iloc[0]["status"] or "")
                 if selected_status == "live":
