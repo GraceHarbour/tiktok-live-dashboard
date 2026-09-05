@@ -3373,7 +3373,7 @@ def main():
                         GROUP BY username
                         ORDER BY "Average Battle Diamonds" DESC NULLS LAST
                     """),
-                    connection,
+                    get_engine(),
                 )
                 if not battle_results.empty:
                     battle_results["Diamonds Earned"] = (
