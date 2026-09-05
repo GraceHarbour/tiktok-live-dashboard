@@ -3255,7 +3255,7 @@ def main():
             weekday_headers = "".join(f'<div class="battle-cal-weekday">{day}</div>' for day in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
             st.components.v1.html(
                 f"""<style>
-                .battle-calendar{{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;width:100%}}
+                .battle-calendar,.batte-calendar{{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;width:100%}}
                 .battle-calendar-wrap{{overflow:visible;padding-bottom:8px;width:100%}}
                 .battle-cal-weekday{{color:#a9d8ff;font-weight:900;text-align:center;padding:8px}}
                 .battle-cal-day{{min-height:122px;padding:10px;border-radius:12px;background:#102744;border:1px solid #28537c;color:white}}
