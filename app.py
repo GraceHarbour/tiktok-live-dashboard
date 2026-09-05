@@ -3457,7 +3457,7 @@ def main():
                     render_read_table(battle_results, height=360)
                 else:
                     st.info("The selected battle has no tracked creator yet.")
-                battle_average_content = battle_average_slot()
+                battle_average_content = battle_average_slot
                 with battle_average_content:
                     st.markdown("#### Creator Battle Average")
             battle_average_content.caption("Permanent all-time history across every completed battle. Recorded results never reset and remain saved even if the related event is deleted.")
