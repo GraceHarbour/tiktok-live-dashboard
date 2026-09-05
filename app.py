@@ -3103,6 +3103,7 @@ def main():
                 battle_events["_start"] = pd.to_datetime(battle_events["start_at"], utc=True, errors="coerce")
                 battle_events["_end"] = pd.to_datetime(battle_events["end_at"], utc=True, errors="coerce")
                 battle_events = battle_events.dropna(subset=["_start"]).sort_values("_start")
+                battle_events["_end"] = battle_events["_end"].fillna(battle_events["_start"] + pd.Timedelta(minutes=30))
             now_utc = pd.Timestamp.now(tz="UTC")
             upcoming_battles = battle_events[battle_events["_start"].ge(now_utc)].copy() if not battle_events.empty else pd.DataFrame()
             completed_battles = battle_events[battle_events["_end"].lt(now_utc)].copy() if not battle_events.empty else pd.DataFrame()
