@@ -3106,6 +3106,10 @@ def main():
             next_end_et = next_battle["_end"].tz_convert("America/New_York")
             next_start_ct = next_battle["_start"].tz_convert("America/Chicago")
             next_end_ct = next_battle["_end"].tz_convert("America/Chicago")
+            next_start_et_label = "Time pending" if pd.isna(next_start_et) else next_start_et.strftime("%A, %B %d · %I:%M %p")
+            next_end_et_label = "pending" if pd.isna(next_end_et) else next_end_et.strftime("%I:%M %p")
+            next_start_ct_label = "Time pending" if pd.isna(next_start_ct) else next_start_ct.strftime("%I:%M %p")
+            next_end_ct_label = "pending" if pd.isna(next_end_ct) else next_end_ct.strftime("%I:%M %p")
             next_participants = load_event_participants(str(next_battle["event_id"]))
             next_creators = ", ".join(next_participants.get("username", pd.Series(dtype=str)).dropna().astype(str).tolist()) or "Creator match pending"
             next_title = str(next_battle["event_name"]).replace("[BATTLE] ", "")
@@ -3113,7 +3117,7 @@ def main():
                 f"""<div style="padding:22px 24px;border-radius:18px;border:2px solid #48a9ff;background:linear-gradient(135deg,#0b2d52,#161c3b);box-shadow:0 10px 28px rgba(0,0,0,.28);margin-bottom:18px;">
                 <div style="color:#7fc8ff;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">Up Next</div>
                 <div style="color:white;font-size:1.55rem;font-weight:900;margin:5px 0 10px;">{html.escape(next_title)}</div>
-                <div style="color:white;font-size:1.05rem;"><b>{next_start_et:%A, %B %d · %I:%M %p}–{next_end_et:%I:%M %p} ET / {next_start_ct:%I:%M %p}–{next_end_ct:%I:%M %p} CT</b></div>
+                <div style="color:white;font-size:1.05rem;"><b>{next_start_et_label}–{next_end_et_label} ET / {next_start_ct_label}–{next_end_ct_label} CT</b></div>
                 <div style="color:#dcecff;margin-top:6px;">Tracking: {html.escape(next_creators)}</div>
                 </div>""",
                 unsafe_allow_html=True,
