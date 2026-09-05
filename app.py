@@ -582,6 +582,17 @@ def remove_event_participants(event_id, selected_creator_ids):
             )
 
 
+def update_community_event_schedule(event_id, start_at, end_at):
+    with get_engine().begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE community_events SET start_at = :start_at, end_at = :end_at "
+                "WHERE event_id = :event_id"
+            ),
+            {"event_id": str(event_id), "start_at": start_at, "end_at": end_at},
+        )
+
+
 def delete_community_event(event_id):
     with get_engine().begin() as connection:
         connection.execute(text("DELETE FROM community_event_drawings WHERE event_id = :event_id"), {"event_id": event_id})
