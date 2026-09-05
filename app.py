@@ -1712,7 +1712,7 @@ def main():
                         avatar_map = avatar_rows.drop_duplicates("_key").set_index("_key")["avatar_url"].to_dict()
                     creator_names = frame.get("username", frame.get("creator_id", pd.Series("", index=frame.index))).fillna("").astype(str)
                     output = pd.DataFrame({
-                        "Picture": frame.get("avatar_url", pd.Series("", index=frame.index)).fillna("").astype(str).where(lambda value: value.str.strip().ne(""), creator_names.str.strip().str.casefold().map(avatar_map).fillna("")),
+                "Picture": frame.get("avatar_url", pd.Series("", index=frame.index)).fillna("").astype(str),
                         "Creator": creator_names,
                         "Diamonds": frame.get("diamonds_display", numeric_series(frame, "diamonds").astype("int64")),
                         "Valid go LIVE days": frame.get("valid_live_days_display", numeric_series(frame, "valid_live_days").astype("int64")),
