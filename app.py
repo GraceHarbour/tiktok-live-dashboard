@@ -3284,6 +3284,18 @@ def main():
                 elif st.session_state.get(selector_key) not in battle_ids:
                     st.session_state[selector_key] = default_battle_id
                 st.markdown('<div id="battle-results"></div>', unsafe_allow_html=True)
+                if requested_battle_id in battle_ids:
+                    st.components.v1.html(
+                        """
+                        <script>
+                        const openBattle = () => window.parent.document
+                            .getElementById('battle-results')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+                        setTimeout(openBattle, 250);
+                        setTimeout(openBattle, 1200);
+                        </script>
+                        """,
+                        height=0,
+                    )
                 selected_battle_id = st.selectbox(
                     "Choose a battle",
                     battle_ids,
