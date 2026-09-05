@@ -3180,6 +3180,18 @@ def main():
             first_grid_day = month_start - pd.Timedelta(days=month_start.weekday())
             last_grid_day = month_end + pd.Timedelta(days=(6 - month_end.weekday()))
             month_battles = calendar_frame[calendar_frame["_month"].eq(calendar_month)].copy()
+            try:
+                with get_engine().connect() as popup_connection:
+                    popup_results = pd.read_sql(
+                        text("""
+                            SELECT event_id, username, start_diamonds, end_diamonds, diamonds_earned
+                            FROM creator_battle_history
+                        """),
+                        popup_connection,
+                    )
+            except Exception:
+                popup_results = pd.DataFrame(columns=["event_id", "username", "start_diamonds", "end_diamonds", "diamonds_earned"])
+            popup_results["event_id"] = popup_results["event_id"].astype(str)
             calendar_cells = []
             for calendar_day in pd.date_range(first_grid_day, last_grid_day, freq="D"):
                 day_rows = month_battles[month_battles["_start_et"].dt.date.eq(calendar_day.date())]
@@ -3189,13 +3201,38 @@ def main():
                     battle_time_et = calendar_battle["_start_et"].strftime("%-I:%M %p")
                     battle_time_ct = calendar_battle["_start"].tz_convert("America/Chicago").strftime("%-I:%M %p")
                     battle_name = str(calendar_battle["event_name"]).replace("[BATTLE] ", "")
-                    battle_event_id = html.escape(str(calendar_battle["event_id"]), quote=True)
-                    battle_href = f"?tab=Battle%20Schedule&amp;event={battle_event_id}#battle-results"
-                    entries.append(f'<a class="battle-cal-event" href="{battle_href}" target="_self"><b>{html.escape(battle_time_et)} ET / {html.escape(battle_time_ct)} CT</b><br>{html.escape(battle_name)}<span class="battle-cal-open">Open battle</span></a>')
+                    raw_event_id = str(calendar_battle["event_id"])
+                    event_results = popup_results[popup_results["event_id"].eq(raw_event_id)]
+                    if event_results.empty:
+                        results_markup = '<div class="battle-pending">Results pending — this battle is not complete yet.</div>'
+                    else:
+                        result_cards = []
+                        for _, result in event_results.iterrows():
+                            creator = html.escape(str(result["username"]))
+                            starting = int(pd.to_numeric(result["start_diamonds"], errors="coerce") or 0)
+                            ending = int(pd.to_numeric(result["end_diamonds"], errors="coerce") or 0)
+                            earned = int(pd.to_numeric(result["diamonds_earned"], errors="coerce") or 0)
+                            result_cards.append(
+                                f'<div class="battle-result-card"><strong>{creator}</strong>'
+                                f'<div><span>Starting</span><b>{starting:,}</b></div>'
+                                f'<div><span>Ending</span><b>{ending:,}</b></div>'
+                                f'<div class="earned"><span>Diamonds earned</span><b>{earned:,}</b></div></div>'
+                            )
+                        total_earned = int(pd.to_numeric(event_results["diamonds_earned"], errors="coerce").fillna(0).sum())
+                        results_markup = ''.join(result_cards) + f'<div class="battle-popup-total"><span>Battle total</span><b>{total_earned:,} diamonds</b></div>'
+                    popup_title = html.escape(battle_name, quote=True)
+                    popup_time = html.escape(f"{calendar_day:%A, %B %d, %Y} · {battle_time_et} ET / {battle_time_ct} CT", quote=True)
+                    popup_results_attr = html.escape(results_markup, quote=True)
+                    entries.append(
+                        f'<button type="button" class="battle-cal-event" data-title="{popup_title}" '
+                        f'data-time="{popup_time}" data-results="{popup_results_attr}" onclick="openBattlePopup(this)">'
+                        f'<b>{html.escape(battle_time_et)} ET / {html.escape(battle_time_ct)} CT</b><br>{html.escape(battle_name)}'
+                        f'<span class="battle-cal-open">View battle</span></button>'
+                    )
                 day_class = "battle-cal-day" + ("" if is_selected_month else " outside-month") + (" has-battle" if entries else "")
                 calendar_cells.append(f'<div class="{day_class}"><div class="battle-cal-number">{calendar_day.day}</div>{"".join(entries)}</div>')
             weekday_headers = "".join(f'<div class="battle-cal-weekday">{day}</div>' for day in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
-            st.markdown(
+            st.components.v1.html(
                 f"""<style>
                 .battle-calendar{{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px;min-width:900px}}
                 .battle-calendar-wrap{{overflow-x:auto;padding-bottom:8px}}
