@@ -3264,8 +3264,8 @@ def main():
                 </style><div class="battle-calendar-wrap"><div class="batte-calendar">{weekday_headers}{"".join(calendar_cells)}</div></div>
                 <dialog id="battlePopup" class="battle-popup"><div class="battle-popup-head"><div><h2 id="battlePopupTitle"></h2><div id="battlePopupTime" class="battle-popup-time"></div></div><button class="battle-popup-close" onclick="document.getElementById('battlePopup').close()">Close</button></div><div id="battlePopupBody" class="battle-popup-body"></div></dialog>
                 <script>function openBattlePopup(button){{document.getElementById('battlePopupTitle').textContent=button.dataset.title;document.getElementById('battlePopupTime').textContent=button.dataset.time;document.getElementById('battlePopupBody').innerHTML=button.dataset.results;document.getElementById('battlePopup').showModal();}}</script>""",
-                height=720,
-                scrolling=True,
+                height=1050,
+                scrolling=False,
             )
             st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern and Central Time.")
         battle_average_slot = st.empty()
