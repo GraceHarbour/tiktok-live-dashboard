@@ -3115,6 +3115,49 @@ def main():
                 unsafe_allow_html=True,
             )
 
+        st.markdown("### Battle Diamonds by Date")
+        battle_date_col, battle_total_col = st.columns([1, 2])
+        with battle_date_col:
+            selected_battle_date = st.date_input(
+                "Select battle date",
+                value=pd.Timestamp.now(tz="America/New_York").date(),
+                key="battle_diamond_date",
+            )
+        with get_engine().connect() as connection:
+            selected_date_results = pd.read_sql(
+                text("""
+                SELECT e.event_id, e.event_name, p.creator_id, p.username,
+                       MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END) AS start_diamonds,
+                       MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END) AS end_diamonds
+                FROM community_events e
+                JOIN community_event_participants p ON p.event_id = e.event_id
+                LEFT JOIN community_event_snapshots s
+                  ON s.event_id = e.event_id AND s.creator_id = p.creator_id
+                WHERE e.event_name LIKE '[BATTLE]%'
+                  AND (e.start_at::timestamptz AT TIME ZONE 'America/New_York')::date = :battle_date
+                GROUP BY e.event_id, e.event_name, p.creator_id, p.username
+                ORDER BY e.start_at::timestamptz, p.username
+                """),
+                connection,
+                params={"battle_date": selected_battle_date},
+            )
+        recorded_date_results = selected_date_results.dropna(subset=["start_diamonds", "end_diamonds"]).copy()
+        if recorded_date_results.empty:
+            selected_date_total = 0
+        else:
+            selected_date_total = (
+                pd.to_numeric(recorded_date_results["end_diamonds"], errors="coerce").fillna(0)
+                - pd.to_numeric(recorded_date_results["start_diamonds"], errors="coerce").fillna(0)
+            ).clip(lower=0).sum()
+        with battle_total_col:
+            st.metric(
+                f"Battle Diamonds  {pd.Timestamp(selected_battle_date):%B %-d, %Y}",
+                f"{int(selected_date_total):,}",
+            )
+            scheduled_count = int(selected_date_results["event_id"].nunique()) if not selected_date_results.empty else 0
+            recorded_count = int(recorded_date_results["event_id"].nunique()) if not recorded_date_results.empty else 0
+            st.caption(f"{recorded_count} of {scheduled_count} scheduled battles have complete starting and ending reads.")
+
         st.markdown("### Monthly Battle Calendar")
         if battle_events.empty:
             st.info("The calendar will appear when battles are scheduled.")
