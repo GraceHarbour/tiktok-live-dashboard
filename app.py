@@ -1722,6 +1722,8 @@ def main():
                         "Rank-up requirement": frame.get("rank_up_detail", pd.Series("", index=frame.index)),
                 "Activeness level": frame.get("activeness_display", frame.get("activeness_level", pd.Series("", index=frame.index))),
                     })
+                    output = output.drop(columns=["Diamonds"])
+                    output.insert(2, "Current Diamonds", numeric_series(frame, "diamonds").astype("int64").values)
                     if include_manager:
                         output.insert(2, "Manager", frame["_manager"].fillna("").astype(str).values)
                     return output.assign(_sort_diamonds=numeric_series(frame, "diamonds").values).sort_values("_sort_diamonds", ascending=False).drop(columns="_sort_diamonds")
