@@ -516,28 +516,24 @@ def create_community_event(event_name, start_at, end_at):
 
 
 def update_community_event_schedule(event_id, start_at, end_at):
-    """Persist an edited event time without changing its participants or results."""
+    """Move an existing event while preserving its participants and results."""
     with get_engine().begin() as connection:
         connection.execute(
             text(
-                """UPDATE community_events
-                   SET start_at = :start_at, end_at = :end_at
-                   WHERE event_id = :event_id"""
+                "UPDATE community_events SET start_at = :start_at, end_at = :end_at, "
+                "status = CASE WHEN status = 'completed' THEN status ELSE 'scheduled' END "
+                "WHERE event_id = :event_id"
             ),
-            {"event_id": event_id, "start_at": start_at, "end_at": end_at},
+            {"event_id": str(event_id), "start_at": start_at, "end_at": end_at},
         )
 
 
 def save_event_participants(event_id, selected_creator_ids, creator_frame):
     now_value = pd.Timestamp.now(tz="UTC").isoformat()
-    normalized_creators = creator_frame.copy()
-    if not normalized_creators.empty:
-        normalized_creators["creator_id"] = normalized_creators["creator_id"].astype(str)
-    lookup = normalized_creators.set_index("creator_id", drop=False) if not normalized_creators.empty else pd.DataFrame()
+    lookup = creator_frame.set_index("creator_id", drop=False) if not creator_frame.empty else pd.DataFrame()
     with get_engine().begin() as connection:
         connection.execute(text("DELETE FROM community_event_participants WHERE event_id = :event_id"), {"event_id": event_id})
         for creator_id in selected_creator_ids:
-            creator_id = str(creator_id)
             if creator_id not in lookup.index:
                 continue
             row = lookup.loc[creator_id]
@@ -1065,7 +1061,7 @@ def save_shared_prior_month(file_name, sheet_name, columns, frame):
 
 
 
-def render_read_table(frame: pd.DataFrame, *, height: int | None = None, target=None) -> None:
+def render_read_table(frame: pd.DataFrame, *, height: int | None = None) -> None:
     """Render dashboard data as a high-contrast, readable table instead of Streamlit's white grid."""
     if frame is None or frame.empty:
         st.info("No records match this view.")
@@ -1080,7 +1076,7 @@ def render_read_table(frame: pd.DataFrame, *, height: int | None = None, target=
         html_table = safe.to_html(index=False, escape=False, classes="gh-data-table")
     else:
         html_table = visible.to_html(index=False, escape=True, classes="gh-data-table")
-    (target or st).markdown(f'<div class="gh-data-panel" tabindex="0" aria-label="Scrollable creator data table" style="{max_height}">{html_table}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="gh-data-panel" tabindex="0" aria-label="Scrollable creator data table" style="{max_height}">{html_table}</div>', unsafe_allow_html=True)
 
 
 def download_frame_csv(frame: pd.DataFrame, label: str, file_name: str, key: str) -> None:
@@ -1328,6 +1324,8 @@ def main():
                 dashboard_tier = dashboard_creators.get("tier_status", pd.Series("", index=dashboard_creators.index)).fillna("").astype(str).str.lower()
                 dashboard_rank = dashboard_creators.get("rank_up_progress", pd.Series("", index=dashboard_creators.index)).fillna("").astype(str).str.lower()
                 dashboard_not_maintained_text = dashboard_tier.str.contains("not maintained|not maintain", na=False) | dashboard_rank.str.contains("not maintained|not maintain", na=False)
+                # Count completed outcomes only. Phrases such as "Rank up to tier 4"
+                # and "Maintain tier" describe goals, not completed results.
                 dashboard_ranked = dashboard_tier.str.contains(r"\branked up\b", na=False) | dashboard_rank.str.contains(r"\branked up\b", na=False)
                 dashboard_maintained = ~dashboard_ranked & ~dashboard_not_maintained_text & (dashboard_tier.str.contains(r"\bmaintained tier\b", na=False) | dashboard_rank.str.contains(r"\bmaintained tier\b", na=False))
                 dashboard_not_maintained = dashboard_not_maintained_text | ~(dashboard_ranked | dashboard_maintained)
@@ -1712,7 +1710,7 @@ def main():
                         avatar_map = avatar_rows.drop_duplicates("_key").set_index("_key")["avatar_url"].to_dict()
                     creator_names = frame.get("username", frame.get("creator_id", pd.Series("", index=frame.index))).fillna("").astype(str)
                     output = pd.DataFrame({
-                "Picture": frame.get("avatar_url", pd.Series("", index=frame.index)).fillna("").astype(str),
+                        "Picture": frame.get("avatar_url", pd.Series("", index=frame.index)).fillna("").astype(str).where(lambda value: value.str.strip().ne(""), creator_names.str.strip().str.casefold().map(avatar_map).fillna("")),
                         "Creator": creator_names,
                         "Diamonds": frame.get("diamonds_display", numeric_series(frame, "diamonds").astype("int64")),
                         "Valid go LIVE days": frame.get("valid_live_days_display", numeric_series(frame, "valid_live_days").astype("int64")),
@@ -1722,8 +1720,6 @@ def main():
                         "Rank-up requirement": frame.get("rank_up_detail", pd.Series("", index=frame.index)),
                 "Activeness level": frame.get("activeness_display", frame.get("activeness_level", pd.Series("", index=frame.index))),
                     })
-                    output = output.drop(columns=["Diamonds"])
-                    output.insert(2, "Current Diamonds", numeric_series(frame, "diamonds").astype("int64").values)
                     if include_manager:
                         output.insert(2, "Manager", frame["_manager"].fillna("").astype(str).values)
                     return output.assign(_sort_diamonds=numeric_series(frame, "diamonds").values).sort_values("_sort_diamonds", ascending=False).drop(columns="_sort_diamonds")
@@ -2057,27 +2053,25 @@ def main():
                 st.caption(
                     f"Based on {maintenance_completed_days} completed 8:00 PM ET reporting day(s) in a {maintenance_total_days}-day month."
                 )
-                pacing_column = st.container(); not_pacing_column = st.container()
-                with pacing_column:
-                    pacing_creators = maintenance_pace_frame[maintenance_pace_frame.get("_is_pacing", pd.Series(dtype=bool)).eq(True)].copy()
-                    pacing_creators = pacing_creators.sort_values(["_projected", "Creator"], ascending=[False, True]) if not pacing_creators.empty else pacing_creators
-                    with st.container(border=True):
-                        st.markdown(f"#### ✅ Pacing to Maintain ({len(pacing_creators):,})")
-                        st.caption("Creators projected to reach their maintenance requirement, including creators already secured.")
-                        if pacing_creators.empty:
-                            st.info("No creators are currently pacing to maintain.")
-                        else:
-                            render_read_table(pacing_creators.drop(columns=["_is_pacing", "_remaining", "_projected"], errors="ignore"), height=560)
-                with not_pacing_column:
-                    not_pacing_creators = maintenance_pace_frame[maintenance_pace_frame.get("_is_pacing", pd.Series(dtype=bool)).eq(False)].copy()
-                    not_pacing_creators = not_pacing_creators.sort_values(["_remaining", "Creator"], ascending=[True, True]) if not not_pacing_creators.empty else not_pacing_creators
-                    with st.container(border=True):
-                        st.markdown(f"#### ⚠️ Not Pacing to Maintain ({len(not_pacing_creators):,})")
-                        st.caption("Closest remaining diamond gap appears first so managers know who to push.")
-                        if not_pacing_creators.empty:
-                            st.success("Every maintenance creator is currently on pace.")
-                        else:
-                            render_read_table(not_pacing_creators.drop(columns=["_is_pacing", "_remaining", "_projected"], errors="ignore"), height=560)
+                # Full-width stacked sections leave room for every pacing field.
+                pacing_creators = maintenance_pace_frame[maintenance_pace_frame.get("_is_pacing", pd.Series(dtype=bool)).eq(True)].copy()
+                pacing_creators = pacing_creators.sort_values(["_projected", "Creator"], ascending=[False, True]) if not pacing_creators.empty else pacing_creators
+                with st.container(border=True):
+                    st.markdown(f"#### ✅ Pacing to Maintain ({len(pacing_creators):,})")
+                    st.caption("Creators projected to reach their maintenance requirement, including creators already secured.")
+                    if pacing_creators.empty:
+                        st.info("No creators are currently pacing to maintain.")
+                    else:
+                        render_read_table(pacing_creators.drop(columns=["_is_pacing", "_remaining", "_projected"], errors="ignore"), height=560)
+                not_pacing_creators = maintenance_pace_frame[maintenance_pace_frame.get("_is_pacing", pd.Series(dtype=bool)).eq(False)].copy()
+                not_pacing_creators = not_pacing_creators.sort_values(["_remaining", "Creator"], ascending=[True, True]) if not not_pacing_creators.empty else not_pacing_creators
+                with st.container(border=True):
+                    st.markdown(f"#### ⚠️ Not Pacing to Maintain ({len(not_pacing_creators):,})")
+                    st.caption("Closest remaining diamond gap appears first so managers know who to push.")
+                    if not_pacing_creators.empty:
+                        st.success("Every maintenance creator is currently on pace.")
+                    else:
+                        render_read_table(not_pacing_creators.drop(columns=["_is_pacing", "_remaining", "_projected"], errors="ignore"), height=560)
                 st.markdown("### Complete Maintenance Read")
                 render_read_table(pd.DataFrame(clean_rows), height=720)
             else:
@@ -2912,17 +2906,6 @@ def main():
                     manager_choices = sorted(name for name in source_rows["assigned_manager"].unique() if name)
                     scouting_view = st.selectbox("Scouting page", ["Agency overview", *manager_choices], key=f"scouting_manager_{source_key}")
                     view_rows = source_rows if scouting_view == "Agency overview" else source_rows[source_rows["assigned_manager"] == scouting_view].copy()
-                # TikTok returns both Applied and Invitation Sent with the newest
-                # records first. Preserve that captured order after every filter.
-                if "source_order" in view_rows.columns:
-                    view_rows = view_rows.sort_values(
-                        ["source_order", "_event_at"],
-                        ascending=[True, False],
-                        na_position="last",
-                        kind="stable",
-                    )
-                else:
-                    view_rows = view_rows.sort_values("_event_at", ascending=False, na_position="last", kind="stable")
                     scouting_photo_keys = {
                         "bluecollarsquad00@gmail.com": "chersade",
                         "ladykmo@outlook.com": "ladykmo",
@@ -3120,7 +3103,6 @@ def main():
                 battle_events["_start"] = pd.to_datetime(battle_events["start_at"], utc=True, errors="coerce")
                 battle_events["_end"] = pd.to_datetime(battle_events["end_at"], utc=True, errors="coerce")
                 battle_events = battle_events.dropna(subset=["_start"]).sort_values("_start")
-                battle_events = battle_events.drop_duplicates(subset=["_start", "event_name"], keep="last")
             now_utc = pd.Timestamp.now(tz="UTC")
             upcoming_battles = battle_events[battle_events["_start"].ge(now_utc)].copy() if not battle_events.empty else pd.DataFrame()
             completed_battles = battle_events[battle_events["_end"].lt(now_utc)].copy() if not battle_events.empty else pd.DataFrame()
@@ -3133,10 +3115,6 @@ def main():
             next_end_et = next_battle["_end"].tz_convert("America/New_York")
             next_start_ct = next_battle["_start"].tz_convert("America/Chicago")
             next_end_ct = next_battle["_end"].tz_convert("America/Chicago")
-            next_start_et_label = "Time pending" if pd.isna(next_start_et) else next_start_et.strftime("%A, %B %d · %I:%M %p")
-            next_end_et_label = "pending" if pd.isna(next_end_et) else next_end_et.strftime("%I:%M %p")
-            next_start_ct_label = "Time pending" if pd.isna(next_start_ct) else next_start_ct.strftime("%I:%M %p")
-            next_end_ct_label = "pending" if pd.isna(next_end_ct) else next_end_ct.strftime("%I:%M %p")
             next_participants = load_event_participants(str(next_battle["event_id"]))
             next_creators = ", ".join(next_participants.get("username", pd.Series(dtype=str)).dropna().astype(str).tolist()) or "Creator match pending"
             next_title = str(next_battle["event_name"]).replace("[BATTLE] ", "")
@@ -3144,54 +3122,84 @@ def main():
                 f"""<div style="padding:22px 24px;border-radius:18px;border:2px solid #48a9ff;background:linear-gradient(135deg,#0b2d52,#161c3b);box-shadow:0 10px 28px rgba(0,0,0,.28);margin-bottom:18px;">
                 <div style="color:#7fc8ff;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">Up Next</div>
                 <div style="color:white;font-size:1.55rem;font-weight:900;margin:5px 0 10px;">{html.escape(next_title)}</div>
-                <div style="color:white;font-size:1.05rem;"><b>{next_start_et_label}–{next_end_et_label} ET / {next_start_ct_label}–{next_end_ct_label} CT</b></div>
+                <div style="color:white;font-size:1.05rem;"><b>{next_start_et:%A, %B %d · %I:%M %p}–{next_end_et:%I:%M %p} ET / {next_start_ct:%I:%M %p}–{next_end_ct:%I:%M %p} CT</b></div>
                 <div style="color:#dcecff;margin-top:6px;">Tracking: {html.escape(next_creators)}</div>
                 </div>""",
                 unsafe_allow_html=True,
             )
 
-        st.markdown("### Battle Diamonds by Date")
-        battle_date_col, battle_total_col = st.columns([1, 2])
-        with battle_date_col:
-            selected_battle_date = st.date_input(
-                "Select battle date",
-                value=pd.Timestamp.now(tz="America/New_York").date(),
-                key="battle_diamond_date",
-            )
-        with get_engine().connect() as connection:
-            selected_date_results = pd.read_sql(
-                text("""
-                SELECT e.event_id, e.event_name, p.creator_id, p.username,
-                       MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END) AS start_diamonds,
-                       MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END) AS end_diamonds
-                FROM community_events e
-                JOIN community_event_participants p ON p.event_id = e.event_id
-                LEFT JOIN community_event_snapshots s
-                  ON s.event_id = e.event_id AND s.creator_id = p.creator_id
-                WHERE e.event_name LIKE '[BATTLE]%'
-                  AND (e.start_at::timestamptz AT TIME ZONE 'America/New_York')::date = :battle_date
-                GROUP BY e.event_id, e.event_name, p.creator_id, p.username
-                ORDER BY e.start_at::timestamptz, p.username
-                """),
-                connection,
-                params={"battle_date": selected_battle_date},
-            )
-        recorded_date_results = selected_date_results.dropna(subset=["start_diamonds", "end_diamonds"]).copy()
-        if recorded_date_results.empty:
-            selected_date_total = 0
+        st.markdown("### Today’s Battle Tracking")
+        today_et = pd.Timestamp.now(tz="America/New_York").date()
+        todays_battles = (
+            battle_events[
+                battle_events["_start"].dt.tz_convert("America/New_York").dt.date.eq(today_et)
+            ].copy()
+            if not battle_events.empty
+            else pd.DataFrame()
+        )
+        if todays_battles.empty:
+            st.info("No battles are scheduled for today.")
         else:
-            selected_date_total = (
-                pd.to_numeric(recorded_date_results["end_diamonds"], errors="coerce").fillna(0)
-                - pd.to_numeric(recorded_date_results["start_diamonds"], errors="coerce").fillna(0)
-            ).clip(lower=0).sum()
-        with battle_total_col:
-            st.metric(
-                f"Battle Diamonds  {pd.Timestamp(selected_battle_date):%B %-d, %Y}",
-                f"{int(selected_date_total):,}",
-            )
-            scheduled_count = int(selected_date_results["event_id"].nunique()) if not selected_date_results.empty else 0
-            recorded_count = int(recorded_date_results["event_id"].nunique()) if not recorded_date_results.empty else 0
-            st.caption(f"{recorded_count} of {scheduled_count} scheduled battles have complete starting and ending reads.")
+            today_tracking_rows = []
+            for _, today_battle in todays_battles.sort_values("_start").iterrows():
+                today_event_id = str(today_battle["event_id"])
+                today_start_et = today_battle["_start"].tz_convert("America/New_York")
+                today_participants = load_event_participants(today_event_id)
+                today_snapshots = load_event_snapshots(today_event_id)
+                today_title = str(today_battle["event_name"]).replace("[BATTLE] ", "")
+                today_status = str(today_battle.get("status", "scheduled") or "scheduled").replace("_", " ").title()
+                if today_participants.empty:
+                    today_tracking_rows.append(
+                        {
+                            "Battle": today_title,
+                            "Start (ET)": today_start_et.strftime("%I:%M %p").lstrip("0"),
+                            "Creator": "Creator match pending",
+                            "Status": today_status,
+                            "Initial Read": None,
+                            "Ending Read": None,
+                            "Total Diamonds": None,
+                        }
+                    )
+                    continue
+                for _, today_creator in today_participants.iterrows():
+                    creator_id = str(today_creator.get("creator_id", ""))
+                    creator_reads = today_snapshots[
+                        today_snapshots.get("creator_id", pd.Series(dtype=str)).astype(str).eq(creator_id)
+                    ] if not today_snapshots.empty else pd.DataFrame()
+                    start_reads = creator_reads[creator_reads["phase"].astype(str).eq("start")] if not creator_reads.empty else pd.DataFrame()
+                    end_reads = creator_reads[creator_reads["phase"].astype(str).eq("end")] if not creator_reads.empty else pd.DataFrame()
+                    initial_read = pd.to_numeric(start_reads["diamonds"], errors="coerce").max() if not start_reads.empty else None
+                    ending_read = pd.to_numeric(end_reads["diamonds"], errors="coerce").max() if not end_reads.empty else None
+                    diamonds_earned = max(int(ending_read - initial_read), 0) if pd.notna(initial_read) and pd.notna(ending_read) else None
+                    today_tracking_rows.append(
+                        {
+                            "Battle": today_title,
+                            "Start (ET)": today_start_et.strftime("%I:%M %p").lstrip("0"),
+                            "Creator": str(today_creator.get("username", "Unknown creator")),
+                            "Status": today_status,
+                            "Initial Read": int(initial_read) if pd.notna(initial_read) else None,
+                            "Ending Read": int(ending_read) if pd.notna(ending_read) else None,
+                            "Total Diamonds": diamonds_earned,
+                        }
+                    )
+            today_tracking = pd.DataFrame(today_tracking_rows)
+            completed_today_total = pd.to_numeric(today_tracking["Total Diamonds"], errors="coerce").sum(min_count=1)
+            with st.container(border=True):
+                tracking_header_left, tracking_header_right = st.columns([3, 1])
+                with tracking_header_left:
+                    st.markdown(f"**All battles for {pd.Timestamp(today_et):%A, %B %d}**")
+                    st.caption("The initial read is taken before each battle. The ending read is taken 30 minutes after its start.")
+                with tracking_header_right:
+                    st.metric(
+                        "Today’s Battle Diamonds",
+                        f"{int(completed_today_total):,}" if pd.notna(completed_today_total) else "Pending",
+                    )
+                display_today_tracking = today_tracking.copy()
+                for tracking_column in ["Initial Read", "Ending Read", "Total Diamonds"]:
+                    display_today_tracking[tracking_column] = display_today_tracking[tracking_column].map(
+                        lambda value: f"{int(value):,}" if pd.notna(value) else "Pending"
+                    )
+                render_read_table(display_today_tracking, height=min(520, 92 + len(display_today_tracking) * 42))
 
         st.markdown("### Monthly Battle Calendar")
         if battle_events.empty:
@@ -3215,18 +3223,6 @@ def main():
             first_grid_day = month_start - pd.Timedelta(days=month_start.weekday())
             last_grid_day = month_end + pd.Timedelta(days=(6 - month_end.weekday()))
             month_battles = calendar_frame[calendar_frame["_month"].eq(calendar_month)].copy()
-            try:
-                with get_engine().connect() as popup_connection:
-                    popup_results = pd.read_sql(
-                        text("""
-                            SELECT event_id, username, start_diamonds, end_diamonds, diamonds_earned
-                            FROM creator_battle_history
-                        """),
-                        popup_connection,
-                    )
-            except Exception:
-                popup_results = pd.DataFrame(columns=["event_id", "username", "start_diamonds", "end_diamonds", "diamonds_earned"])
-            popup_results["event_id"] = popup_results["event_id"].astype(str)
             calendar_cells = []
             for calendar_day in pd.date_range(first_grid_day, last_grid_day, freq="D"):
                 day_rows = month_battles[month_battles["_start_et"].dt.date.eq(calendar_day.date())]
@@ -3236,70 +3232,25 @@ def main():
                     battle_time_et = calendar_battle["_start_et"].strftime("%-I:%M %p")
                     battle_time_ct = calendar_battle["_start"].tz_convert("America/Chicago").strftime("%-I:%M %p")
                     battle_name = str(calendar_battle["event_name"]).replace("[BATTLE] ", "")
-                    raw_event_id = str(calendar_battle["event_id"])
-                    event_results = popup_results[popup_results["event_id"].eq(raw_event_id)]
-                    if event_results.empty:
-                        results_markup = '<div class="battle-pending">Results pending — this battle is not complete yet.</div>'
-                    else:
-                        result_cards = []
-                        for _, result in event_results.iterrows():
-                            creator = html.escape(str(result["username"]))
-                            starting = int(pd.to_numeric(result["start_diamonds"], errors="coerce") or 0)
-                            ending = int(pd.to_numeric(result["end_diamonds"], errors="coerce") or 0)
-                            earned = int(pd.to_numeric(result["diamonds_earned"], errors="coerce") or 0)
-                            result_cards.append(
-                                f'<div class="battle-result-card"><strong>{creator}</strong>'
-                                f'<div><span>Starting</span><b>{starting:,}</b></div>'
-                                f'<div><span>Ending</span><b>{ending:,}</b></div>'
-                                f'<div class="earned"><span>Diamonds earned</span><b>{earned:,}</b></div></div>'
-                            )
-                        total_earned = int(pd.to_numeric(event_results["diamonds_earned"], errors="coerce").fillna(0).sum())
-                        results_markup = ''.join(result_cards) + f'<div class="battle-popup-total"><span>Battle total</span><b>{total_earned:,} diamonds</b></div>'
-                    popup_title = html.escape(battle_name, quote=True)
-                    popup_time = html.escape(f"{calendar_day:%A, %B %d, %Y} · {battle_time_et} ET / {battle_time_ct} CT", quote=True)
-                    popup_results_attr = html.escape(results_markup, quote=True)
-                    entries.append(
-                        f'<button type="button" class="battle-cal-event" data-title="{popup_title}" '
-                        f'data-time="{popup_time}" data-results="{popup_results_attr}" onclick="openBattlePopup(this)">'
-                        f'<b>{html.escape(battle_time_et)} ET / {html.escape(battle_time_ct)} CT</b><br>{html.escape(battle_name)}'
-                        f'<span class="battle-cal-open">View battle</span></button>'
-                    )
+                    entries.append(f'<div class="battle-cal-event"><b>{html.escape(battle_time_et)} ET / {html.escape(battle_time_ct)} CT</b><br>{html.escape(battle_name)}</div>')
                 day_class = "battle-cal-day" + ("" if is_selected_month else " outside-month") + (" has-battle" if entries else "")
                 calendar_cells.append(f'<div class="{day_class}"><div class="battle-cal-number">{calendar_day.day}</div>{"".join(entries)}</div>')
             weekday_headers = "".join(f'<div class="battle-cal-weekday">{day}</div>' for day in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
-            st.components.v1.html(
+            st.markdown(
                 f"""<style>
-                .battle-calendar,.batte-calendar{{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;width:100%}}
-                .battle-calendar-wrap{{overflow:visible;padding-bottom:8px;width:100%}}
+                .battle-calendar{{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px;min-width:900px}}
+                .battle-calendar-wrap{{overflow-x:auto;padding-bottom:8px}}
                 .battle-cal-weekday{{color:#a9d8ff;font-weight:900;text-align:center;padding:8px}}
                 .battle-cal-day{{min-height:122px;padding:10px;border-radius:12px;background:#102744;border:1px solid #28537c;color:white}}
                 .battle-cal-day.outside-month{{opacity:.34}}
                 .battle-cal-day.has-battle{{border:2px solid #48a9ff;background:linear-gradient(145deg,#10345c,#201f4a)}}
                 .battle-cal-number{{font-size:1.05rem;font-weight:900;color:#d8ecff;margin-bottom:7px}}
-                .battle-cal-event{{display:block;font-size:.82rem;line-height:1.3;background:#075da3;color:white!important;text-decoration:none!important;border-radius:9px;padding:7px;margin-top:6px;box-shadow:0 3px 10px rgba(0,0,0,.2);transition:transform .12s ease,background .12s ease}}
-                .battle-cal-event:hover{{background:#0874c7;transform:translateY(-1px)}}
-                .battle-cal-open{{display:block;margin-top:5px;color:#d8ecff;font-size:.72rem;font-weight:800}}
-                .battle-popup{{border:1px solid #48a9ff;border-radius:18px;background:#08182c;color:white;width:min(620px,calc(100% - 32px));padding:0;box-shadow:0 24px 80px #000b}}
-                .battle-popup::backdrop{{background:rgba(0,7,18,.78)}}
-                .battle-popup-head{{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:20px 22px;border-bottom:1px solid #28537c}}
-                .battle-popup-head h2{{margin:0 0 6px;font-size:1.25rem;color:#fff}}
-                .battle-popup-time{{color:#9ed4ff;font-weight:700}}
-                .battle-popup-close{{border:1px solid #5c86aa;border-radius:10px;background:#112b46;color:white;font-weight:800;padding:8px 14px;cursor:pointer}}
-                .battle-popup-body{{padding:20px 22px}}
-                .batte-result-card{{background:#102744;border:1px solid #28537c;border-radius:14px;padding:15px;margin-bottom:12px}}
-                .battle-result-card>strong{{display:block;font-size:1.1rem;margin-bottom:10px}}
-                .battle-result-card>div{{display:flex;justify-content:space-between;padding:5px 0;color:#cde8ff}}
-                .battle-result-card .earned{{border-top:1px solid #28537c;margin-top:5px;padding-top:10px;color:#6fe7b7}}
-                .batte-popup-total{{display:flex;justify-content:space-between;gap:16px;background:#153a31;border:1px solid #2c8b6b;border-radius:14px;padding:16px;color:#8ff0c9;font-size:1.12rem}}
-                .batte-pending{{background:#352b12;border:1px solid #a98228;border-radius:14px;padding:18px;color:#ffe29a}}
-                </style><div class="battle-calendar-wrap"><div class="batte-calendar">{weekday_headers}{"".join(calendar_cells)}</div></div>
-                <dialog id="battlePopup" class="battle-popup"><div class="battle-popup-head"><div><h2 id="battlePopupTitle"></h2><div id="battlePopupTime" class="battle-popup-time"></div></div><button class="battle-popup-close" onclick="document.getElementById('battlePopup').close()">Close</button></div><div id="battlePopupBody" class="battle-popup-body"></div></dialog>
-                <script>function openBattlePopup(button){{document.getElementById('battlePopupTitle').textContent=button.dataset.title;document.getElementById('battlePopupTime').textContent=button.dataset.time;document.getElementById('battlePopupBody').innerHTML=button.dataset.results;document.getElementById('battlePopup').showModal();}}</script>""",
-                height=1050,
-                scrolling=True,
+                .battle-cal-event{{font-size:.82rem;line-height:1.3;background:#075da3;color:white;border-radius:9px;padding:7px;margin-top:6px;box-shadow:0 3px 10px rgba(0,0,0,.2)}}
+                </style><div class="battle-calendar-wrap"><div class="battle-calendar">{weekday_headers}{"".join(calendar_cells)}</div></div>""",
+                unsafe_allow_html=True,
             )
             st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern and Central Time.")
-        battle_average_slot = st.container(border=True)
+        battle_average_slot = st.container()
 
 
         st.markdown("### Current and Future Battles")
@@ -3324,26 +3275,57 @@ def main():
                     st.markdown("**Battle format:** Single · 30 minutes")
                     st.markdown(f"**Starting read:** {(start_et - pd.Timedelta(minutes=5)):%I:%M %p} ET")
                     st.markdown(f"**Ending read:** {(start_et + pd.Timedelta(minutes=30)):%I:%M %p} ET")
+                    if st.button("Delete this battle", key=f"delete_battle_{battle_row['event_id']}", type="secondary"):
+                        delete_community_event(str(battle_row["event_id"]))
+                        load_community_events.clear()
+                        load_event_participants.clear()
+                        load_event_snapshots.clear()
+                        st.rerun()
                     with st.expander("Edit this battle's date, time, and creators"):
-                        edit_date_col, edit_time_col = st.columns(2)
-                        with edit_date_col:
-                            edited_date = st.date_input("Battle date", value=start_et.date(), key=f"battle_date_editor_{battle_row['event_id']}")
-                        with edit_time_col:
-                            time_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in range(0, 60, 5)]
-                            current_time = start_et.strftime("%H:%M")
-                            if current_time not in time_values:
-                                time_values.append(current_time)
-                                time_values.sort()
-                            edited_time = st.selectbox("Start time (ET)", time_values, index=time_values.index(current_time), format_func=lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0"), key=f"battle_time_editor_{battle_row['event_id']}")
+                        edit_date_column, edit_time_column = st.columns(2)
+                        with edit_date_column:
+                            edited_battle_date = st.date_input(
+                                "Battle date",
+                                value=start_et.date(),
+                                key=f"battle_date_editor_{battle_row['event_id']}",
+                            )
+                        with edit_time_column:
+                            edit_time_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in range(0, 60, 5)]
+                            current_time_value = start_et.strftime("%H:%M")
+                            if current_time_value not in edit_time_values:
+                                edit_time_values.append(current_time_value)
+                                edit_time_values.sort()
+                            edited_battle_time = st.selectbox(
+                                "Start time (ET)",
+                                edit_time_values,
+                                index=edit_time_values.index(current_time_value),
+                                format_func=lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0"),
+                                key=f"battle_time_editor_{battle_row['event_id']}",
+                            )
                         creator_options = creators.get("creator_id", pd.Series(dtype=str)).dropna().astype(str).tolist()
-                        creator_labels = {str(row.get("creator_id", "")): f"{row.get('username', row.get('creator_id', 'Unknown'))} — {row.get('manager_name', row.get('manager', 'Unassigned'))}" for _, row in creators.iterrows() if str(row.get("creator_id", "")).strip()}
+                        creator_labels = {
+                            str(row.get("creator_id", "")): f"{row.get('username', row.get('creator_id', 'Unknown'))} — {row.get('manager_name', row.get('manager', 'Unassigned'))}"
+                            for _, row in creators.iterrows()
+                            if str(row.get("creator_id", "")).strip()
+                        }
                         selected_now = participants.get("creator_id", pd.Series(dtype=str)).dropna().astype(str).tolist()
                         selected_now = [creator_id for creator_id in selected_now if creator_id in creator_options]
-                        selected_creators = st.multiselect("Creators to track", creator_options, default=selected_now, format_func=lambda creator_id: creator_labels.get(str(creator_id), str(creator_id)), key=f"battle_creator_editor_{battle_row['event_id']}", placeholder="Search by creator name")
+                        selected_creators = st.multiselect(
+                            "Creators to track",
+                            creator_options,
+                            default=selected_now,
+                            format_func=lambda creator_id: creator_labels.get(str(creator_id), str(creator_id)),
+                            key=f"battle_creator_editor_{battle_row['event_id']}",
+                            placeholder="Search by creator name",
+                        )
                         if st.button("Save battle changes", key=f"save_battle_changes_{battle_row['event_id']}", type="primary", use_container_width=True):
-                            edited_start_et = pd.Timestamp(f"{edited_date} {edited_time}", tz="America/New_York")
+                            edited_start_et = pd.Timestamp(f"{edited_battle_date} {edited_battle_time}", tz="America/New_York")
                             edited_end_et = edited_start_et + pd.Timedelta(minutes=30)
-                            update_community_event_schedule(str(battle_row["event_id"]), edited_start_et.tz_convert("UTC").isoformat(), edited_end_et.tz_convert("UTC").isoformat())
+                            update_community_event_schedule(
+                                str(battle_row["event_id"]),
+                                edited_start_et.tz_convert("UTC").isoformat(),
+                                edited_end_et.tz_convert("UTC").isoformat(),
+                            )
                             save_event_participants(str(battle_row["event_id"]), selected_creators, creators)
                             load_community_events.clear()
                             load_event_participants.clear()
@@ -3361,34 +3343,12 @@ def main():
                     else str(completed_battles.iloc[-1]["event_id"]) if not completed_battles.empty
                     else battle_ids[-1]
                 )
-                requested_battle_id = str(st.query_params.get("event", "") or "")
-                selector_key = "battle_schedule_selector_live_v4"
-                link_request_key = "battle_schedule_link_request"
-                if requested_battle_id in battle_ids:
-                    default_battle_id = requested_battle_id
-                    if st.session_state.get(link_request_key) != requested_battle_id:
-                        st.session_state[selector_key] = requested_battle_id
-                        st.session_state[link_request_key] = requested_battle_id
-                elif st.session_state.get(selector_key) not in battle_ids:
-                    st.session_state[selector_key] = default_battle_id
-                st.markdown('<div id="battle-results"></div>', unsafe_allow_html=True)
-                if requested_battle_id in battle_ids:
-                    st.components.v1.html(
-                        """
-                        <script>
-                        const openBattle = () => window.parent.document
-                            .getElementById('battle-results')?.scrollIntoView({behavior: 'smooth', block: 'start'});
-                        setTimeout(openBattle, 250);
-                        setTimeout(openBattle, 1200);
-                        </script>
-                        """,
-                        height=0,
-                    )
                 selected_battle_id = st.selectbox(
                     "Choose a battle",
                     battle_ids,
+                    index=battle_ids.index(default_battle_id),
                     format_func=lambda value: str(battle_events[battle_events["event_id"].astype(str).eq(value)].iloc[0]["event_name"]).replace("[BATTLE] ", ""),
-                    key=selector_key,
+                    key="battle_schedule_selector_live_v4",
                 )
                 selected_status = str(battle_events[battle_events["event_id"].astype(str).eq(selected_battle_id)].iloc[0]["status"] or "")
                 if selected_status == "live":
@@ -3409,60 +3369,29 @@ def main():
                         connection,
                         params={"event_id": selected_battle_id},
                     )
-                    # Archive each completed result independently of the event tables. This
-                # makes creator averages permanent even if an event is later deleted.
-                    history_connection = get_engine().connect()
-                history_connection.execute(text("""
-                    CREATE TABLE IF NOT EXISTS creator_battle_history (
-                        event_id TEXT NOT NULL,
-                        creator_id TEXT NOT NULL,
-                        username TEXT NOT NULL,
-                        start_diamonds BIGINT NOT NULL,
-                        end_diamonds BIGINT NOT NULL,
-                        diamonds_earned BIGINT NOT NULL,
-                        recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        PRIMARY KEY (event_id, creator_id)
+                    creator_averages = pd.read_sql(
+                        text("""
+                            WITH results AS (
+                                SELECT p.creator_id, p.username,
+                                       MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END) AS start_diamonds,
+                                       MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END) AS end_diamonds
+                                FROM community_event_participants p
+                                JOIN community_events e ON e.event_id = p.event_id
+                                LEFT JOIN community_event_snapshots s
+                                  ON s.event_id = p.event_id AND s.creator_id = p.creator_id
+                                WHERE e.event_name LIKE '[BATTLE]%'
+                                GROUP BY p.event_id, p.creator_id, p.username
+                            )
+                            SELECT username AS "Creator",
+                                   COUNT(*) FILTER (WHERE start_diamonds IS NOT NULL AND end_diamonds IS NOT NULL) AS "Battles Recorded",
+                                   ROUND(AVG(GREATEST(end_diamonds - start_diamonds, 0)) FILTER (WHERE start_diamonds IS NOT NULL AND end_diamonds IS NOT NULL)) AS "Average Battle Diamonds"
+                            FROM results
+                            GROUP BY username
+                            HAVING COUNT(*) FILTER (WHERE start_diamonds IS NOT NULL AND end_diamonds IS NOT NULL) > 0
+                            ORDER BY "Average Battle Diamonds" DESC NULLS LAST
+                        """),
+                        connection,
                     )
-                """))
-                history_connection.execute(text("""
-                    INSERT INTO creator_battle_history (
-                        event_id, creator_id, username, start_diamonds,
-                        end_diamonds, diamonds_earned
-                    )
-                    SELECT p.event_id, p.creator_id, MAX(p.username),
-                           MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END),
-                           MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END),
-                           GREATEST(
-                               MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END)
-                               - MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END), 0
-                           )
-                    FROM community_event_participants p
-                    JOIN community_events e ON e.event_id = p.event_id
-                    JOIN community_event_snapshots s
-                      ON s.event_id = p.event_id AND s.creator_id = p.creator_id
-                    WHERE e.event_name LIKE '[BATTLE]%'
-                    GROUP BY p.event_id, p.creator_id
-                    HAVING MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END) IS NOT NULL
-                       AND MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END) IS NOT NULL
-                    ON CONFLICT (event_id, creator_id) DO UPDATE SET
-                        username = EXCLUDED.username,
-                        start_diamonds = EXCLUDED.start_diamonds,
-                        end_diamonds = EXCLUDED.end_diamonds,
-                        diamonds_earned = EXCLUDED.diamonds_earned
-                """))
-                history_connection.commit()
-                creator_averages = pd.read_sql(
-                    text("""
-                        SELECT username AS "Creator",
-                               COUNT(*) AS "Battles Recorded",
-                               ROUND(AVG(diamonds_earned)) AS "Average Battle Diamonds"
-                        FROM creator_battle_history
-                        GROUP BY username
-                        ORDER BY "Average Battle Diamonds" DESC NULLS LAST
-                    """),
-                    history_connection,
-                )
-                history_connection.close()
                 if not battle_results.empty:
                     battle_results["Diamonds Earned"] = (
                         pd.to_numeric(battle_results["Ending Diamonds"], errors="coerce")
@@ -3471,28 +3400,27 @@ def main():
                     render_read_table(battle_results, height=360)
                 else:
                     st.info("The selected battle has no tracked creator yet.")
-                battle_average_content = battle_average_slot
-                with battle_average_content:
+                with battle_average_slot:
                     st.markdown("#### Creator Battle Average")
-            battle_average_content.caption("Permanent all-time history across every completed battle. Recorded results never reset and remain saved even if the related event is deleted.")
-            battle_average_search = battle_average_content.text_input(
-                "Search creator battle averages",
-                placeholder="Type a creator name",
-                key="battle_average_creator_search",
-            ).strip()
-            if battle_average_search and not creator_averages.empty:
-                creator_averages = creator_averages[
-                    creator_averages["Creator"].fillna("").astype(str).str.contains(
-                        battle_average_search, case=False, na=False, regex=False
-                    )
-                ].copy()
-            if creator_averages.empty:
-                if battle_average_search:
-                    battle_average_content.info("No creator averages match that search.")
-                else:
-                    battle_average_content.info("Averages will appear after each creator has a completed battle result.")
-            else:
-                render_read_table(creator_averages, height=420, target=battle_average_content)
+                    st.caption("Permanent all-time history across every completed battle. Results remain saved unless the related event is deleted.")
+                    battle_average_search = st.text_input(
+                        "Search creator battle averages",
+                        placeholder="Type a creator name",
+                        key="battle_average_creator_search",
+                    ).strip()
+                    if battle_average_search and not creator_averages.empty:
+                        creator_averages = creator_averages[
+                            creator_averages["Creator"].fillna("").astype(str).str.contains(
+                                battle_average_search, case=False, na=False, regex=False
+                            )
+                        ].copy()
+                    if creator_averages.empty:
+                        if battle_average_search:
+                            st.info("No creator averages match that search.")
+                        else:
+                            st.info("Averages will appear after each creator has a completed battle result.")
+                    else:
+                        render_read_table(creator_averages, height=420)
 
     if active_main_tab == "Access & Data":
         with access_tab:
