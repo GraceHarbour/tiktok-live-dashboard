@@ -3285,7 +3285,7 @@ def main():
                 scrolling=False,
             )
             st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern and Central Time.")
-        battle_average_slot = st.container(border=True)()
+        battle_average_slot = st.container(border=True)
 
 
         st.markdown("### Current and Future Battles")
