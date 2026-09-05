@@ -515,6 +515,19 @@ def create_community_event(event_name, start_at, end_at):
     return event_id
 
 
+def update_community_event_schedule(event_id, start_at, end_at):
+    """Persist an edited event time without changing its participants or results."""
+    with get_engine().begin() as connection:
+        connection.execute(
+            text(
+                """UPDATE community_events
+                   SET start_at = :start_at, end_at = :end_at
+                   WHERE event_id = :event_id"""
+            ),
+            {"event_id": event_id, "start_at": start_at, "end_at": end_at},
+        )
+
+
 def save_event_participants(event_id, selected_creator_ids, creator_frame):
     now_value = pd.Timestamp.now(tz="UTC").isoformat()
     normalized_creators = creator_frame.copy()
@@ -3242,8 +3255,8 @@ def main():
             weekday_headers = "".join(f'<div class="battle-cal-weekday">{day}</div>' for day in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
             st.components.v1.html(
                 f"""<style>
-                .battle-calendar{{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px;min-width:900px}}
-                .battle-calendar-wrap{{overflow-x:auto;padding-bottom:8px}}
+                .battle-calendar{{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;width:100%}}
+                .battle-calendar-wrap{{overflow:visible;padding-bottom:8px;width:100%}}
                 .battle-cal-weekday{{color:#a9d8ff;font-weight:900;text-align:center;padding:8px}}
                 .battle-cal-day{{min-height:122px;padding:10px;border-radius:12px;background:#102744;border:1px solid #28537c;color:white}}
                 .battle-cal-day.outside-month{{opacity:.34}}
@@ -3272,7 +3285,7 @@ def main():
                 scrolling=False,
             )
             st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern and Central Time.")
-        battle_average_slot = st.empty()
+        battle_average_slot = st.container(border=True)()
 
 
         st.markdown("### Current and Future Battles")
@@ -3444,7 +3457,7 @@ def main():
                     render_read_table(battle_results, height=360)
                 else:
                     st.info("The selected battle has no tracked creator yet.")
-                battle_average_content = battle_average_slot.container()
+                battle_average_content = battle_average_slot()
                 with battle_average_content:
                     st.markdown("#### Creator Battle Average")
             battle_average_content.caption("Permanent all-time history across every completed battle. Recorded results never reset and remain saved even if the related event is deleted.")
