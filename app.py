@@ -3303,28 +3303,58 @@ def main():
                         connection,
                         params={"event_id": selected_battle_id},
                     )
-                    creator_averages = pd.read_sql(
-                        text("""
-                            WITH results AS (
-                                SELECT p.creator_id, p.username,
-                                       MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END) AS start_diamonds,
-                                       MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END) AS end_diamonds
-                                FROM community_event_participants p
-                                JOIN community_events e ON e.event_id = p.event_id
-                                LEFT JOIN community_event_snapshots s
-                                  ON s.event_id = p.event_id AND s.creator_id = p.creator_id
-                                WHERE e.event_name LIKE '[BATTLE]%'
-                                GROUP BY p.event_id, p.creator_id, p.username
-                            )
-                            SELECT username AS "Creator",
-                                   COUNT(*) FILTER (WHERE start_diamonds IS NOT NULL AND end_diamonds IS NOT NULL) AS "Battles Recorded",
-                                   ROUND(AVG(GREATEST(end_diamonds - start_diamonds, 0)) FILTER (WHERE start_diamonds IS NOT NULL AND end_diamonds IS NOT NULL)) AS "Average Battle Diamonds"
-                            FROM results
-                            GROUP BY username
-                            ORDER BY "Average Battle Diamonds" DESC NULLS LAST
-                        """),
-                        connection,
+                    # Archive each completed result independently of the event tables. This
+                # makes creator averages permanent even if an event is later deleted.
+                connection.execute(text("""
+                    CREATE TABLE IF NOT EXISTS creator_battle_history (
+                        event_id TEXT NOT NULL,
+                        creator_id TEXT NOT NULL,
+                        username TEXT NOT NULL,
+                        start_diamonds BIGINT NOT NULL,
+                        end_diamonds BIGINT NOT NULL,
+                        diamonds_earned BIGINT NOT NULL,
+                        recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        PRIMARY KEY (event_id, creator_id)
                     )
+                """))
+                connection.execute(text("""
+                    INSERT INTO creator_battle_history (
+                        event_id, creator_id, username, start_diamonds,
+                        end_diamonds, diamonds_earned
+                    )
+                    SELECT p.event_id, p.creator_id, MAX(p.username),
+                           MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END),
+                           MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END),
+                           GREATEST(
+                               MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END)
+                               - MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END), 0
+                           )
+                    FROM community_event_participants p
+                    JOIN community_events e ON e.event_id = p.event_id
+                    JOIN community_event_snapshots s
+                      ON s.event_id = p.event_id AND s.creator_id = p.creator_id
+                    WHERE e.event_name LIKE '[BATTLE]%'
+                    GROUP BY p.event_id, p.creator_id
+                    HAVING MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END) IS NOT NULL
+                       AND MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END) IS NOT NULL
+                    ON CONFLICT (event_id, creator_id) DO UPDATE SET
+                        username = EXCLUDED.username,
+                        start_diamonds = EXCLUDED.start_diamonds,
+                        end_diamonds = EXCLUDED.end_diamonds,
+                        diamonds_earned = EXCLUDED.diamonds_earned
+                """))
+                connection.commit()
+                creator_averages = pd.read_sql(
+                    text("""
+                        SELECT username AS "Creator",
+                               COUNT(*) AS "Battles Recorded",
+                               ROUND(AVG(diamonds_earned)) AS "Average Battle Diamonds"
+                        FROM creator_battle_history
+                        GROUP BY username
+                        ORDER BY "Average Battle Diamonds" DESC NULLS LAST
+                    """),
+                    connection,
+                )
                 if not battle_results.empty:
                     battle_results["Diamonds Earned"] = (
                         pd.to_numeric(battle_results["Ending Diamonds"], errors="coerce")
@@ -3336,7 +3366,7 @@ def main():
                 battle_average_content = battle_average_slot.container()
                 with battle_average_content:
                     st.markdown("#### Creator Battle Average")
-            battle_average_content.caption("Permanent all-time history across every completed battle. Results remain saved unless the related event is deleted.")
+            battle_average_content.caption("Permanent all-time history across every completed battle. Recorded results never reset and remain saved even if the related event is deleted.")
             battle_average_search = battle_average_content.text_input(
                 "Search creator battle averages",
                 placeholder="Type a creator name",
