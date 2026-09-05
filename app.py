@@ -3146,7 +3146,9 @@ def main():
                     battle_time_et = calendar_battle["_start_et"].strftime("%-I:%M %p")
                     battle_time_ct = calendar_battle["_start"].tz_convert("America/Chicago").strftime("%-I:%M %p")
                     battle_name = str(calendar_battle["event_name"]).replace("[BATTLE] ", "")
-                    entries.append(f'<div class="battle-cal-event"><b>{html.escape(battle_time_et)} ET / {html.escape(battle_time_ct)} CT</b><br>{html.escape(battle_name)}</div>')
+                    battle_event_id = html.escape(str(calendar_battle["event_id"]), quote=True)
+                    battle_href = f"?tab=Battle%20Schedule&amp;event={battle_event_id}#battle-results"
+                    entries.append(f'<a class="battle-cal-event" href="{battle_href}" target="_self"><b>{html.escape(battle_time_et)} ET / {html.escape(battle_time_ct)} CT</b><br>{html.escape(battle_name)}<span class="battle-cal-open">Open battle</span></a>')
                 day_class = "battle-cal-day" + ("" if is_selected_month else " outside-month") + (" has-battle" if entries else "")
                 calendar_cells.append(f'<div class="{day_class}"><div class="battle-cal-number">{calendar_day.day}</div>{"".join(entries)}</div>')
             weekday_headers = "".join(f'<div class="battle-cal-weekday">{day}</div>' for day in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
@@ -3159,7 +3161,9 @@ def main():
                 .battle-cal-day.outside-month{{opacity:.34}}
                 .battle-cal-day.has-battle{{border:2px solid #48a9ff;background:linear-gradient(145deg,#10345c,#201f4a)}}
                 .battle-cal-number{{font-size:1.05rem;font-weight:900;color:#d8ecff;margin-bottom:7px}}
-                .battle-cal-event{{font-size:.82rem;line-height:1.3;background:#075da3;color:white;border-radius:9px;padding:7px;margin-top:6px;box-shadow:0 3px 10px rgba(0,0,0,.2)}}
+                .battle-cal-event{{display:block;font-size:.82rem;line-height:1.3;background:#075da3;color:white!important;text-decoration:none!important;border-radius:9px;padding:7px;margin-top:6px;box-shadow:0 3px 10px rgba(0,0,0,.2);transition:transform .12s ease,background .12s ease}}
+                .battle-cal-event:hover{{background:#0874c7;transform:translateY(-1px)}}
+                .battle-cal-open{{display:block;margin-top:5px;color:#d8ecff;font-size:.72rem;font-weight:800}}
                 </style><div class="battle-calendar-wrap"><div class="battle-calendar">{weekday_headers}{"".join(calendar_cells)}</div></div>""",
                 unsafe_allow_html=True,
             )
@@ -3226,6 +3230,10 @@ def main():
                     else str(completed_battles.iloc[-1]["event_id"]) if not completed_battles.empty
                     else battle_ids[-1]
                 )
+                requested_battle_id = str(st.query_params.get("event", "") or "")
+                if requested_battle_id in battle_ids:
+                    default_battle_id = requested_battle_id
+                st.markdown('<div id="battle-results"></div>', unsafe_allow_html=True)
                 selected_battle_id = st.selectbox(
                     "Choose a battle",
                     battle_ids,
