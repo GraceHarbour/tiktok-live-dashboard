@@ -517,10 +517,14 @@ def create_community_event(event_name, start_at, end_at):
 
 def save_event_participants(event_id, selected_creator_ids, creator_frame):
     now_value = pd.Timestamp.now(tz="UTC").isoformat()
-    lookup = creator_frame.set_index("creator_id", drop=False) if not creator_frame.empty else pd.DataFrame()
+    normalized_creators = creator_frame.copy()
+    if not normalized_creators.empty:
+        normalized_creators["creator_id"] = normalized_creators["creator_id"].astype(str)
+    lookup = normalized_creators.set_index("creator_id", drop=False) if not normalized_creators.empty else pd.DataFrame()
     with get_engine().begin() as connection:
         connection.execute(text("DELETE FROM community_event_participants WHERE event_id = :event_id"), {"event_id": event_id})
         for creator_id in selected_creator_ids:
+            creator_id = str(creator_id)
             if creator_id not in lookup.index:
                 continue
             row = lookup.loc[creator_id]
@@ -3244,8 +3248,24 @@ def main():
                 .battle-cal-event{{display:block;font-size:.82rem;line-height:1.3;background:#075da3;color:white!important;text-decoration:none!important;border-radius:9px;padding:7px;margin-top:6px;box-shadow:0 3px 10px rgba(0,0,0,.2);transition:transform .12s ease,background .12s ease}}
                 .battle-cal-event:hover{{background:#0874c7;transform:translateY(-1px)}}
                 .battle-cal-open{{display:block;margin-top:5px;color:#d8ecff;font-size:.72rem;font-weight:800}}
-                </style><div class="battle-calendar-wrap"><div class="battle-calendar">{weekday_headers}{"".join(calendar_cells)}</div></div>""",
-                unsafe_allow_html=True,
+                .battle-popup{{border:1px solid #48a9ff;border-radius:18px;background:#08182c;color:white;width:min(620px,calc(100% - 32px));padding:0;box-shadow:0 24px 80px #000b}}
+                .battle-popup::backdrop{{background:rgba(0,7,18,.78)}}
+                .battle-popup-head{{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:20px 22px;border-bottom:1px solid #28537c}}
+                .battle-popup-head h2{{margin:0 0 6px;font-size:1.25rem;color:#fff}}
+                .battle-popup-time{{color:#9ed4ff;font-weight:700}}
+                .battle-popup-close{{border:1px solid #5c86aa;border-radius:10px;background:#112b46;color:white;font-weight:800;padding:8px 14px;cursor:pointer}}
+                .battle-popup-body{{padding:20px 22px}}
+                .batte-result-card{{background:#102744;border:1px solid #28537c;border-radius:14px;padding:15px;margin-bottom:12px}}
+                .battle-result-card>strong{{display:block;font-size:1.1rem;margin-bottom:10px}}
+                .battle-result-card>div{{display:flex;justify-content:space-between;padding:5px 0;color:#cde8ff}}
+                .battle-result-card .earned{{border-top:1px solid #28537c;margin-top:5px;padding-top:10px;color:#6fe7b7}}
+                .batte-popup-total{{display:flex;justify-content:space-between;gap:16px;background:#153a31;border:1px solid #2c8b6b;border-radius:14px;padding:16px;color:#8ff0c9;font-size:1.12rem}}
+                .batte-pending{{background:#352b12;border:1px solid #a98228;border-radius:14px;padding:18px;color:#ffe29a}}
+                </style><div class="battle-calendar-wrap"><div class="batte-calendar">{weekday_headers}{"".join(calendar_cells)}</div></div>
+                <dialog id="battlePopup" class="battle-popup"><div class="battle-popup-head"><div><h2 id="battlePopupTitle"></h2><div id="battlePopupTime" class="battle-popup-time"></div></div><button class="battle-popup-close" onclick="document.getElementById('battlePopup').close()">Close</button></div><div id="battlePopupBody" class="battle-popup-body"></div></dialog>
+                <script>function openBattlePopup(button){{document.getElementById('battlePopupTitle').textContent=button.dataset.title;document.getElementById('battlePopupTime').textContent=button.dataset.time;document.getElementById('battlePopupBody').innerHTML=button.dataset.results;document.getElementById('battlePopup').showModal();}}</script>""",
+                height=720,
+                scrolling=True,
             )
             st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern and Central Time.")
         battle_average_slot = st.empty()
