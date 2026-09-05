@@ -3323,7 +3323,8 @@ def main():
                     )
                     # Archive each completed result independently of the event tables. This
                 # makes creator averages permanent even if an event is later deleted.
-                connection.execute(text("""
+                    history_connection = get_engine().connect()
+                history_connection.execute(text("""
                     CREATE TABLE IF NOT EXISTS creator_battle_history (
                         event_id TEXT NOT NULL,
                         creator_id TEXT NOT NULL,
@@ -3335,7 +3336,7 @@ def main():
                         PRIMARY KEY (event_id, creator_id)
                     )
                 """))
-                connection.execute(text("""
+                history_connection.execute(text("""
                     INSERT INTO creator_battle_history (
                         event_id, creator_id, username, start_diamonds,
                         end_diamonds, diamonds_earned
@@ -3361,7 +3362,8 @@ def main():
                         end_diamonds = EXCLUDED.end_diamonds,
                         diamonds_earned = EXCLUDED.diamonds_earned
                 """))
-                connection.commit()
+                history_connection.commit()
+                history_connection.close()
                 creator_averages = pd.read_sql(
                     text("""
                         SELECT username AS "Creator",
