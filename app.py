@@ -3363,7 +3363,6 @@ def main():
                         diamonds_earned = EXCLUDED.diamonds_earned
                 """))
                 history_connection.commit()
-                history_connection.close()
                 creator_averages = pd.read_sql(
                     text("""
                         SELECT username AS "Creator",
@@ -3373,8 +3372,9 @@ def main():
                         GROUP BY username
                         ORDER BY "Average Battle Diamonds" DESC NULLS LAST
                     """),
-                    get_engine(),
+                    history_connection,
                 )
+                history_connection.close()
                 if not battle_results.empty:
                     battle_results["Diamonds Earned"] = (
                         pd.to_numeric(battle_results["Ending Diamonds"], errors="coerce")
