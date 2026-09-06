@@ -3286,6 +3286,14 @@ def main():
             st.info(f"No battles are scheduled for {pd.Timestamp(selected_tracking_date):%B %d, %Y}.")
         else:
             today_tracking_rows = []
+            latest_diamonds_by_creator = (
+                creators.assign(_creator_id=creators.get("creator_id", pd.Series("", index=creators.index)).astype(str))
+                .set_index("_creator_id")
+                .get("diamonds", pd.Series(dtype=float))
+                .to_dict()
+                if not creators.empty
+                else {}
+            )
             for _, today_battle in todays_battles.sort_values("_start").iterrows():
                 today_event_id = str(today_battle["event_id"])
                 today_start_et = today_battle["_start"].tz_convert("America/New_York")
@@ -3302,6 +3310,7 @@ def main():
                             "Status": today_status,
                             "Initial Read": None,
                             "Ending Read": None,
+                            "Latest Diamonds": None,
                             "Total Diamonds": None,
                         }
                     )
@@ -3315,6 +3324,7 @@ def main():
                     end_reads = creator_reads[creator_reads["phase"].astype(str).eq("end")] if not creator_reads.empty else pd.DataFrame()
                     initial_read = pd.to_numeric(start_reads["diamonds"], errors="coerce").max() if not start_reads.empty else None
                     ending_read = pd.to_numeric(end_reads["diamonds"], errors="coerce").max() if not end_reads.empty else None
+                    latest_diamonds = pd.to_numeric(latest_diamonds_by_creator.get(creator_id), errors="coerce")
                     diamonds_earned = max(int(ending_read - initial_read), 0) if pd.notna(initial_read) and pd.notna(ending_read) else None
                     today_tracking_rows.append(
                         {
@@ -3324,6 +3334,7 @@ def main():
                             "Status": today_status,
                             "Initial Read": int(initial_read) if pd.notna(initial_read) else None,
                             "Ending Read": int(ending_read) if pd.notna(ending_read) else None,
+                            "Latest Diamonds": int(latest_diamonds) if pd.notna(latest_diamonds) else None,
                             "Total Diamonds": diamonds_earned,
                         }
                     )
@@ -3340,7 +3351,7 @@ def main():
                         f"{int(completed_today_total):,}" if pd.notna(completed_today_total) else "Pending",
                     )
                 display_today_tracking = today_tracking.copy()
-                for tracking_column in ["Initial Read", "Ending Read", "Total Diamonds"]:
+                for tracking_column in ["Initial Read", "Ending Read", "Latest Diamonds", "Total Diamonds"]:
                     display_today_tracking[tracking_column] = display_today_tracking[tracking_column].map(
                         lambda value: f"{int(value):,}" if pd.notna(value) else "Pending"
                     )
