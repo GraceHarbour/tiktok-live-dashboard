@@ -221,36 +221,30 @@ def store(records):
                         (event_id, str(creator.get("id", "")), str(creator.get("tiktok_username", "")),
                          str(creator.get("manager_name", "")), datetime.now(timezone.utc).isoformat()))
 
-            # Remove stale reader-created duplicates at the same start time.
-            # Manual events and past events are never deleted.
-            cursor.execute("SELECT event_id,event_name,start_at FROM community_events WHERE event_id LIKE 'discord-%' AND start_at >= %s ORDER BY start_at,event_id", (datetime.now(timezone.utc) - timedelta(hours=1),))
-            rows = cursor.fetchall()
-            grouped = {}
-            for eid, ename, estart in rows:
-                grouped.setdefault(estart, []).append((eid, ename or ""))
-            for same_time in grouped.values():
-                if len(same_time) < 2:
+            # Remove duplicate reader rows only; manual and past rows are untouched.
+    cursor.execute("SELECT event_id,event_name,start_at FROM community_events WHERE event_id LIKE 'discord-%' AND start_at >= %s ORDER BY start_at,event_id", (datetime.now(timezone.utc) - timedelta(hours=1),))
+    rows = cursor.fetchall()
+    groups = {}
+    for eid, ename, estart in rows:
+        groups.setdefault(estart, []).append((eid, ename or ""))
+    for items in groups.values():
+        if len(items) < 2:
+            continue
+        for i, (eid, ename) in enumerate(items):
+            if 'pending' not in normalized(ename) and 'open' not in normalized(ename):
+                continue
+            et = {x for x in normalized(ename).split() if x not in {'pending','open','vs','battle'}}
+            winner = False
+            for j, (otherid, other) in enumerate(items):
+                if j == i or 'pending' in normalized(other) or 'open' in normalized(other):
                     continue
-                kept = []
-                for eid, ename in same_time:
-                    tokens = {t for t in normalized(ename).split() if t not in {"pending", "open", "vs", "battle"}}
-                    duplicate = None
-                    for kid, kname, ktokens in kept:
-                        if tokens & ktokens:
-                            score = int("pending" not in normalized(ename)) + int("[open]" not in normalized(ename))
-                            kscore = int("pending" not in normalized(kname)) + int("[open]" not in normalized(kname))
-                            if score > kscore:
-                                cursor.execute("DELETE FROM community_event_participants WHERE event_id=%s", (kid,))
-                                cursor.execute("DELETE FROM community_events WHERE event_id=%s", (kid,))
-                                kept.remove((kid, kname, ktokens))
-                            else:
-                                duplicate = eid
-                            break
-                           if duplicate:
-                           cursor.execute("DELETE FROM community_event_participants WHERE event_id=%s", (duplicate,))
-                          cursor.execute("DELETE FROM community_events WHERE event_id=%s", (duplicate,))
-                    else:
-                        kept.append((eid, ename, tokens))
+                ot = {x for x in normalized(other).split() if x not in {'pending','open','vs','battle'}}
+                if et & ot:
+                    winner = True
+                    break
+            if winner:
+                cursor.execute("DELETE FROM community_event_participants WHERE event_id=%s", (eid,))
+                cursor.execute("DELETE FROM community_events WHERE event_id=%s", (eid,))
     print(f"Discord battle sync: {inserted} inserted, {updated} updated, {len(records)} unique source battles")
 
 
