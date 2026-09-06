@@ -1378,7 +1378,7 @@ def main():
                             / focus_elapsed_reporting_days
                             * focus_total_reporting_days
                         ) if focus_pacing_diamonds and focus_elapsed_reporting_days > 0 else 0.0
-                        focus_remaining_reporting_days = max(0, focus_total_reporting_days - focus_elapsed_reporting_days)
+                        focus_remaining_reporting_days = max(0, focus_total_reporting_days - focus_elapsed_reporting_days - 1)
                         focus_daily_divisor = max(1, focus_remaining_reporting_days)
                         focus_minimum_gap = max(0, int(focus_minimum_goal) - focus_current_diamonds)
                         focus_total_gap = max(0, int(focus_total_goal) - focus_current_diamonds)
@@ -2033,7 +2033,7 @@ def main():
                     max(0, int((maintenance_now - maintenance_cycle_start).total_seconds() // 86_400)),
                 )
                 maintenance_elapsed_days = max(maintenance_completed_days, 1)
-                maintenance_days_remaining = max(maintenance_total_days - maintenance_completed_days, 1)
+                maintenance_days_remaining = max(maintenance_total_days - maintenance_completed_days - 1, 1)
                 maintenance_pace_rows = []
                 for _, source_row in maintenance_data.iterrows():
                     raw = re.sub(r"\s+", " ", str(source_row.get("raw_row", "")).replace(chr(20), " ").replace("\n", " ")).strip()
