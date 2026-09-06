@@ -215,7 +215,8 @@ def store(records):
                 inserted += int(not exists)
                 updated += int(exists)
                 if creator is not None:
-                    cursor.execute("DELETE FROM community_event_participants WHERE event_id=%s", (event_id,))
+                    # Discord refreshes may update the matched creator, but must
+                    # never replace creators that an administrator added manually.
                     cursor.execute("""INSERT INTO community_event_participants(event_id,creator_id,username,manager,added_at)
                         VALUES(%s,%s,%s,%s,%s) ON CONFLICT(event_id,creator_id) DO UPDATE SET username=EXCLUDED.username,manager=EXCLUDED.manager""",
                         (event_id, str(creator.get("id", "")), str(creator.get("tiktok_username", "")),
