@@ -528,6 +528,32 @@ def update_community_event_schedule(event_id, start_at, end_at):
             {"event_id": str(event_id), "start_at": start_at, "end_at": end_at},
         )
 
+
+def update_community_event(event_id, event_name, start_at, end_at, status):
+    """Update every administrator-editable field on a scheduled battle."""
+    normalized_name = str(event_name).strip()
+    if not normalized_name:
+        raise ValueError("Enter a battle title or matchup.")
+    if not normalized_name.startswith("[BATTLE]"):
+        normalized_name = f"[BATTLE] {normalized_name}"
+    if status not in {"scheduled", "live", "completed", "cancelled"}:
+        raise ValueError("Choose a valid battle status.")
+    with get_engine().begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE community_events SET event_name = :event_name, start_at = :start_at, "
+                "end_at = :end_at, status = :status WHERE event_id = :event_id"
+            ),
+            {
+                "event_id": str(event_id),
+                "event_name": normalized_name,
+                "start_at": start_at,
+                "end_at": end_at,
+                "status": status,
+            },
+        )
+
+
 @st.cache_data(ttl=30, show_spinner=False)
 def load_event_participants_bulk(event_ids):
     ids = [str(value) for value in event_ids]
@@ -3060,6 +3086,21 @@ def main():
         with battle_schedule_tab:
             st.subheader("Battle Schedule")
             st.caption("All times are shown in Eastern and Central Time. Each tracked creator is captured at battle start and again 30 minutes later from the first successful goal read.")
+            battle_actor_email = google_signed_in_email()
+            battle_access = load_access_people()
+            if not battle_access.empty:
+                battle_access["email"] = battle_access["email"].fillna("").astype(str).str.casefold()
+                battle_access["role"] = battle_access["role"].fillna("member").astype(str).str.casefold()
+                battle_access["active"] = battle_access["active"].fillna(False).astype(bool)
+            battle_actor = battle_access[
+                battle_access["email"].eq(battle_actor_email) & battle_access["active"]
+            ] if battle_actor_email and not battle_access.empty else pd.DataFrame()
+            battle_actor_role = str(battle_actor.iloc[0]["role"]) if not battle_actor.empty else ""
+            battle_can_manage = battle_actor_role in {"owner", "admin"}
+            if battle_can_manage:
+                st.caption(f"Editing enabled for {battle_actor_role.title()} account {battle_actor_email}.")
+            else:
+                st.info("You can add creators to scheduled battles. Owners and Administrators can also edit all battle details.")
             battle_creator_columns = [column for column in ["creator_id", "username", "manager_name", "manager"] if column in creators.columns]
             battle_creator_frame = creators[battle_creator_columns].copy()
             if not battle_creator_frame.empty and "creator_id" in battle_creator_frame.columns:
@@ -3090,8 +3131,8 @@ def main():
             with st.form("battle_schedule_form", clear_on_submit=True):
                 battle_form_left, battle_form_middle, battle_form_right = st.columns(3)
                 with battle_form_left:
-                    battle_title = st.text_input("Battle name", placeholder="Confirmed Battle")
-                    battle_date = st.date_input("Battle date", value=(pd.Timestamp.now(tz="America/New_York") + pd.Timedelta(days=1)).date())
+                    battle_title = st.text_input("Battle name", placeholder="Confirmed Battle", disabled=not battle_can_manage)
+                    battle_date = st.date_input("Battle date", value=(pd.Timestamp.now(tz="America/New_York") + pd.Timedelta(days=1)).date(), disabled=not battle_can_manage)
                 with battle_form_middle:
                     battle_time_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 15, 30, 45)]
                     battle_start_text = st.selectbox(
@@ -3099,8 +3140,9 @@ def main():
                         battle_time_values,
                         index=battle_time_values.index("20:00"),
                         format_func=lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0"),
+                        disabled=not battle_can_manage,
                     )
-                    battle_opponent = st.text_input("Opponent", placeholder="Opponent username")
+                    battle_opponent = st.text_input("Opponent", placeholder="Opponent username", disabled=not battle_can_manage)
                 with battle_form_right:
                     battle_creator_options = battle_creator_frame["creator_id"].tolist() if not battle_creator_frame.empty else []
                     battle_creator_labels = dict(zip(battle_creator_frame["creator_id"], battle_creator_frame["username"])) if battle_creator_options else {}
@@ -3108,8 +3150,9 @@ def main():
                         "Agency creator(s) to track",
                         battle_creator_options,
                         format_func=lambda value: battle_creator_labels.get(value, value),
+                        disabled=not battle_can_manage,
                     )
-                save_battle = st.form_submit_button("Save battle", type="primary", use_container_width=True)
+                save_battle = st.form_submit_button("Save battle", type="primary", use_container_width=True, disabled=not battle_can_manage)
             if save_battle:
                 if not battle_title.strip() or not battle_creator_ids:
                     st.error("Enter a battle name and select at least one agency creator.")
@@ -3393,19 +3436,27 @@ def main():
                     st.markdown("**Battle format:** Single · 30 minutes")
                     st.markdown(f"**Starting read:** {(start_et - pd.Timedelta(minutes=5)):%I:%M %p} ET")
                     st.markdown(f"**Ending read:** {(start_et + pd.Timedelta(minutes=30)):%I:%M %p} ET")
-                    if st.button("Delete this battle", key=f"delete_battle_{battle_row['event_id']}", type="secondary"):
+                    if st.button("Delete this battle", key=f"delete_battle_{battle_row['event_id']}", type="secondary", disabled=not battle_can_manage):
                         delete_community_event(str(battle_row["event_id"]))
                         load_community_events.clear()
                         load_event_participants.clear()
                         load_event_snapshots.clear()
                         st.rerun()
-                    with st.expander("Edit this battle's date, time, and creators"):
-                        edit_date_column, edit_time_column = st.columns(2)
+                    with st.expander("Edit all battle details"):
+                        current_battle_title = str(battle_row["event_name"]).removeprefix("[BATTLE] ")
+                        edited_battle_title = st.text_input(
+                            "Battle title / matchup",
+                            value=current_battle_title,
+                            key=f"battle_title_editor_{battle_row['event_id']}",
+                            disabled=not battle_can_manage,
+                        )
+                        edit_date_column, edit_time_column, edit_end_column = st.columns(3)
                         with edit_date_column:
                             edited_battle_date = st.date_input(
                                 "Battle date",
                                 value=start_et.date(),
                                 key=f"battle_date_editor_{battle_row['event_id']}",
+                                disabled=not battle_can_manage,
                             )
                         with edit_time_column:
                             edit_time_values = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in range(0, 60, 5)]
@@ -3419,7 +3470,31 @@ def main():
                                 index=edit_time_values.index(current_time_value),
                                 format_func=lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0"),
                                 key=f"battle_time_editor_{battle_row['event_id']}",
+                                disabled=not battle_can_manage,
                             )
+                        with edit_end_column:
+                            current_end_time_value = end_et.strftime("%H:%M")
+                            if current_end_time_value not in edit_time_values:
+                                edit_time_values.append(current_end_time_value)
+                                edit_time_values.sort()
+                            edited_battle_end_time = st.selectbox(
+                                "End time (ET)",
+                                edit_time_values,
+                                index=edit_time_values.index(current_end_time_value),
+                                format_func=lambda value: pd.Timestamp(f"2000-01-01 {value}").strftime("%I:%M %p").lstrip("0"),
+                                key=f"battle_end_time_editor_{battle_row['event_id']}",
+                                disabled=not battle_can_manage,
+                            )
+                        status_options = ["scheduled", "live", "completed", "cancelled"]
+                        current_status = str(battle_row.get("status", "scheduled") or "scheduled").casefold()
+                        edited_battle_status = st.selectbox(
+                            "Battle status",
+                            status_options,
+                            index=status_options.index(current_status) if current_status in status_options else 0,
+                            format_func=lambda value: value.title(),
+                            key=f"battle_status_editor_{battle_row['event_id']}",
+                            disabled=not battle_can_manage,
+                        )
                         creator_options = creators.get("creator_id", pd.Series(dtype=str)).dropna().astype(str).tolist()
                         creator_labels = {
                             str(row.get("creator_id", "")): f"{row.get('username', row.get('creator_id', 'Unknown'))} — {row.get('manager_name', row.get('manager', 'Unassigned'))}"
@@ -3428,26 +3503,51 @@ def main():
                         }
                         selected_now = participants.get("creator_id", pd.Series(dtype=str)).dropna().astype(str).tolist()
                         selected_now = [creator_id for creator_id in selected_now if creator_id in creator_options]
-                        selected_creators = st.multiselect(
-                            "Creators to track",
-                            creator_options,
-                            default=selected_now,
-                            format_func=lambda creator_id: creator_labels.get(str(creator_id), str(creator_id)),
-                            key=f"battle_creator_editor_{battle_row['event_id']}",
-                            placeholder="Search by creator name",
-                        )
-                        if st.button("Save battle changes", key=f"save_battle_changes_{battle_row['event_id']}", type="primary", use_container_width=True):
+                        if battle_can_manage:
+                            selected_creators = st.multiselect(
+                                "Creators to track",
+                                creator_options,
+                                default=selected_now,
+                                format_func=lambda creator_id: creator_labels.get(str(creator_id), str(creator_id)),
+                                key=f"battle_creator_editor_{battle_row['event_id']}",
+                                placeholder="Search by creator name",
+                            )
+                        else:
+                            creators_available_to_add = [creator_id for creator_id in creator_options if creator_id not in selected_now]
+                            creators_to_add = st.multiselect(
+                                "Add creators to track",
+                                creators_available_to_add,
+                                format_func=lambda creator_id: creator_labels.get(str(creator_id), str(creator_id)),
+                                key=f"battle_creator_add_{battle_row['event_id']}",
+                                placeholder="Search by creator name",
+                            )
+                            if st.button(
+                                "Add selected creators",
+                                key=f"add_battle_creators_{battle_row['event_id']}",
+                                disabled=not creators_to_add,
+                                use_container_width=True,
+                            ):
+                                add_event_participants(str(battle_row["event_id"]), creators_to_add, creators)
+                                load_event_participants.clear()
+                                load_event_participants_bulk.clear()
+                                st.success("Creators added to this battle.")
+                                st.rerun()
+                        if st.button("Save all battle changes", key=f"save_battle_changes_{battle_row['event_id']}", type="primary", use_container_width=True, disabled=not battle_can_manage):
                             edited_start_et = pd.Timestamp(f"{edited_battle_date} {edited_battle_time}", tz="America/New_York")
-                            edited_end_et = edited_start_et + pd.Timedelta(minutes=30)
-                            update_community_event_schedule(
+                            edited_end_et = pd.Timestamp(f"{edited_battle_date} {edited_battle_end_time}", tz="America/New_York")
+                            if edited_end_et <= edited_start_et:
+                                edited_end_et += pd.Timedelta(days=1)
+                            update_community_event(
                                 str(battle_row["event_id"]),
+                                edited_battle_title,
                                 edited_start_et.tz_convert("UTC").isoformat(),
                                 edited_end_et.tz_convert("UTC").isoformat(),
+                                edited_battle_status,
                             )
                             save_event_participants(str(battle_row["event_id"]), selected_creators, creators)
                             load_community_events.clear()
                             load_event_participants.clear()
-                            st.success("Battle date, start time, and tracked creators updated.")
+                            st.success("All battle details were updated.")
                             st.rerun()
             st.markdown("### Battle Results and Creator Averages")
             if battle_events.empty:
