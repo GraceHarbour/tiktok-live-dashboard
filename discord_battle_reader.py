@@ -137,22 +137,27 @@ def scheduled_records(messages):
 
 
 def merged_records(scheduled, confirmed):
-    merged = {}
+    merged = []
+    def tokens(record):
+        vals = {normalized(record.get("creator", "")), normalized(record.get("opponent", ""))}
+        return {v for v in vals if v and v != "pending"}
     for record in scheduled + confirmed:
-        # Message/user IDs differ between pending and confirmed posts.  Use
-        # the battle identity instead so confirmation updates the same row.
-        opponent_key = normalized(record.get("opponent", ""))
-        creator_key = normalized(record.get("creator", ""))
-        identity = opponent_key if opponent_key and opponent_key != "pending" else creator_key
-        key = (record["day"].isoformat(), record["clock"], identity)
-        if key not in merged:
-            merged[key] = record.copy()
+        identity = tokens(record)
+        match = None
+        for existing in merged:
+            if existing["day"] != record["day"] or existing["clock"] != record["clock"]:
+                continue
+            overlap = identity & tokens(existing)
+            if overlap:
+                match = existing
+                break
+        if match is None:
+            merged.append(record.copy())
             continue
         for field, value in record.items():
             if value not in (None, "", "pending", "Rule pending", "18+ not provided"):
-                merged[key][field] = value
-    return list(merged.values())
-
+                match[field] = value
+    return merged
 
 def creator_match(name, creators):
     target = normalized(name)
