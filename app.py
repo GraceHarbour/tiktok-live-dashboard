@@ -801,13 +801,17 @@ def set_google_iap_access(email: str, enabled: bool) -> None:
     if binding is None:
         binding = {"role": "roles/iap.httpsResourceAccessor", "members": []}
         policy["bindings"].append(binding)
-    members = {str(member) for member in binding.get("members", [])}
+    # IAM may return Google-account principals with their original letter case.
+    # Compare them case-insensitively so removing a user actually removes the
+    # existing principal instead of looking for a lowercase spelling that is
+    # not present in the policy.
+    members = {str(member).casefold(): str(member) for member in binding.get("members", [])}
     member = f"user:{normalized}"
     if enabled:
-        members.add(member)
+        members.setdefault(member.casefold(), member)
     else:
-        members.discard(member)
-    binding["members"] = sorted(members)
+        members.pop(member.casefold(), None)
+    binding["members"] = sorted(members.values(), key=str.casefold)
     update = requests.post(f"https://cloudresourcemanager.googleapis.com/v1/projects/{project}:setIamPolicy", headers=headers, json={"policy": policy}, timeout=10)
     update.raise_for_status()
 
@@ -3570,6 +3574,9 @@ def main():
                     add_submit = st.form_submit_button("Add or restore access", type="primary")
                 if add_submit:
                     try:
+                        normalized_add_email = add_email.strip().casefold()
+                        if not normalized_add_email or "@" not in normalized_add_email:
+                            raise ValueError("Enter a valid Google email address.")
                         set_google_iap_access(add_email, True)
                         save_access_person(add_email, add_role)
                         st.session_state["access_notice"] = f"Access saved for {add_email.strip().casefold()}."
