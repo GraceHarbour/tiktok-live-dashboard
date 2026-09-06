@@ -1359,15 +1359,15 @@ def main():
                         # A reporting day is complete only at the next 8:00 PM ET boundary.
                         # Never project from a partial day.
                         focus_calendar_month_start = focus_today.normalize().replace(day=1)
-                        focus_current_month_end = focus_calendar_month_start + pd.offsets.MonthBegin(1) - pd.Timedelta(hours=4)
+                        focus_current_month_end = (focus_calendar_month_start + pd.offsets.MonthBegin(1) - pd.Timedelta(days=1)).replace(hour=20, minute=0, second=0, microsecond=0)
                         focus_month_start = (
                             focus_calendar_month_start + pd.offsets.MonthBegin(1)
                             if focus_today >= focus_current_month_end
                             else focus_calendar_month_start
                         )
                         focus_next_month_start = focus_month_start + pd.offsets.MonthBegin(1)
-                        focus_reporting_start = focus_month_start - pd.Timedelta(hours=4)
-                        focus_reporting_end = focus_next_month_start - pd.Timedelta(hours=4)
+                        focus_reporting_start = (focus_month_start - pd.Timedelta(days=1)).replace(hour=20, minute=0, second=0, microsecond=0)
+                        focus_reporting_end = (focus_next_month_start - pd.Timedelta(days=1)).replace(hour=20, minute=0, second=0, microsecond=0)
                         focus_total_reporting_days = int((focus_reporting_end - focus_reporting_start).total_seconds() / 86_400)
                         focus_elapsed_reporting_days = min(
                             focus_total_reporting_days,
@@ -2025,8 +2025,8 @@ def main():
 
                 maintenance_now = pd.Timestamp.now(tz="America/New_York")
                 maintenance_month_start = maintenance_now.normalize().replace(day=1)
-                maintenance_cycle_start = maintenance_month_start - pd.Timedelta(hours=4)
-                maintenance_cycle_end = maintenance_month_start + pd.offsets.MonthBegin(1) - pd.Timedelta(hours=4)
+                maintenance_cycle_start = (maintenance_month_start - pd.Timedelta(days=1)).replace(hour=20, minute=0, second=0, microsecond=0)
+                maintenance_cycle_end = (maintenance_month_start + pd.offsets.MonthBegin(1) - pd.Timedelta(days=1)).replace(hour=20, minute=0, second=0, microsecond=0)
                 maintenance_total_days = max(int((maintenance_cycle_end - maintenance_cycle_start).total_seconds() // 86_400), 1)
                 maintenance_completed_days = min(
                     maintenance_total_days,
