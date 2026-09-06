@@ -527,6 +527,18 @@ def update_community_event_schedule(event_id, start_at, end_at):
             {"event_id": str(event_id), "start_at": start_at, "end_at": end_at},
         )
 
+@st.cache_data(ttl=30, show_spinner=False)
+def load_event_participants_bulk(event_ids):
+    ids = [str(value) for value in event_ids]
+    if not ids:
+        return pd.DataFrame(columns=["event_id", "username", "manager"])
+    with get_engine().connect() as connection:
+        return pd.read_sql(
+            text("SELECT event_id, username, manager FROM community_event_participants WHERE event_id = ANY(:event_ids) ORDER BY event_id, username"),
+            connection,
+            params={"event_ids": ids},
+        )
+
 
 def save_event_participants(event_id, selected_creator_ids, creator_frame):
     now_value = pd.Timestamp.now(tz="UTC").isoformat()
@@ -3103,7 +3115,12 @@ def main():
                 battle_events["_start"] = pd.to_datetime(battle_events["start_at"], utc=True, errors="coerce")
                 battle_events["_end"] = pd.to_datetime(battle_events["end_at"], utc=True, errors="coerce")
                 battle_events = battle_events.dropna(subset=["_start"]).sort_values("_start")
-                battle_events["_end"] = battle_events["_end"].fillna(battle_events["_start"] + pd.Timedelta(minutes=30))
+                # Older/manual events may have no end timestamp. Battles are
+                # always 30 minutes, so derive it instead of allowing NaT to
+                # reach the display formatter.
+                battle_events["_end"] = battle_events["_end"].fillna(
+                    battle_events["_start"] + pd.Timedelta(minutes=30)
+                )
             now_utc = pd.Timestamp.now(tz="UTC")
             upcoming_battles = battle_events[battle_events["_start"].ge(now_utc)].copy() if not battle_events.empty else pd.DataFrame()
             completed_battles = battle_events[battle_events["_end"].lt(now_utc)].copy() if not battle_events.empty else pd.DataFrame()
@@ -3258,12 +3275,13 @@ def main():
         if upcoming_battles.empty:
             st.info("No future confirmed battles are scheduled.")
         else:
+            upcoming_participants = load_event_participants_bulk(upcoming_battles["event_id"].astype(str).tolist())
             for _, battle_row in upcoming_battles.iterrows():
                 start_et = battle_row["_start"].tz_convert("America/New_York")
                 end_et = battle_row["_end"].tz_convert("America/New_York")
                 start_ct = battle_row["_start"].tz_convert("America/Chicago")
                 end_ct = battle_row["_end"].tz_convert("America/Chicago")
-                participants = load_event_participants(str(battle_row["event_id"]))
+                participants = upcoming_participants[upcoming_participants["event_id"].astype(str).eq(str(battle_row["event_id"]))]
                 creator_names = ", ".join(participants.get("username", pd.Series(dtype=str)).dropna().astype(str).tolist()) or "No creator selected"
                 with st.container(border=True):
                     st.markdown(f"#### {str(battle_row['event_name']).replace('[BATTLE] ', '')}")
