@@ -224,7 +224,7 @@ def store(records):
             # Remove duplicate current/future reader rows only; manual and past rows are untouched.
             now_utc = datetime.now(timezone.utc)
             cursor.execute("""SELECT event_id,event_name,start_at,end_at FROM community_events
-                WHERE event_id LIKE 'discord-%%' AND COALESCE(end_at,start_at) >= %s
+                                WHERE event_id LIKE 'discord-%%' AND COALESCE(end_at::timestamptz,start_at::timestamptz) >= %s
                 ORDER BY start_at,event_id""", (now_utc,))
             rows = cursor.fetchall()
             groups = {}
