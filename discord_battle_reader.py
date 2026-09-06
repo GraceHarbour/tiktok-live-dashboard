@@ -220,6 +220,37 @@ def store(records):
                         VALUES(%s,%s,%s,%s,%s) ON CONFLICT(event_id,creator_id) DO UPDATE SET username=EXCLUDED.username,manager=EXCLUDED.manager""",
                         (event_id, str(creator.get("id", "")), str(creator.get("tiktok_username", "")),
                          str(creator.get("manager_name", "")), datetime.now(timezone.utc).isoformat()))
+
+            # Remove stale reader-created duplicates at the same start time.
+            # Manual events and past events are never deleted.
+            cursor.execute("SELECT event_id,event_name,start_at FROM community_events WHERE event_id LIKE 'discord-%' AND start_at >= %s ORDER BY start_at,event_id", (datetime.now(timezone.utc) - timedelta(hours=1),))
+            rows = cursor.fetchall()
+            grouped = {}
+            for eid, ename, estart in rows:
+                grouped.setdefault(estart, []).append((eid, ename or ""))
+            for same_time in grouped.values():
+                if len(same_time) < 2:
+                    continue
+                kept = []
+                for eid, ename in same_time:
+                    tokens = {t for t in normalized(ename).split() if t not in {"pending", "open", "vs", "battle"}}
+                    duplicate = None
+                    for kid, kname, ktokens in kept:
+                        if tokens & ktokens:
+                            score = int("pending" not in normalized(ename)) + int("[open]" not in normalized(ename))
+                            kscore = int("pending" not in normalized(kname)) + int("[open]" not in normalized(kname))
+                            if score > kscore:
+                                cursor.execute("DELETE FROM community_event_participants WHERE event_id=%s", (kid,))
+                                cursor.execute("DELETE FROM community_events WHERE event_id=%s", (kid,))
+                                kept.remove((kid, kname, ktokens))
+                            else:
+                                duplicate = eid
+                            break
+                           if duplicate:
+                           cursor.execute("DELETE FROM community_event_participants WHERE event_id=%s", (duplicate,))
+                          cursor.execute("DELETE FROM community_events WHERE event_id=%s", (duplicate,))
+                    else:
+                        kept.append((eid, ename, tokens))
     print(f"Discord battle sync: {inserted} inserted, {updated} updated, {len(records)} unique source battles")
 
 
