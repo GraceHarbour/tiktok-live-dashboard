@@ -567,7 +567,12 @@ def process_due_battle_snapshots(now=None):
                     )
                     changed = True
                 continue
-            for phase in (["start", "end"] if now_utc >= start_at + pd.Timedelta(minutes=30) else ["start"]):
+            due_phases = []
+            if now_utc <= start_at + pd.Timedelta(minutes=5):
+                due_phases.append("start")
+            if start_at + pd.Timedelta(minutes=30) <= now_utc <= start_at + pd.Timedelta(minutes=35):
+                due_phases.append("end")
+            for phase in due_phases:
                 insert_result = connection.execute(
                     text(
                         "INSERT INTO community_event_snapshots "
@@ -3357,14 +3362,6 @@ def main():
                             st.success("Recorded battle diamonds were saved.")
                             st.rerun()
             today_tracking_rows = []
-            latest_diamonds_by_creator = (
-                creators.assign(_creator_id=creators.get("creator_id", pd.Series("", index=creators.index)).astype(str))
-                .set_index("_creator_id")
-                .get("diamonds", pd.Series(dtype=float))
-                .to_dict()
-                if not creators.empty
-                else {}
-            )
             for _, today_battle in todays_battles.sort_values("_start").iterrows():
                 today_event_id = str(today_battle["event_id"])
                 today_start_et = today_battle["_start"].tz_convert("America/New_York")
@@ -3381,7 +3378,6 @@ def main():
                             "Status": today_status,
                             "Initial Read": None,
                             "Ending Read": None,
-                            "Latest Diamonds": None,
                             "Total Diamonds": None,
                         }
                     )
@@ -3395,7 +3391,9 @@ def main():
                     end_reads = creator_reads[creator_reads["phase"].astype(str).eq("end")] if not creator_reads.empty else pd.DataFrame()
                     initial_read = pd.to_numeric(start_reads["diamonds"], errors="coerce").max() if not start_reads.empty else None
                     ending_read = pd.to_numeric(end_reads["diamonds"], errors="coerce").max() if not end_reads.empty else None
-                    latest_diamonds = pd.to_numeric(latest_diamonds_by_creator.get(creator_id), errors="coerce")
+                    if today_event_id in manual_results:
+                        initial_read = None
+                        ending_read = None
                     diamonds_earned = (
                         int(manual_results[today_event_id])
                         if today_event_id in manual_results
@@ -3411,7 +3409,6 @@ def main():
                             "Status": today_status,
                             "Initial Read": int(initial_read) if pd.notna(initial_read) else None,
                             "Ending Read": int(ending_read) if pd.notna(ending_read) else None,
-                            "Latest Diamonds": int(latest_diamonds) if pd.notna(latest_diamonds) else None,
                             "Total Diamonds": diamonds_earned,
                         }
                     )
@@ -3428,7 +3425,7 @@ def main():
                         f"{int(completed_today_total):,}" if pd.notna(completed_today_total) else "Pending",
                     )
                 display_today_tracking = today_tracking.copy()
-                for tracking_column in ["Initial Read", "Ending Read", "Latest Diamonds", "Total Diamonds"]:
+                for tracking_column in ["Initial Read", "Ending Read", "Total Diamonds"]:
                     display_today_tracking[tracking_column] = display_today_tracking[tracking_column].map(
                         lambda value: f"{int(value):,}" if pd.notna(value) else "Pending"
                     )
@@ -3754,10 +3751,19 @@ def main():
                         connection,
                     )
                 if not battle_results.empty:
-                    battle_results["Diamonds Earned"] = (
-                        pd.to_numeric(battle_results["Ending Diamonds"], errors="coerce")
-                        - pd.to_numeric(battle_results["Starting Diamonds"], errors="coerce")
-                    ).clip(lower=0)
+                    selected_manual_results = load_manual_battle_results()
+                    selected_manual_match = selected_manual_results[
+                        selected_manual_results["event_id"].astype(str).eq(selected_battle_id)
+                    ] if not selected_manual_results.empty else pd.DataFrame()
+                    if not selected_manual_match.empty:
+                        battle_results["Starting Diamonds"] = None
+                        battle_results["Ending Diamonds"] = None
+                        battle_results["Diamonds Earned"] = int(selected_manual_match.iloc[0]["diamonds"])
+                    else:
+                        battle_results["Diamonds Earned"] = (
+                            pd.to_numeric(battle_results["Ending Diamonds"], errors="coerce")
+                            - pd.to_numeric(battle_results["Starting Diamonds"], errors="coerce")
+                        ).clip(lower=0)
                     render_read_table(battle_results, height=360)
                 else:
                     st.info("The selected battle has no tracked creator yet.")

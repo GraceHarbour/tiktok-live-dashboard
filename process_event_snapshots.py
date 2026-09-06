@@ -92,15 +92,17 @@ def main() -> None:
                 if now < start_read_due:
                     cursor.execute("UPDATE community_events SET status = 'armed' WHERE event_id = %s AND status NOT IN ('live', 'completed')", (event_id,))
                     continue
-                start_rows = snapshot(cursor, event_id, "start", captured_at)
-                if start_rows:
-                    captured.append(f"{event_name}: start ({start_rows} creators)")
+                if now <= start_value + timedelta(minutes=5):
+                    start_rows = snapshot(cursor, event_id, "start", captured_at)
+                    if start_rows:
+                        captured.append(f"{event_name}: start ({start_rows} creators)")
                 if now < final_read_due:
                     cursor.execute("UPDATE community_events SET status = 'live' WHERE event_id = %s", (event_id,))
                     continue
-                end_rows = snapshot(cursor, event_id, "end", captured_at)
-                if end_rows:
-                    captured.append(f"{event_name}: end ({end_rows} creators)")
+                if now <= final_read_due + timedelta(minutes=5):
+                    end_rows = snapshot(cursor, event_id, "end", captured_at)
+                    if end_rows:
+                        captured.append(f"{event_name}: end ({end_rows} creators)")
                 cursor.execute("UPDATE community_events SET status = 'completed' WHERE event_id = %s", (event_id,))
     print("; ".join(captured) if captured else "No event snapshots due.")
 
