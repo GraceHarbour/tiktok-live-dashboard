@@ -221,38 +221,44 @@ def store(records):
                         (event_id, str(creator.get("id", "")), str(creator.get("tiktok_username", "")),
                          str(creator.get("manager_name", "")), datetime.now(timezone.utc).isoformat()))
 
-            # Remove duplicate reader rows only; manual and past rows are untouched.
-    cursor.execute("SELECT event_id,event_name,start_at FROM community_events WHERE event_id LIKE 'discord-%' AND start_at >= %s ORDER BY start_at,event_id", (datetime.now(timezone.utc) - timedelta(hours=1),))
-    rows = cursor.fetchall()
-    groups = {}
-    for eid, ename, estart in rows:
-        groups.setdefault(estart, []).append((eid, ename or ""))
-    for items in groups.values():
-        if len(items) < 2:
-            continue
-        for i, (eid, ename) in enumerate(items):
-            if 'pending' not in normalized(ename) and 'open' not in normalized(ename):
-                continue
-            et = {x for x in normalized(ename).split() if x not in {'pending','open','vs','battle'}}
-            winner = False
-            for j, (otherid, other) in enumerate(items):
-                if j == i or 'pending' in normalized(other) or 'open' in normalized(other):
+            # Remove duplicate current/future reader rows only; manual and past rows are untouched.
+            now_utc = datetime.now(timezone.utc)
+            cursor.execute("""SELECT event_id,event_name,start_at,end_at FROM community_events
+                WHERE event_id LIKE 'discord-%' AND COALESCE(end_at,start_at) >= %s
+                ORDER BY start_at,event_id""", (now_utc,))
+            rows = cursor.fetchall()
+            groups = {}
+            for eid, ename, estart, eend in rows:
+                groups.setdefault(estart, []).append((eid, ename or ""))
+            for items in groups.values():
+                if len(items) < 2:
                     continue
-                ot = {x for x in normalized(other).split() if x not in {'pending','open','vs','battle'}}
-                if et & ot:
-                    winner = True
-                    break
-            if winner:
-                cursor.execute("DELETE FROM community_event_participants WHERE event_id=%s", (eid,))
-                cursor.execute("DELETE FROM community_events WHERE event_id=%s", (eid,))
+                for eid, ename in items:
+                    if "pending" not in ename.casefold() and "open" not in ename.casefold():
+                        continue
+                    pending_match = re.search(r"\[BATTLE\]\s*(.+?)\s+vs\b", ename, re.I)
+                    pending_creator = normalized(pending_match.group(1)) if pending_match else ""
+                    if not pending_creator:
+                        continue
+                    has_confirmed = any(
+                        other_id != eid
+                        and "pending" not in other_name.casefold()
+                        and "open" not in other_name.casefold()
+                        and (lambda match: normalized(match.group(1)) if match else "")(
+                            re.search(r"\[BATTLE\]\s*(.+?)\s+vs\b", other_name, re.I)
+                        ) == pending_creator
+                        for other_id, other_name in items
+                    )
+                    if has_confirmed:
+                        cursor.execute("DELETE FROM community_event_participants WHERE event_id=%s", (eid,))
+                        cursor.execute("DELETE FROM community_events WHERE event_id=%s", (eid,))
     print(f"Discord battle sync: {inserted} inserted, {updated} updated, {len(records)} unique source battles")
 
 
 def main():
     scheduled = fetch(SCHEDULE_CHANNEL)
     confirmed = fetch(CONFIRMATION_CHANNEL)
-    all_messages = scheduled + confirmed
-    store(merged_records(scheduled_records(all_messages), confirmed_records(all_messages)))
+    store(merged_records(scheduled_records(scheduled), confirmed_records(confirmed)))
 
 
 if __name__ == "__main__":
