@@ -277,6 +277,7 @@ def ensure_schema():
         "CREATE TABLE IF NOT EXISTS community_event_participants (event_id TEXT NOT NULL, creator_id TEXT NOT NULL, username TEXT, manager TEXT, added_at TEXT NOT NULL, PRIMARY KEY (event_id, creator_id))",
         "CREATE TABLE IF NOT EXISTS community_event_snapshots (event_id TEXT NOT NULL, phase TEXT NOT NULL, creator_id TEXT NOT NULL, username TEXT, manager TEXT, diamonds INTEGER NOT NULL, captured_at TEXT NOT NULL, PRIMARY KEY (event_id, phase, creator_id))",
         "CREATE TABLE IF NOT EXISTS community_event_manual_results (event_id TEXT PRIMARY KEY, diamonds INTEGER NOT NULL, updated_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS community_event_deletions (event_id TEXT PRIMARY KEY, event_name TEXT, start_at TEXT, deleted_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS community_event_drawings (drawing_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, excluded_json TEXT NOT NULL, candidates_json TEXT NOT NULL, winners_json TEXT NOT NULL, winner_count INTEGER NOT NULL, created_at TEXT NOT NULL)",
     ]
     with get_engine().begin() as connection:
@@ -482,8 +483,16 @@ def cached_wheel_replay_html(title, candidates, winners):
 
 @st.cache_data(ttl=30, show_spinner=False)
 def load_community_events():
-    with get_engine().connect() as connection:
-        return pd.read_sql(text("SELECT * FROM community_events ORDER BY start_at DESC"), connection)
+    with get_engine().begin() as connection:
+        connection.execute(text("CREATE TABLE IF NOT EXISTS community_event_deletions (event_id TEXT PRIMARY KEY, event_name TEXT, start_at TEXT, deleted_at TEXT NOT NULL)"))
+        return pd.read_sql(
+            text(
+                "SELECT e.* FROM community_events e "
+                "LEFT JOIN community_event_deletions d ON d.event_id = e.event_id "
+                "WHERE d.event_id IS NULL ORDER BY e.start_at DESC"
+            ),
+            connection,
+        )
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -739,8 +748,18 @@ def remove_event_participants(event_id, selected_creator_ids):
 
 def delete_community_event(event_id):
     with get_engine().begin() as connection:
+        connection.execute(text("CREATE TABLE IF NOT EXISTS community_event_deletions (event_id TEXT PRIMARY KEY, event_name TEXT, start_at TEXT, deleted_at TEXT NOT NULL)"))
+        connection.execute(
+            text(
+                "INSERT INTO community_event_deletions (event_id, event_name, start_at, deleted_at) "
+                "SELECT event_id, event_name, start_at, :deleted_at FROM community_events WHERE event_id = :event_id "
+                "ON CONFLICT (event_id) DO UPDATE SET event_name = EXCLUDED.event_name, start_at = EXCLUDED.start_at, deleted_at = EXCLUDED.deleted_at"
+            ),
+            {"event_id": event_id, "deleted_at": pd.Timestamp.now(tz="UTC").isoformat()},
+        )
         connection.execute(text("DELETE FROM community_event_drawings WHERE event_id = :event_id"), {"event_id": event_id})
         connection.execute(text("DELETE FROM community_event_snapshots WHERE event_id = :event_id"), {"event_id": event_id})
+        connection.execute(text("DELETE FROM community_event_manual_results WHERE event_id = :event_id"), {"event_id": event_id})
         connection.execute(text("DELETE FROM community_event_participants WHERE event_id = :event_id"), {"event_id": event_id})
         connection.execute(text("DELETE FROM community_events WHERE event_id = :event_id"), {"event_id": event_id})
 
@@ -3576,12 +3595,25 @@ def main():
                     st.markdown("**Battle format:** Single · 30 minutes")
                     st.markdown(f"**Starting read:** {(start_et - pd.Timedelta(minutes=5)):%I:%M %p} ET")
                     st.markdown(f"**Ending read:** {(start_et + pd.Timedelta(minutes=30)):%I:%M %p} ET")
-                    if st.button("Delete this battle", key=f"delete_battle_{battle_row['event_id']}", type="secondary", disabled=not battle_can_manage):
-                        delete_community_event(str(battle_row["event_id"]))
-                        load_community_events.clear()
-                        load_event_participants.clear()
-                        load_event_snapshots.clear()
-                        st.rerun()
+                    if battle_can_manage:
+                        with st.expander("Delete this battle"):
+                            st.warning("This permanently removes the battle and prevents schedule updates from adding it back.")
+                            confirm_battle_delete = st.checkbox(
+                                "Yes, I am sure I want to delete this battle.",
+                                key=f"confirm_delete_battle_{battle_row['event_id']}",
+                            )
+                            if st.button(
+                                "Delete battle permanently",
+                                key=f"delete_battle_{battle_row['event_id']}",
+                                type="secondary",
+                                disabled=not confirm_battle_delete,
+                            ):
+                                delete_community_event(str(battle_row["event_id"]))
+                                load_community_events.clear()
+                                load_event_participants.clear()
+                                load_event_snapshots.clear()
+                                st.success("Battle deleted and blocked from future schedule imports.")
+                                st.rerun()
                     with st.expander("Edit all battle details"):
                         current_battle_title = str(battle_row["event_name"]).removeprefix("[BATTLE] ")
                         edited_battle_title = st.text_input(

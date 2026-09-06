@@ -176,6 +176,9 @@ def store(records):
     inserted = updated = 0
     with psycopg.connect(url, autocommit=True) as connection:
         with connection.cursor() as cursor:
+            cursor.execute("""CREATE TABLE IF NOT EXISTS community_event_deletions (
+                event_id TEXT PRIMARY KEY, event_name TEXT, start_at TEXT, deleted_at TEXT NOT NULL
+            )""")
             cursor.execute("SELECT id, display_name, tiktok_username, manager_name FROM creators")
             creators = [
                 {"id": row[0], "display_name": row[1], "tiktok_username": row[2], "manager_name": row[3]}
@@ -188,6 +191,9 @@ def store(records):
                     continue
                 end = start + timedelta(minutes=30)
                 event_id = f"discord-{record['day'].strftime('%Y%m%d')}-{record['clock'][0]:02d}{record['clock'][1]:02d}-{record['discord_id']}"
+                cursor.execute("SELECT 1 FROM community_event_deletions WHERE event_id=%s", (event_id,))
+                if cursor.fetchone():
+                    continue
                 creator = creator_match(record["creator"], creators)
                 # Reuse a manually scheduled event at the same instant when it
                 # already names this creator; confirmations must update it.
