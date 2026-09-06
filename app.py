@@ -276,6 +276,7 @@ def ensure_schema():
         "CREATE TABLE IF NOT EXISTS community_events (event_id TEXT PRIMARY KEY, event_name TEXT NOT NULL, start_at TEXT NOT NULL, end_at TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS community_event_participants (event_id TEXT NOT NULL, creator_id TEXT NOT NULL, username TEXT, manager TEXT, added_at TEXT NOT NULL, PRIMARY KEY (event_id, creator_id))",
         "CREATE TABLE IF NOT EXISTS community_event_snapshots (event_id TEXT NOT NULL, phase TEXT NOT NULL, creator_id TEXT NOT NULL, username TEXT, manager TEXT, diamonds INTEGER NOT NULL, captured_at TEXT NOT NULL, PRIMARY KEY (event_id, phase, creator_id))",
+        "CREATE TABLE IF NOT EXISTS community_event_manual_results (event_id TEXT PRIMARY KEY, diamonds INTEGER NOT NULL, updated_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS community_event_drawings (drawing_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, excluded_json TEXT NOT NULL, candidates_json TEXT NOT NULL, winners_json TEXT NOT NULL, winner_count INTEGER NOT NULL, created_at TEXT NOT NULL)",
     ]
     with get_engine().begin() as connection:
@@ -503,6 +504,29 @@ def load_event_snapshots(event_id):
             connection,
             params={"event_id": event_id},
         )
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def load_manual_battle_results():
+    with get_engine().connect() as connection:
+        return pd.read_sql(text("SELECT event_id, diamonds FROM community_event_manual_results"), connection)
+
+
+def save_manual_battle_result(event_id, diamonds):
+    with get_engine().begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO community_event_manual_results (event_id, diamonds, updated_at) "
+                "VALUES (:event_id, :diamonds, :updated_at) "
+                "ON CONFLICT (event_id) DO UPDATE SET diamonds = EXCLUDED.diamonds, updated_at = EXCLUDED.updated_at"
+            ),
+            {
+                "event_id": str(event_id),
+                "diamonds": max(int(diamonds), 0),
+                "updated_at": pd.Timestamp.now(tz="UTC").isoformat(),
+            },
+        )
+    load_manual_battle_results.clear()
 
 
 def process_due_battle_snapshots(now=None):
@@ -3285,6 +3309,33 @@ def main():
         if todays_battles.empty:
             st.info(f"No battles are scheduled for {pd.Timestamp(selected_tracking_date):%B %d, %Y}.")
         else:
+            manual_results_frame = load_manual_battle_results()
+            manual_results = (
+                manual_results_frame.set_index("event_id")["diamonds"].to_dict()
+                if not manual_results_frame.empty
+                else {}
+            )
+            if battle_can_manage:
+                with st.expander("Enter or correct battle diamonds"):
+                    with st.form(f"manual_battle_results_{selected_tracking_date}"):
+                        manual_values = {}
+                        for _, result_battle in todays_battles.sort_values("_start").iterrows():
+                            result_event_id = str(result_battle["event_id"])
+                            result_title = str(result_battle["event_name"]).replace("[BATTLE] ", "")
+                            result_time = result_battle["_start"].tz_convert("America/New_York").strftime("%I:%M %p").lstrip("0")
+                            manual_values[result_event_id] = st.number_input(
+                                f"{result_time} — {result_title}",
+                                min_value=0,
+                                step=1,
+                                value=int(manual_results.get(result_event_id, 0)),
+                                key=f"manual_battle_diamonds_{result_event_id}",
+                            )
+                        if st.form_submit_button("Save recorded battle diamonds", type="primary"):
+                            for result_event_id, result_diamonds in manual_values.items():
+                                if int(result_diamonds) > 0 or result_event_id in manual_results:
+                                    save_manual_battle_result(result_event_id, result_diamonds)
+                            st.success("Recorded battle diamonds were saved.")
+                            st.rerun()
             today_tracking_rows = []
             latest_diamonds_by_creator = (
                 creators.assign(_creator_id=creators.get("creator_id", pd.Series("", index=creators.index)).astype(str))
@@ -3325,7 +3376,13 @@ def main():
                     initial_read = pd.to_numeric(start_reads["diamonds"], errors="coerce").max() if not start_reads.empty else None
                     ending_read = pd.to_numeric(end_reads["diamonds"], errors="coerce").max() if not end_reads.empty else None
                     latest_diamonds = pd.to_numeric(latest_diamonds_by_creator.get(creator_id), errors="coerce")
-                    diamonds_earned = max(int(ending_read - initial_read), 0) if pd.notna(initial_read) and pd.notna(ending_read) else None
+                    diamonds_earned = (
+                        int(manual_results[today_event_id])
+                        if today_event_id in manual_results
+                        else max(int(ending_read - initial_read), 0)
+                        if pd.notna(initial_read) and pd.notna(ending_read)
+                        else None
+                    )
                     today_tracking_rows.append(
                         {
                             "Battle": today_title,
