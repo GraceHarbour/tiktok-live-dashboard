@@ -595,6 +595,14 @@ def process_due_battle_snapshots(now=None):
     return changed
 
 
+@st.fragment(run_every="60s")
+def battle_tracking_heartbeat():
+    """Keep due battle reads moving while Battle Schedule is open."""
+    if process_due_battle_snapshots():
+        st.rerun()
+    st.caption("Battle tracking is active and checks for due reads every minute.")
+
+
 def create_community_event(event_name, start_at, end_at):
     event_id = f"event-{pd.Timestamp.now(tz='UTC').value}"
     created_at = pd.Timestamp.now(tz="UTC").isoformat()
@@ -3176,7 +3184,7 @@ def main():
         with battle_schedule_tab:
             st.subheader("Battle Schedule")
             st.caption("All times are shown in Eastern and Central Time. Each tracked creator is captured at battle start and again 30 minutes later from the first successful goal read.")
-            process_due_battle_snapshots()
+            battle_tracking_heartbeat()
             battle_actor_email = google_signed_in_email()
             battle_access = load_access_people()
             if not battle_access.empty:
