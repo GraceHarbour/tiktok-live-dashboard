@@ -508,12 +508,24 @@ def load_event_snapshots(event_id):
 
 @st.cache_data(ttl=30, show_spinner=False)
 def load_manual_battle_results():
-    with get_engine().connect() as connection:
+    with get_engine().begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS community_event_manual_results "
+                "(event_id TEXT PRIMARY KEY, diamonds INTEGER NOT NULL, updated_at TEXT NOT NULL)"
+            )
+        )
         return pd.read_sql(text("SELECT event_id, diamonds FROM community_event_manual_results"), connection)
 
 
 def save_manual_battle_result(event_id, diamonds):
     with get_engine().begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS community_event_manual_results "
+                "(event_id TEXT PRIMARY KEY, diamonds INTEGER NOT NULL, updated_at TEXT NOT NULL)"
+            )
+        )
         connection.execute(
             text(
                 "INSERT INTO community_event_manual_results (event_id, diamonds, updated_at) "
