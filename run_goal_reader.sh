@@ -27,6 +27,8 @@ for attempt in 1 2 3; do
   fi
 done
 if [ "$state" = "success" ]; then
+  timeout 180 "$reader_dir/.venv/bin/python" "$reader_dir/process_event_snapshots.py" >> "$log_file" 2>&1 || \
+    echo "Battle snapshot processing failed; the dashboard fallback will retry when Battle Schedule is opened." >> "$log_file"
   timeout 180 "$reader_dir/.venv/bin/python" "$reader_dir/hourly_goal_metrics.py" >> "$log_file" 2>&1 || echo "Hourly Goal metrics refresh failed; retained last verified values." >> "$log_file"
   GOAL_RUN_STARTED_ET="$goal_run_started_et" timeout 180 "$reader_dir/.venv/bin/python" "$reader_dir/firefox-source/monthly_goal_rollover.py" >> "$log_file" 2>&1 || \
     echo "Month-end goal rollover failed; retained prior verified goals." >> "$log_file"

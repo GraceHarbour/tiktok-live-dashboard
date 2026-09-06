@@ -505,6 +505,60 @@ def load_event_snapshots(event_id):
         )
 
 
+def process_due_battle_snapshots(now=None):
+    """Capture due reads if a scheduler tick was missed."""
+    now_utc = pd.Timestamp(now or pd.Timestamp.now(tz="UTC"))
+    now_utc = now_utc.tz_localize("UTC") if now_utc.tzinfo is None else now_utc.tz_convert("UTC")
+    captured_at = now_utc.isoformat()
+    changed = False
+    with get_engine().begin() as connection:
+        due_events = connection.execute(
+            text(
+                "SELECT event_id, start_at, status FROM community_events "
+                "WHERE event_name LIKE '[BATTLE]%' AND status NOT IN ('cancelled', 'completed')"
+            )
+        ).mappings().all()
+        for event in due_events:
+            start_at = pd.to_datetime(event["start_at"], utc=True, errors="coerce")
+            if pd.isna(start_at):
+                continue
+            event_id = str(event["event_id"])
+            if now_utc < start_at - pd.Timedelta(minutes=5):
+                if now_utc >= start_at - pd.Timedelta(minutes=15) and str(event["status"]) != "armed":
+                    connection.execute(
+                        text("UPDATE community_events SET status = 'armed' WHERE event_id = :event_id"),
+                        {"event_id": event_id},
+                    )
+                    changed = True
+                continue
+            for phase in (["start", "end"] if now_utc >= start_at + pd.Timedelta(minutes=30) else ["start"]):
+                insert_result = connection.execute(
+                    text(
+                        "INSERT INTO community_event_snapshots "
+                        "(event_id, phase, creator_id, username, manager, diamonds, captured_at) "
+                        "SELECT p.event_id, :phase, p.creator_id, p.username, p.manager, "
+                        "COALESCE(g.diamonds, 0), :captured_at "
+                        "FROM community_event_participants p "
+                        "LEFT JOIN goal_creators g ON g.creator_id = p.creator_id "
+                        "WHERE p.event_id = :event_id "
+                        "ON CONFLICT (event_id, phase, creator_id) DO NOTHING"
+                    ),
+                    {"event_id": event_id, "phase": phase, "captured_at": captured_at},
+                )
+                changed = changed or bool(insert_result.rowcount)
+            next_status = "completed" if now_utc >= start_at + pd.Timedelta(minutes=30) else "live"
+            if str(event["status"]) != next_status:
+                connection.execute(
+                    text("UPDATE community_events SET status = :status WHERE event_id = :event_id"),
+                    {"event_id": event_id, "status": next_status},
+                )
+                changed = True
+    if changed:
+        load_community_events.clear()
+        load_event_snapshots.clear()
+    return changed
+
+
 def create_community_event(event_name, start_at, end_at):
     event_id = f"event-{pd.Timestamp.now(tz='UTC').value}"
     created_at = pd.Timestamp.now(tz="UTC").isoformat()
@@ -3086,6 +3140,7 @@ def main():
         with battle_schedule_tab:
             st.subheader("Battle Schedule")
             st.caption("All times are shown in Eastern and Central Time. Each tracked creator is captured at battle start and again 30 minutes later from the first successful goal read.")
+            process_due_battle_snapshots()
             battle_actor_email = google_signed_in_email()
             battle_access = load_access_people()
             if not battle_access.empty:
