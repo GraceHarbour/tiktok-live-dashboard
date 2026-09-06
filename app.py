@@ -542,10 +542,14 @@ def load_event_participants_bulk(event_ids):
 
 def save_event_participants(event_id, selected_creator_ids, creator_frame):
     now_value = pd.Timestamp.now(tz="UTC").isoformat()
-    lookup = creator_frame.set_index("creator_id", drop=False) if not creator_frame.empty else pd.DataFrame()
+    normalized_creators = creator_frame.copy()
+    if not normalized_creators.empty:
+        normalized_creators["creator_id"] = normalized_creators["creator_id"].astype(str)
+    lookup = normalized_creators.set_index("creator_id", drop=False) if not normalized_creators.empty else pd.DataFrame()
     with get_engine().begin() as connection:
         connection.execute(text("DELETE FROM community_event_participants WHERE event_id = :event_id"), {"event_id": event_id})
         for creator_id in selected_creator_ids:
+            creator_id = str(creator_id)
             if creator_id not in lookup.index:
                 continue
             row = lookup.loc[creator_id]
@@ -3042,7 +3046,8 @@ def main():
         with battle_schedule_tab:
             st.subheader("Battle Schedule")
             st.caption("All times are shown in Eastern and Central Time. Each tracked creator is captured at battle start and again 30 minutes later from the first successful goal read.")
-            battle_creator_frame = creators.copy()
+            battle_creator_columns = [column for column in ["creator_id", "username", "manager_name", "manager"] if column in creators.columns]
+            battle_creator_frame = creators[battle_creator_columns].copy()
             if not battle_creator_frame.empty and "creator_id" in battle_creator_frame.columns:
                 battle_creator_frame["creator_id"] = battle_creator_frame["creator_id"].astype(str)
                 battle_creator_frame["username"] = battle_creator_frame.get("username", pd.Series("", index=battle_creator_frame.index)).fillna("").astype(str)
@@ -3100,13 +3105,19 @@ def main():
                     event_label = f"[BATTLE] {battle_title.strip()}"
                     if battle_opponent.strip():
                         event_label += f" vs {battle_opponent.strip().lstrip('@')}"
-                    battle_event_id = create_community_event(event_label, start_et.tz_convert("UTC").isoformat(), end_et.tz_convert("UTC").isoformat())
-                    save_event_participants(battle_event_id, battle_creator_ids, battle_creator_frame)
-                    load_community_events.clear()
-                    load_event_participants.clear()
-                    load_event_snapshots.clear()
-                    st.success("Battle saved. Start and 30-minute readings are scheduled.")
-                    st.rerun()
+                    try:
+                        battle_event_id = create_community_event(event_label, start_et.tz_convert("UTC").isoformat(), end_et.tz_convert("UTC").isoformat())
+                        save_event_participants(battle_event_id, [str(value) for value in battle_creator_ids], battle_creator_frame)
+                    except MemoryError:
+                        st.error("The battle could not be saved because the dashboard ran out of memory. Please try again after refreshing.")
+                    except Exception as battle_save_error:
+                        st.error(f"The battle could not be saved: {battle_save_error}")
+                    else:
+                        load_community_events.clear()
+                        load_event_participants.clear()
+                        load_event_snapshots.clear()
+                        st.success("Battle saved. Start and 30-minute readings are scheduled.")
+                        st.rerun()
             battle_events = load_community_events()
             if battle_events.empty:
                 battle_events = pd.DataFrame()
@@ -3146,17 +3157,21 @@ def main():
                 unsafe_allow_html=True,
             )
 
-        st.markdown("### Today’s Battle Tracking")
-        today_et = pd.Timestamp.now(tz="America/New_York").date()
+        st.markdown("### Battle Tracking by Date")
+        selected_tracking_date = st.date_input(
+            "Select battle tracking date",
+            value=pd.Timestamp.now(tz="America/New_York").date(),
+            key="battle_tracking_date",
+        )
         todays_battles = (
             battle_events[
-                battle_events["_start"].dt.tz_convert("America/New_York").dt.date.eq(today_et)
+                battle_events["_start"].dt.tz_convert("America/New_York").dt.date.eq(selected_tracking_date)
             ].copy()
             if not battle_events.empty
             else pd.DataFrame()
         )
         if todays_battles.empty:
-            st.info("No battles are scheduled for today.")
+            st.info(f"No battles are scheduled for {pd.Timestamp(selected_tracking_date):%B %d, %Y}.")
         else:
             today_tracking_rows = []
             for _, today_battle in todays_battles.sort_values("_start").iterrows():
@@ -3205,11 +3220,11 @@ def main():
             with st.container(border=True):
                 tracking_header_left, tracking_header_right = st.columns([3, 1])
                 with tracking_header_left:
-                    st.markdown(f"**All battles for {pd.Timestamp(today_et):%A, %B %d}**")
+                    st.markdown(f"**All battles for {pd.Timestamp(selected_tracking_date):%A, %B %d}**")
                     st.caption("The initial read is taken before each battle. The ending read is taken 30 minutes after its start.")
                 with tracking_header_right:
                     st.metric(
-                        "Today’s Battle Diamonds",
+                        "Battle Diamonds for Selected Date",
                         f"{int(completed_today_total):,}" if pd.notna(completed_today_total) else "Pending",
                     )
                 display_today_tracking = today_tracking.copy()
@@ -3241,6 +3256,29 @@ def main():
             first_grid_day = month_start - pd.Timedelta(days=month_start.weekday())
             last_grid_day = month_end + pd.Timedelta(days=(6 - month_end.weekday()))
             month_battles = calendar_frame[calendar_frame["_month"].eq(calendar_month)].copy()
+            try:
+                month_event_ids = month_battles["event_id"].astype(str).tolist()
+                with get_engine().connect() as popup_connection:
+                    popup_results = pd.read_sql(
+                        text("""
+                            SELECT p.event_id, p.username,
+                                   MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END) AS start_diamonds,
+                                   MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END) AS end_diamonds
+                            FROM community_event_participants p
+                            LEFT JOIN community_event_snapshots s
+                              ON s.event_id = p.event_id AND s.creator_id = p.creator_id
+                            WHERE p.event_id = ANY(:event_ids)
+                            GROUP BY p.event_id, p.username
+                            ORDER BY p.username
+                        """),
+                        popup_connection,
+                        params={"event_ids": month_event_ids},
+                    ) if month_event_ids else pd.DataFrame()
+            except Exception:
+                popup_results = pd.DataFrame(columns=["event_id", "username", "start_diamonds", "end_diamonds"])
+            if popup_results.empty:
+                popup_results = pd.DataFrame(columns=["event_id", "username", "start_diamonds", "end_diamonds"])
+            popup_results["event_id"] = popup_results["event_id"].astype(str)
             calendar_cells = []
             for calendar_day in pd.date_range(first_grid_day, last_grid_day, freq="D"):
                 day_rows = month_battles[month_battles["_start_et"].dt.date.eq(calendar_day.date())]
@@ -3250,11 +3288,40 @@ def main():
                     battle_time_et = calendar_battle["_start_et"].strftime("%-I:%M %p")
                     battle_time_ct = calendar_battle["_start"].tz_convert("America/Chicago").strftime("%-I:%M %p")
                     battle_name = str(calendar_battle["event_name"]).replace("[BATTLE] ", "")
-                    entries.append(f'<div class="battle-cal-event"><b>{html.escape(battle_time_et)} ET / {html.escape(battle_time_ct)} CT</b><br>{html.escape(battle_name)}</div>')
+                    raw_event_id = str(calendar_battle["event_id"])
+                    event_results = popup_results[popup_results["event_id"].eq(raw_event_id)].copy()
+                    complete_results = event_results.dropna(subset=["start_diamonds", "end_diamonds"])
+                    if complete_results.empty:
+                        results_markup = '<div class="battle-pending">Results pending — this battle is not complete yet.</div>'
+                    else:
+                        result_cards = []
+                        total_earned = 0
+                        for _, result in complete_results.iterrows():
+                            creator = html.escape(str(result["username"]))
+                            starting = int(pd.to_numeric(result["start_diamonds"], errors="coerce"))
+                            ending = int(pd.to_numeric(result["end_diamonds"], errors="coerce"))
+                            earned = max(ending - starting, 0)
+                            total_earned += earned
+                            result_cards.append(
+                                f'<div class="battle-result-card"><strong>{creator}</strong>'
+                                f'<div><span>Starting</span><b>{starting:,}</b></div>'
+                                f'<div><span>Ending</span><b>{ending:,}</b></div>'
+                                f'<div class="earned"><span>Diamonds earned</span><b>{earned:,}</b></div></div>'
+                            )
+                        results_markup = ''.join(result_cards) + f'<div class="battle-popup-total"><span>Battle total</span><b>{total_earned:,} diamonds</b></div>'
+                    popup_title = html.escape(battle_name, quote=True)
+                    popup_time = html.escape(f"{calendar_day:%A, %B %d, %Y} · {battle_time_et} ET / {battle_time_ct} CT", quote=True)
+                    popup_results_attr = html.escape(results_markup, quote=True)
+                    entries.append(
+                        f'<button type="button" class="battle-cal-event" data-title="{popup_title}" '
+                        f'data-time="{popup_time}" data-results="{popup_results_attr}" onclick="openBattlePopup(this)">'
+                        f'<b>{html.escape(battle_time_et)} ET / {html.escape(battle_time_ct)} CT</b><br>{html.escape(battle_name)}'
+                        f'<span class="battle-cal-open">View results</span></button>'
+                    )
                 day_class = "battle-cal-day" + ("" if is_selected_month else " outside-month") + (" has-battle" if entries else "")
                 calendar_cells.append(f'<div class="{day_class}"><div class="battle-cal-number">{calendar_day.day}</div>{"".join(entries)}</div>')
             weekday_headers = "".join(f'<div class="battle-cal-weekday">{day}</div>' for day in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
-            st.markdown(
+            st.components.v1.html(
                 f"""<style>
                 .battle-calendar{{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px;min-width:900px}}
                 .battle-calendar-wrap{{overflow-x:auto;padding-bottom:8px}}
@@ -3263,9 +3330,27 @@ def main():
                 .battle-cal-day.outside-month{{opacity:.34}}
                 .battle-cal-day.has-battle{{border:2px solid #48a9ff;background:linear-gradient(145deg,#10345c,#201f4a)}}
                 .battle-cal-number{{font-size:1.05rem;font-weight:900;color:#d8ecff;margin-bottom:7px}}
-                .battle-cal-event{{font-size:.82rem;line-height:1.3;background:#075da3;color:white;border-radius:9px;padding:7px;margin-top:6px;box-shadow:0 3px 10px rgba(0,0,0,.2)}}
-                </style><div class="battle-calendar-wrap"><div class="battle-calendar">{weekday_headers}{"".join(calendar_cells)}</div></div>""",
-                unsafe_allow_html=True,
+                .battle-cal-event{{display:block;width:100%;border:0;text-align:left;font-size:.82rem;line-height:1.3;background:#075da3;color:white;border-radius:9px;padding:7px;margin-top:6px;box-shadow:0 3px 10px rgba(0,0,0,.2);cursor:pointer;transition:transform .12s ease,background .12s ease}}
+                .battle-cal-event:hover{{background:#0874c7;transform:translateY(-1px)}}
+                .battle-cal-open{{display:block;margin-top:5px;color:#d8ecff;font-size:.72rem;font-weight:800}}
+                .battle-popup{{border:1px solid #48a9ff;border-radius:18px;background:#08182c;color:white;width:min(620px,calc(100% - 32px));padding:0;box-shadow:0 24px 80px #000b}}
+                .battle-popup::backdrop{{background:rgba(0,7,18,.78)}}
+                .battle-popup-head{{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:20px 22px;border-bottom:1px solid #28537c}}
+                .battle-popup-head h2{{margin:0 0 6px;font-size:1.25rem;color:#fff}}
+                .battle-popup-time{{color:#9ed4ff;font-weight:700}}
+                .battle-popup-close{{border:1px solid #5c86aa;border-radius:10px;background:#112b46;color:white;font-weight:800;padding:8px 14px;cursor:pointer}}
+                .battle-popup-body{{padding:20px 22px}}
+                .battle-result-card{{background:#102744;border:1px solid #28537c;border-radius:14px;padding:15px;margin-bottom:12px}}
+                .battle-result-card>strong{{display:block;font-size:1.1rem;margin-bottom:10px}}
+                .battle-result-card>div{{display:flex;justify-content:space-between;padding:5px 0;color:#cde8ff}}
+                .battle-result-card .earned{{border-top:1px solid #28537c;margin-top:5px;padding-top:10px;color:#6fe7b7}}
+                .battle-popup-total{{display:flex;justify-content:space-between;gap:16px;background:#153a31;border:1px solid #2c8b6b;border-radius:14px;padding:16px;color:#8ff0c9;font-size:1.12rem}}
+                .battle-pending{{background:#352b12;border:1px solid #a98228;border-radius:14px;padding:18px;color:#ffe29a}}
+                </style><div class="battle-calendar-wrap"><div class="battle-calendar">{weekday_headers}{"".join(calendar_cells)}</div></div>
+                <dialog id="battlePopup" class="battle-popup"><div class="battle-popup-head"><div><h2 id="battlePopupTitle"></h2><div id="battlePopupTime" class="battle-popup-time"></div></div><button class="battle-popup-close" onclick="document.getElementById('battlePopup').close()">Close</button></div><div id="battlePopupBody" class="battle-popup-body"></div></dialog>
+                <script>function openBattlePopup(button){{document.getElementById('battlePopupTitle').textContent=button.dataset.title;document.getElementById('battlePopupTime').textContent=button.dataset.time;document.getElementById('battlePopupBody').innerHTML=button.dataset.results;document.getElementById('battlePopup').showModal();}}</script>""",
+                height=720,
+                scrolling=True,
             )
             st.caption(f"{len(month_battles)} battles scheduled for {month_start:%B %Y}. Times shown in Eastern and Central Time.")
         battle_average_slot = st.container()
