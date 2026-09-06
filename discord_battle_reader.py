@@ -16,7 +16,7 @@ ET = ZoneInfo("America/New_York")
 
 
 def fetch(channel):
-    token = TOKEN_FILE.read_text().splitlines()[0].strip()
+    token = os.environ.get("DISCORD_BOT_TOKEN", "").strip() or TOKEN_FILE.read_text().splitlines()[0].strip()
     request = urllib.request.Request(
         f"https://discord.com/api/v10/channels/{channel}/messages?limit=100",
         headers={"Authorization": f"Bot {token}", "User-Agent": "GraceHarbourBattleReader/1.0"},
