@@ -824,6 +824,15 @@ def save_access_person(email: str, role: str) -> None:
     if role not in {"member", "admin", "owner"}:
         raise ValueError("Choose a valid role.")
     with get_engine().begin() as connection:
+        # Production previously used a narrower/older role constraint. Replace
+        # it without validating legacy rows so current role updates and new
+        # accounts can use the roles exposed by this page.
+        connection.execute(text("ALTER TABLE dashboard_access_people DROP CONSTRAINT IF EXISTS dashboard_access_people_role_check"))
+        connection.execute(
+            text("""ALTER TABLE dashboard_access_people
+                  ADD CONSTRAINT dashboard_access_people_role_check
+                  CHECK (role IN ('owner', 'admin', 'member')) NOT VALID""")
+        )
         connection.execute(
             text("""INSERT INTO dashboard_access_people (email, role, active, added_at, updated_at)
                   VALUES (:email, :role, TRUE, NOW(), NOW())
