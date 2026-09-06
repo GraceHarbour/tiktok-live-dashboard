@@ -2,6 +2,7 @@ import base64
 
 import io
 import json
+import logging
 from html import escape as html_escape
 import os
 import re
@@ -3579,12 +3580,14 @@ def main():
                             raise ValueError("Enter a valid Google email address.")
                         set_google_iap_access(add_email, True)
                         save_access_person(add_email, add_role)
-                        st.session_state["access_notice"] = f"Access saved for {add_email.strip().casefold()}."
-                        st.rerun()
                     except ValueError as error:
                         st.error(str(error))
                     except Exception:
+                        logging.exception("Could not add or restore dashboard access for %s", normalized_add_email)
                         st.error("The access list could not be updated. Please try again.")
+                    else:
+                        st.session_state["access_notice"] = f"Access saved for {normalized_add_email}."
+                        st.rerun()
 
                 st.subheader("Current access")
                 st.caption("Change a role, remove access, or restore a previously removed account. Changes are saved immediately.")
@@ -3616,18 +3619,22 @@ def main():
                             if save_col.button("Save", key=f"save_access_{person_email}"):
                                 try:
                                     save_access_person(person_email, selected_role)
+                                except Exception:
+                                    logging.exception("Could not update dashboard role for %s", person_email)
+                                    st.error("That account could not be updated. Please try again.")
+                                else:
                                     st.session_state["access_notice"] = f"Updated {person_email}."
                                     st.rerun()
-                                except Exception:
-                                    st.error("That account could not be updated. Please try again.")
                             if remove_col.button("Remove", key=f"remove_access_{person_email}"):
                                 try:
                                     set_google_iap_access(person_email, False)
                                     deactivate_access_person(person_email)
+                                except Exception:
+                                    logging.exception("Could not remove dashboard access for %s", person_email)
+                                    st.error("That account could not be removed. Please try again.")
+                                else:
                                     st.session_state["access_notice"] = f"Removed access for {person_email}."
                                     st.rerun()
-                                except Exception:
-                                    st.error("That account could not be removed. Please try again.")
 
                 inactive_people = access_view[~access_view["active"]].copy() if not access_view.empty else pd.DataFrame()
                 if not inactive_people.empty:
@@ -3647,10 +3654,12 @@ def main():
                                 try:
                                     set_google_iap_access(removed_email, True)
                                     save_access_person(removed_email, restore_choice)
+                                except Exception:
+                                    logging.exception("Could not restore dashboard access for %s", removed_email)
+                                    st.error("That account could not be restored. Please try again.")
+                                else:
                                     st.session_state["access_notice"] = f"Restored {removed_email}."
                                     st.rerun()
-                                except Exception:
-                                    st.error("That account could not be restored. Please try again.")
 
 
 if __name__ == "__main__":
