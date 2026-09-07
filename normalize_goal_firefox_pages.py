@@ -20,7 +20,11 @@ for page in pages:
         if len(item) < 14 or 'Email' not in item or 'Group' not in item:
             raise RuntimeError(f'Unexpected Creator row: {item!r}')
         email_at, group_at = item.index('Email'), item.index('Group')
-        avatar_url = str(page.get('creator_avatars', {}).get(item[0], '')).strip()
+        avatar_indexes = page.get('creator_avatars', {})
+        avatar_url = str(
+            avatar_indexes.get('by_id', {}).get(item[1], '')
+            or avatar_indexes.get('by_username', {}).get(item[0], '')
+        ).strip()
         creator_nodes = [
             node for node in page.get('layout', [])
             if node.get('text') == item[0] and 300 <= float(node.get('x', 0)) <= 520

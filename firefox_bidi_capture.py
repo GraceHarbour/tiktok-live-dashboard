@@ -91,17 +91,26 @@ def visible_images(bidi: Bidi, context: str) -> list[dict[str, Any]]:
     return json.loads(raw)
 
 
-def visible_creator_avatars(bidi: Bidi, context: str) -> dict[str, str]:
-    """Capture avatars from their containing table row, never by screen proximity."""
+def visible_creator_avatars(bidi: Bidi, context: str) -> dict[str, dict[str, str]]:
+    """Capture avatars with the creator ID from their containing table row."""
     raw = str(evaluate(bidi, context, """JSON.stringify([...document.querySelectorAll(
       'tr, [role="row"], .semi-table-row'
     )].map(row => {
       const img = row.querySelector('img');
       const lines = (row.innerText || '').split('\\n').map(v => v.trim()).filter(Boolean);
-      return {creator: lines[0] || '', src: img ? (img.currentSrc || img.src || '') : ''};
+      return {creator: lines[0] || '', creator_id: lines[1] || '',
+        src: img ? (img.currentSrc || img.src || '') : ''};
     }).filter(item => item.creator && item.src))"""))
     entries = json.loads(raw)
-    return {str(item["creator"]).strip(): str(item["src"]).strip() for item in entries}
+    return {
+        "by_id": {
+            str(item["creator_id"]).strip(): str(item["src"]).strip()
+            for item in entries if str(item.get("creator_id", "")).strip().isdigit()
+        },
+        "by_username": {
+            str(item["creator"]).strip(): str(item["src"]).strip() for item in entries
+        },
+    }
 
 
 def page_range(text: str) -> tuple[int, int, int] | None:
