@@ -1862,6 +1862,12 @@ def main():
                     # virtualized row. Only show a picture that is matched to
                     # the creator's exact normalized username.
                     matched_avatars = creator_names.str.strip().str.casefold().map(avatar_map).fillna("")
+                    verified_goal_avatars = frame.get(
+                        "avatar_url", pd.Series("", index=frame.index)
+                    ).fillna("").astype(str)
+                    matched_avatars = matched_avatars.where(
+                        matched_avatars.str.strip().ne(""), verified_goal_avatars
+                    )
                     output = pd.DataFrame({
                         "Picture": matched_avatars,
                         "Creator": creator_names,

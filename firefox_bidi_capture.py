@@ -91,6 +91,19 @@ def visible_images(bidi: Bidi, context: str) -> list[dict[str, Any]]:
     return json.loads(raw)
 
 
+def visible_creator_avatars(bidi: Bidi, context: str) -> dict[str, str]:
+    """Capture avatars from their containing table row, never by screen proximity."""
+    raw = str(evaluate(bidi, context, """JSON.stringify([...document.querySelectorAll(
+      'tr, [role="row"], .semi-table-row'
+    )].map(row => {
+      const img = row.querySelector('img');
+      const lines = (row.innerText || '').split('\\n').map(v => v.trim()).filter(Boolean);
+      return {creator: lines[0] || '', src: img ? (img.currentSrc || img.src || '') : ''};
+    }).filter(item => item.creator && item.src))"""))
+    entries = json.loads(raw)
+    return {str(item["creator"]).strip(): str(item["src"]).strip() for item in entries}
+
+
 def page_range(text: str) -> tuple[int, int, int] | None:
     matches = re.findall(r"Showing\s+(\d+)\s*(?:-|to)\s*(\d+)\s+of\s+(\d+)", text, re.I)
     if matches:
@@ -207,7 +220,13 @@ def main() -> int:
             showing = page_range(text)
             if not showing:
                 raise RuntimeError("Firefox did not expose the Creator pagination range.")
-            pages.append({"showing": showing, "text": text, "layout": visible_layout(bidi, context), "images": visible_images(bidi, context)})
+            pages.append({
+                "showing": showing,
+                "text": text,
+                "layout": visible_layout(bidi, context),
+                "images": visible_images(bidi, context),
+                "creator_avatars": visible_creator_avatars(bidi, context),
+            })
             pages_output.write_text(json.dumps(pages), encoding="utf-8")
             _start, end, total = showing
             if end >= total:
