@@ -1850,23 +1850,32 @@ def main():
                 def creator_goal_display(frame, include_manager=False):
                     avatar_rows = pd.DataFrame()
                     try:
-                        avatar_rows = pd.read_sql(text("SELECT username, avatar_url, captured_at FROM monthly_reward_results WHERE avatar_url <> '' ORDER BY captured_at DESC"), get_engine())
+                        avatar_rows = pd.read_sql(text("SELECT creator_id, username, avatar_url, captured_at FROM monthly_reward_results WHERE avatar_url <> '' ORDER BY captured_at DESC"), get_engine())
                     except Exception:
                         pass
-                    avatar_map = {}
+                    avatar_id_map = {}
+                    avatar_name_map = {}
                     if not avatar_rows.empty:
-                        avatar_rows["_key"] = avatar_rows["username"].fillna("").astype(str).str.strip().str.casefold()
-                        avatar_map = avatar_rows.drop_duplicates("_key").set_index("_key")["avatar_url"].to_dict()
+                        avatar_rows["_id_key"] = avatar_rows["creator_id"].fillna("").astype(str).str.strip()
+                        avatar_rows["_name_key"] = avatar_rows["username"].fillna("").astype(str).str.strip().str.lstrip("@").str.casefold()
+                        avatar_id_map = avatar_rows[avatar_rows["_id_key"].ne("")].drop_duplicates("_id_key").set_index("_id_key")["avatar_url"].to_dict()
+                        avatar_name_map = avatar_rows[avatar_rows["_name_key"].ne("")].drop_duplicates("_name_key").set_index("_name_key")["avatar_url"].to_dict()
                     creator_names = frame.get("username", frame.get("creator_id", pd.Series("", index=frame.index))).fillna("").astype(str)
-                    # Screen-position avatar capture can drift to an adjacent
-                    # virtualized row. Only show a picture that is matched to
-                    # the creator's exact normalized username.
-                    matched_avatars = creator_names.str.strip().str.casefold().map(avatar_map).fillna("")
+                    creator_ids = frame.get("creator_id", pd.Series("", index=frame.index)).fillna("").astype(str).str.strip()
+                    # Creator ID is stable even when a username or display name changes.
+                    # Prefer the current Goal read, then an exact historical ID match;
+                    # use normalized username only for older records without an ID photo.
                     verified_goal_avatars = frame.get(
                         "avatar_url", pd.Series("", index=frame.index)
                     ).fillna("").astype(str)
+                    matched_avatars = verified_goal_avatars.copy()
+                    historical_id_avatars = creator_ids.map(avatar_id_map).fillna("")
                     matched_avatars = matched_avatars.where(
-                        matched_avatars.str.strip().ne(""), verified_goal_avatars
+                        matched_avatars.str.strip().ne(""), historical_id_avatars
+                    )
+                    historical_name_avatars = creator_names.str.strip().str.lstrip("@").str.casefold().map(avatar_name_map).fillna("")
+                    matched_avatars = matched_avatars.where(
+                        matched_avatars.str.strip().ne(""), historical_name_avatars
                     )
                     output = pd.DataFrame({
                         "Picture": matched_avatars,
