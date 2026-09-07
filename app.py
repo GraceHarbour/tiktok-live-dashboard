@@ -3802,12 +3802,21 @@ def main():
         battle_average_slot = st.container()
 
 
-        st.markdown("### Current and Future Battles")
-        if upcoming_battles.empty:
-            st.info("No future confirmed battles are scheduled.")
+        editable_battles = (
+            battle_events[
+                battle_events["_start"].ge(
+                    pd.Timestamp.now(tz="America/New_York").normalize().tz_convert("UTC")
+                )
+            ].copy()
+            if not battle_events.empty
+            else pd.DataFrame()
+        )
+        st.markdown("### Today's and Future Battles")
+        if editable_battles.empty:
+            st.info("No battles are scheduled for today or later.")
         else:
-            upcoming_participants = load_event_participants_bulk(upcoming_battles["event_id"].astype(str).tolist())
-            for _, battle_row in upcoming_battles.iterrows():
+            upcoming_participants = load_event_participants_bulk(editable_battles["event_id"].astype(str).tolist())
+            for _, battle_row in editable_battles.iterrows():
                 start_et = battle_row["_start"].tz_convert("America/New_York")
                 end_et = battle_row["_end"].tz_convert("America/New_York")
                 start_ct = battle_row["_start"].tz_convert("America/Chicago")
