@@ -2834,12 +2834,17 @@ def main():
                                     ),
                                     None,
                                 )
+                                normalized_prior_columns = {
+                                    str(column).strip().casefold(): column for column in prior_frame.columns
+                                }
                                 prior_diamond_column = next(
                                     (
-                                        column for column in prior_frame.columns
-                                        if str(column).strip().casefold() in {
+                                        normalized_prior_columns[column_name]
+                                        for column_name in (
+                                            "diamonds last month", "total diamonds last month",
                                             "diamonds", "diamond", "total diamonds", "current diamonds"
-                                        }
+                                        )
+                                        if column_name in normalized_prior_columns
                                     ),
                                     None,
                                 )
