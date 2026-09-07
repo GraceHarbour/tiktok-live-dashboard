@@ -2543,6 +2543,8 @@ def main():
                 maintenance_target_count = (maintenance_total * 50 + 99) // 100 if maintenance_total else 0
                 maintenance_projected_count = min(maintenance_total, maintenance_achieved + maintenance_on_pace)
                 maintenance_priority_needed = max(0, maintenance_target_count - maintenance_projected_count)
+                maintenance_on_target = maintenance_projected_count >= maintenance_target_count and maintenance_target_count > 0
+                maintenance_pace_color = "#63e6be" if maintenance_on_target else "#ff6b6b"
                 graduation_on_pace = int(battle_active["_priority"].eq("On pace").sum()) if not battle_active.empty else 0
                 graduation_help = int(battle_active["_priority"].eq("Needs help").sum()) if not battle_active.empty else 0
                 focus_goal_creators = creators.copy()
@@ -2557,6 +2559,9 @@ def main():
                 battle_reached_count = max(business_reached_count, goal_graduated_count)
                 battle_graduation_rate = (battle_reached_count / battle_evaluated_base * 100) if battle_evaluated_base else 0
                 battle_wins_needed = max(0, battle_graduation_target - battle_reached_count)
+                battle_projected_graduations = min(battle_evaluated_base, battle_reached_count + graduation_on_pace)
+                battle_graduation_on_target = battle_projected_graduations >= battle_graduation_target and battle_graduation_target > 0
+                battle_graduation_pace_color = "#63e6be" if battle_graduation_on_target else "#ff6b6b"
                 battle_combined_wins = int((battle_ranked_mask | battle_maintained_mask).sum())
                 battle_agency_target = (len(focus_goal_creators) * 50 + 99) // 100 if len(focus_goal_creators) else 0
                 battle_agency_wins_needed = max(0, battle_agency_target - battle_combined_wins)
@@ -2564,14 +2569,16 @@ def main():
                 st.markdown("### Creator Focus Center")
                 st.markdown(f"""
                 <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:8px 0 14px 0;">
-                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance achieved</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_achieved:,}</div></div>
-                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_on_pace:,}</div></div>
-                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needs help</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{maintenance_help:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid {maintenance_pace_color};border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance achieved</div><div style="color:{maintenance_pace_color};font-size:2rem;font-weight:900;">{maintenance_achieved:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid {maintenance_pace_color};border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance on pace</div><div style="color:{maintenance_pace_color};font-size:2rem;font-weight:900;">{maintenance_on_pace:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid {maintenance_pace_color};border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Projected maintenance</div><div style="color:{maintenance_pace_color};font-size:2rem;font-weight:900;">{maintenance_projected_count:,} / {maintenance_target_count:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid {maintenance_pace_color};border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needs help</div><div style="color:{maintenance_pace_color};font-size:2rem;font-weight:900;">{maintenance_help:,}</div></div>
                   <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation achieved</div><div style="color:#63e6be;font-size:2rem;font-weight:900;">{battle_reached_count:,}</div></div>
-                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation percentage</div><div style="color:#63e6be;font-size:2rem;font-weight:900;">{battle_graduation_rate:.2f}%</div></div>
-                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{graduation_on_pace:,}</div></div>
-                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation wins needed</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_wins_needed:,}</div></div>
-                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needed to 50%</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{maintenance_priority_needed:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid {battle_graduation_pace_color};border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation percentage</div><div style="color:{battle_graduation_pace_color};font-size:2rem;font-weight:900;">{battle_graduation_rate:.2f}%</div></div>
+                  <div style="background:#102f4f;border:2px solid {battle_graduation_pace_color};border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation on pace</div><div style="color:{battle_graduation_pace_color};font-size:2rem;font-weight:900;">{graduation_on_pace:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid {battle_graduation_pace_color};border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Projected graduations</div><div style="color:{battle_graduation_pace_color};font-size:2rem;font-weight:900;">{battle_projected_graduations:,} / {battle_graduation_target:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid {battle_graduation_pace_color};border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation wins needed</div><div style="color:{battle_graduation_pace_color};font-size:2rem;font-weight:900;">{battle_wins_needed:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid {maintenance_pace_color};border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needed to 50%</div><div style="color:{maintenance_pace_color};font-size:2rem;font-weight:900;">{maintenance_priority_needed:,}</div></div>
                 </div>
                 """, unsafe_allow_html=True)
                 if battle_pacing_ready:
