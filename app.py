@@ -1856,8 +1856,19 @@ def main():
 
                 def creator_goal_display(frame, include_manager=False):
                     avatar_rows = pd.DataFrame()
+                    prior_goal_rows = pd.DataFrame()
                     try:
                         avatar_rows = pd.read_sql(text("SELECT creator_id, username, avatar_url, captured_at FROM monthly_reward_results WHERE avatar_url <> '' ORDER BY captured_at DESC"), get_engine())
+                        prior_goal_rows = pd.read_sql(
+                            text("""
+                                SELECT DISTINCT ON (creator_id) creator_id, diamonds
+                                FROM monthly_reward_results
+                                WHERE month_key < :current_month
+                                ORDER BY creator_id, month_key DESC
+                            """),
+                            get_engine(),
+                            params={"current_month": pd.Timestamp.now(tz="America/New_York").strftime("%Y-%m")},
+                        )
                     except Exception:
                         pass
                     avatar_id_map = {}
@@ -1884,10 +1895,49 @@ def main():
                     matched_avatars = matched_avatars.where(
                         matched_avatars.str.strip().ne(""), historical_name_avatars
                     )
+                    tier_diamond_goals = {
+                        1: 0, 2: 100_000, 3: 200_000, 4: 300_000, 5: 500_000,
+                        6: 1_000_000, 7: 1_600_000, 8: 3_000_000,
+                        9: 5_000_000, 10: 8_000_000,
+                    }
+                    prior_diamond_map = {}
+                    if not prior_goal_rows.empty:
+                        prior_goal_rows["_id_key"] = prior_goal_rows["creator_id"].fillna("").astype(str).str.strip()
+                        prior_diamond_map = pd.to_numeric(
+                            prior_goal_rows.drop_duplicates("_id_key").set_index("_id_key")["diamonds"], errors="coerce"
+                        ).dropna().to_dict()
+
+                    def creator_tier_goal(row):
+                        # A stated rank-up destination is the active target. Otherwise,
+                        # use the creator's current tier maintenance requirement. This
+                        # rejects stale/arbitrary raw targets carried in the source row.
+                        rank_detail = f"{row.get('rank_up_progress', '')} {row.get('rank_up_detail', '')}"
+                        rank_match = re.search(r"rank(?:ing)?\s+up\s+to\s+tier\s*(10|[1-9])", rank_detail, flags=re.IGNORECASE)
+                        raw_tier_text = row.get("tier_status", "")
+                        tier_text = "" if pd.isna(raw_tier_text) else str(raw_tier_text)
+                        tier_match = re.search(r"tier\s*(10|[1-9])", tier_text, flags=re.IGNORECASE)
+                        selected_match = rank_match or tier_match
+                        if selected_match:
+                            return tier_diamond_goals.get(int(selected_match.group(1)))
+                        raw_creator_id = row.get("creator_id", "")
+                        creator_id = "" if pd.isna(raw_creator_id) else str(raw_creator_id).strip()
+                        prior_diamonds = prior_diamond_map.get(creator_id)
+                        if prior_diamonds is None or pd.isna(prior_diamonds):
+                            return None
+                        eligible_goals = [goal for goal in tier_diamond_goals.values() if goal <= int(prior_diamonds)]
+                        return max(eligible_goals) if eligible_goals else 0
+
+                    calculated_goals = frame.apply(creator_tier_goal, axis=1)
+                    current_goal_diamonds = numeric_series(frame, "diamonds").astype("int64")
+                    source_diamond_display = frame.get("diamonds_display", current_goal_diamonds.astype(str)).fillna("").astype(str)
+                    corrected_diamond_display = pd.Series([
+                        f"{int(current):,} / {int(target):,}" if pd.notna(target) and int(target) > 0 else source
+                        for current, target, source in zip(current_goal_diamonds, calculated_goals, source_diamond_display)
+                    ], index=frame.index)
                     output = pd.DataFrame({
                         "Picture": matched_avatars,
                         "Creator": creator_names,
-                        "Diamonds": frame.get("diamonds_display", numeric_series(frame, "diamonds").astype("int64")),
+                        "Diamonds": corrected_diamond_display,
                         "Valid go LIVE days": numeric_series(frame, "valid_live_days").astype("int64"),
                         "Valid LIVE duration": frame.get("valid_live_duration_display", numeric_series(frame, "valid_live_hours").map(lambda value: f"{value:g}h")),
                         "Tier": frame.get("tier_status", pd.Series("", index=frame.index)),
