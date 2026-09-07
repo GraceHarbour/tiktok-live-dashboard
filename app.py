@@ -2387,7 +2387,11 @@ def main():
                         manager_name = creator_manager_map.get(creator_name.lstrip("@").casefold(), "Unassigned")
                         if creator_focus_manager != "All managers" and manager_name != creator_focus_manager:
                             continue
-                        maintained_value = bool(source_row.get("maintained_tier", False)) or bool(re.search(r"Ranked up|Maintained tier", raw, flags=re.IGNORECASE))
+                        # Graduation/rank-up is a separate outcome. A creator who ranked
+                        # up but did not maintain must not be credited as maintenance.
+                        maintained_flag = str(source_row.get("maintained_tier", "")).strip().casefold() in {"1", "true", "yes"}
+                        maintained_text = bool(re.search(r"\bMaintained tier\b", raw, flags=re.IGNORECASE)) and not bool(re.search(r"\bNot maintained tier\b", raw, flags=re.IGNORECASE))
+                        maintained_value = maintained_flag or maintained_text
                         projected_value = int(round(current_value / battle_elapsed_days * battle_total_days)) if battle_pacing_ready else 0
                         remaining_value = max(0, target_value - current_value)
                         daily_needed = int((remaining_value / battle_days_remaining) + 0.999999)
@@ -2521,10 +2525,9 @@ def main():
                     reward_reachable = reward_active["_priority"].eq("Needs help") & ((reward_active["_remaining"] <= 40_000) | (reward_active["_pace_gap"] <= reward_active["_daily_actual"].mul(0.35).clip(lower=1_000)))
                     reward_active.loc[reward_reachable, "_action"] = "Push today — reachable"
 
-                battle_reached_count = int(battle_reached.get("Reached graduation", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
+                business_reached_count = int(battle_reached.get("Reached graduation", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
                 battle_evaluated_base = max(165, len(battle_graduation)) if creator_focus_manager == "All managers" else len(battle_graduation)
                 battle_graduation_target = (battle_evaluated_base * 15 + 99) // 100 if battle_evaluated_base else 0
-                battle_wins_needed = max(0, battle_graduation_target - battle_reached_count)
 
                 maintenance_achieved = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("Achieved").sum())
                 maintenance_on_pace = int(maintenance_battle.get("Priority", pd.Series(dtype="object")).eq("On pace").sum())
@@ -2535,13 +2538,20 @@ def main():
                 maintenance_priority_needed = max(0, maintenance_target_count - maintenance_projected_count)
                 graduation_on_pace = int(battle_active["_priority"].eq("On pace").sum()) if not battle_active.empty else 0
                 graduation_help = int(battle_active["_priority"].eq("Needs help").sum()) if not battle_active.empty else 0
-                battle_tier_text = creators.get("tier_status", pd.Series("", index=creators.index)).fillna("").astype(str).str.lower()
-                battle_rank_text = creators.get("rank_up_progress", pd.Series("", index=creators.index)).fillna("").astype(str).str.lower()
+                focus_goal_creators = creators.copy()
+                if creator_focus_manager != "All managers" and "_manager" in focus_goal_creators.columns:
+                    focus_goal_creators = focus_goal_creators[focus_goal_creators["_manager"].fillna("").astype(str) == creator_focus_manager].copy()
+                battle_tier_text = focus_goal_creators.get("tier_status", pd.Series("", index=focus_goal_creators.index)).fillna("").astype(str).str.lower()
+                battle_rank_text = focus_goal_creators.get("rank_up_progress", pd.Series("", index=focus_goal_creators.index)).fillna("").astype(str).str.lower()
                 battle_explicit_not = battle_tier_text.str.contains("not maintained|not maintain", na=False) | battle_rank_text.str.contains("not maintained|not maintain", na=False)
-                battle_ranked_mask = battle_tier_text.str.contains("ranked up|ranking up|rank up", na=False) | battle_rank_text.str.contains("rank up|ranked up|ranking up", na=False)
+                battle_ranked_mask = battle_tier_text.str.contains(r"\branked up\b|\bgraduated\b", na=False) | battle_rank_text.str.contains(r"\branked up\b|\bgraduated\b", na=False)
                 battle_maintained_mask = ~battle_ranked_mask & ~battle_explicit_not & (battle_tier_text.str.contains("maintained|maintain", na=False) | battle_rank_text.str.contains("maintain", na=False))
+                goal_graduated_count = int(battle_ranked_mask.sum())
+                battle_reached_count = max(business_reached_count, goal_graduated_count)
+                battle_graduation_rate = (battle_reached_count / battle_evaluated_base * 100) if battle_evaluated_base else 0
+                battle_wins_needed = max(0, battle_graduation_target - battle_reached_count)
                 battle_combined_wins = int((battle_ranked_mask | battle_maintained_mask).sum())
-                battle_agency_target = (len(creators) * 50 + 99) // 100 if len(creators) else 0
+                battle_agency_target = (len(focus_goal_creators) * 50 + 99) // 100 if len(focus_goal_creators) else 0
                 battle_agency_wins_needed = max(0, battle_agency_target - battle_combined_wins)
 
                 st.markdown("### Creator Focus Center")
@@ -2550,6 +2560,8 @@ def main():
                   <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance achieved</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_achieved:,}</div></div>
                   <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{maintenance_on_pace:,}</div></div>
                   <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needs help</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{maintenance_help:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation achieved</div><div style="color:#63e6be;font-size:2rem;font-weight:900;">{battle_reached_count:,}</div></div>
+                  <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation percentage</div><div style="color:#63e6be;font-size:2rem;font-weight:900;">{battle_graduation_rate:.2f}%</div></div>
                   <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation on pace</div><div style="color:#6ee7ff;font-size:2rem;font-weight:900;">{graduation_on_pace:,}</div></div>
                   <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Graduation wins needed</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{battle_wins_needed:,}</div></div>
                   <div style="background:#102f4f;border:2px solid #4f86b7;border-radius:12px;padding:16px;text-align:center;"><div style="color:#ffffff;font-weight:800;">Maintenance needed to 50%</div><div style="color:#ffcf5a;font-size:2rem;font-weight:900;">{maintenance_priority_needed:,}</div></div>
