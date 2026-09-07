@@ -681,6 +681,28 @@ def add_event_participants(event_id, selected_creator_ids, creator_frame):
                     "added_at": now_value,
                 },
             )
+            # If a person joins while the Community Event is active, ensure
+            # their result box has a baseline immediately. Existing official
+            # start snapshots are preserved by the conflict rule.
+            connection.execute(
+                text(
+                    "INSERT INTO community_event_snapshots "
+                    "(event_id, phase, creator_id, username, manager, diamonds, captured_at) "
+                    "SELECT :event_id, 'start', g.creator_id, g.username, "
+                    "COALESCE(NULLIF(g.manager_name, ''), g.manager, ''), "
+                    "COALESCE(g.diamonds, 0), :captured_at "
+                    "FROM goal_creators g JOIN community_events e ON e.event_id = :event_id "
+                    "WHERE g.creator_id = :creator_id "
+                    "AND NOW() >= e.start_at::timestamptz "
+                    "AND NOW() <= e.end_at::timestamptz + interval '15 minutes' "
+                    "ON CONFLICT (event_id, phase, creator_id) DO NOTHING"
+                ),
+                {
+                    "event_id": event_id,
+                    "creator_id": str(creator_id),
+                    "captured_at": now_value,
+                },
+            )
 
 
 def remove_event_participants(event_id, selected_creator_ids):
@@ -2755,6 +2777,7 @@ def main():
                         if st.button("Add selected people", type="primary", key=f"add_event_creators_{selected_event_id}", use_container_width=True):
                             add_event_participants(selected_event_id, people_to_add, creator_choices)
                             load_event_participants.clear()
+                            load_event_snapshots.clear()
                             updated_total = len(set(current_ids).union(people_to_add))
                             st.success(f"Added {len(people_to_add)} creator(s). {updated_total} people are now tracked.")
                             st.rerun()
