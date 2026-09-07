@@ -550,6 +550,22 @@ def save_manual_battle_result(event_id, diamonds):
     load_manual_battle_results.clear()
 
 
+@st.fragment(run_every="5m")
+def event_results_heartbeat():
+    """Refresh live Community Event displays without writing snapshot data."""
+    heartbeat_now = pd.Timestamp.now(tz="UTC")
+    previous_refresh = pd.to_datetime(
+        st.session_state.get("event_results_last_refresh"), utc=True, errors="coerce"
+    )
+    if pd.isna(previous_refresh):
+        st.session_state["event_results_last_refresh"] = heartbeat_now.isoformat()
+    elif heartbeat_now - previous_refresh >= pd.Timedelta(minutes=4):
+        st.session_state["event_results_last_refresh"] = heartbeat_now.isoformat()
+        load_event_snapshots.clear()
+        st.rerun()
+    st.caption("Live creator boxes refresh automatically as new Goal Management reads arrive.")
+
+
 def create_community_event(event_name, start_at, end_at):
     event_id = f"event-{pd.Timestamp.now(tz='UTC').value}"
     created_at = pd.Timestamp.now(tz="UTC").isoformat()
@@ -2670,6 +2686,8 @@ def main():
                         f'<div style="color:{status_color};font-weight:900;margin-top:3px;">{live_status}</div></div>',
                         unsafe_allow_html=True,
                     )
+                    if event_start_utc <= now_utc <= event_end_utc + pd.Timedelta(minutes=20):
+                        event_results_heartbeat()
 
                     with st.expander("Delete this event"):
                         st.warning("Deleting this event permanently removes its participant list and saved results.")
@@ -2828,7 +2846,7 @@ def main():
                         results_display = results.rename(columns={"username": "Creator", "manager": "Manager"})
                         results_display = results_display[["Creator", "Manager", "Starting diamonds", "Ending diamonds", "Total diamonds earned"]].rename(columns={"Ending diamonds": "Current / ending diamonds"}).sort_values("Total diamonds earned", ascending=False)
                         st.markdown("### Live Event Results")
-                        st.caption("Starting diamonds are saved at the official event start. During a live event, current diamonds show the latest Goal total; after the event, the saved ending snapshot is used.")
+                        st.caption("Starting diamonds are saved at the official event start. Each new Goal Management read refreshes every person's diamonds-earned box during the event. The final result locks from the read taken 15 minutes after the event ends.")
                         filter_left, filter_right = st.columns([2, 1])
                         with filter_left:
                             event_creator_search = st.text_input(
