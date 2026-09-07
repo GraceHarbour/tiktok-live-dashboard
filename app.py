@@ -1858,8 +1858,12 @@ def main():
                         avatar_rows["_key"] = avatar_rows["username"].fillna("").astype(str).str.strip().str.casefold()
                         avatar_map = avatar_rows.drop_duplicates("_key").set_index("_key")["avatar_url"].to_dict()
                     creator_names = frame.get("username", frame.get("creator_id", pd.Series("", index=frame.index))).fillna("").astype(str)
+                    # Screen-position avatar capture can drift to an adjacent
+                    # virtualized row. Only show a picture that is matched to
+                    # the creator's exact normalized username.
+                    matched_avatars = creator_names.str.strip().str.casefold().map(avatar_map).fillna("")
                     output = pd.DataFrame({
-                        "Picture": frame.get("avatar_url", pd.Series("", index=frame.index)).fillna("").astype(str).where(lambda value: value.str.strip().ne(""), creator_names.str.strip().str.casefold().map(avatar_map).fillna("")),
+                        "Picture": matched_avatars,
                         "Creator": creator_names,
                         "Diamonds": frame.get("diamonds_display", numeric_series(frame, "diamonds").astype("int64")),
                         "Valid go LIVE days": numeric_series(frame, "valid_live_days").astype("int64"),
