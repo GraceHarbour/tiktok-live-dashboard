@@ -1872,17 +1872,13 @@ def main():
                     except Exception:
                         pass
                     avatar_id_map = {}
-                    avatar_name_map = {}
                     if not avatar_rows.empty:
                         avatar_rows["_id_key"] = avatar_rows["creator_id"].fillna("").astype(str).str.strip()
-                        avatar_rows["_name_key"] = avatar_rows["username"].fillna("").astype(str).str.strip().str.lstrip("@").str.casefold()
                         avatar_id_map = avatar_rows[avatar_rows["_id_key"].ne("")].drop_duplicates("_id_key").set_index("_id_key")["avatar_url"].to_dict()
-                        avatar_name_map = avatar_rows[avatar_rows["_name_key"].ne("")].drop_duplicates("_name_key").set_index("_name_key")["avatar_url"].to_dict()
                     creator_names = frame.get("username", frame.get("creator_id", pd.Series("", index=frame.index))).fillna("").astype(str)
                     creator_ids = frame.get("creator_id", pd.Series("", index=frame.index)).fillna("").astype(str).str.strip()
-                    # Creator ID is stable even when a username or display name changes.
-                    # Prefer the current Goal read, then an exact historical ID match;
-                    # use normalized username only for older records without an ID photo.
+                    # Creator ID is the only safe photo key. Never attach an avatar by
+                    # username because names can change or collide between captures.
                     verified_goal_avatars = frame.get(
                         "avatar_url", pd.Series("", index=frame.index)
                     ).fillna("").astype(str)
@@ -1890,10 +1886,6 @@ def main():
                     historical_id_avatars = creator_ids.map(avatar_id_map).fillna("")
                     matched_avatars = matched_avatars.where(
                         matched_avatars.str.strip().ne(""), historical_id_avatars
-                    )
-                    historical_name_avatars = creator_names.str.strip().str.lstrip("@").str.casefold().map(avatar_name_map).fillna("")
-                    matched_avatars = matched_avatars.where(
-                        matched_avatars.str.strip().ne(""), historical_name_avatars
                     )
                     tier_diamond_goals = {
                         1: 0, 2: 100_000, 3: 200_000, 4: 300_000, 5: 500_000,

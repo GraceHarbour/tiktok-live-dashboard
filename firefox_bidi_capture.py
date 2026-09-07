@@ -96,17 +96,30 @@ def visible_creator_avatars(bidi: Bidi, context: str) -> dict[str, dict[str, str
     raw = str(evaluate(bidi, context, """JSON.stringify([...document.querySelectorAll(
       'tr, [role="row"], .semi-table-row'
     )].map(row => {
-      const img = row.querySelector('img');
       const lines = (row.innerText || '').split('\\n').map(v => v.trim()).filter(Boolean);
-      return {creator: lines[0] || '', creator_id: lines[1] || '',
-        src: img ? (img.currentSrc || img.src || '') : ''};
-    }).filter(item => item.creator && item.src))"""))
+      const idIndex = lines.findIndex(value => /^\\d{6,}$/.test(value));
+      const images = [...row.querySelectorAll('img')].filter(img => {
+        const rect = img.getBoundingClientRect();
+        return rect.width >= 20 && rect.height >= 20 && rect.width <= 160 && rect.height <= 160;
+      });
+      const img = images[0];
+      const rect = row.getBoundingClientRect();
+      return {creator: idIndex > 0 ? lines[idIndex - 1] : '',
+        creator_id: idIndex >= 0 ? lines[idIndex] : '',
+        src: img ? (img.currentSrc || img.src || '') : '',
+        line_count: lines.length, area: Math.round(rect.width * rect.height)};
+    }).filter(item => item.creator && item.creator_id && item.src))"""))
     entries = json.loads(raw)
+    # Broad table selectors can return both a real row and an outer wrapper.
+    # Keep the smallest, most specific row for each exact numeric creator ID.
+    entries.sort(key=lambda item: (int(item.get("line_count", 9999)), int(item.get("area", 999999999))))
+    by_id: dict[str, str] = {}
+    for item in entries:
+        creator_id = str(item.get("creator_id", "")).strip()
+        if creator_id.isdigit() and creator_id not in by_id:
+            by_id[creator_id] = str(item.get("src", "")).strip()
     return {
-        "by_id": {
-            str(item["creator_id"]).strip(): str(item["src"]).strip()
-            for item in entries if str(item.get("creator_id", "")).strip().isdigit()
-        }
+        "by_id": by_id
     }
 
 
