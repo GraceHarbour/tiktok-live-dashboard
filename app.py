@@ -2427,10 +2427,11 @@ def main():
                 battle_progress = battle_graduation.get("Graduation progress", pd.Series("", index=battle_graduation.index)).fillna("").astype(str)
                 battle_current = pd.to_numeric(battle_progress.str.replace(",", "", regex=False).str.extract(r"(\d+)\s*/")[0], errors="coerce").fillna(0).astype("int64")
                 live_diamond_map = {}
-                if battle_creator_column and not creators.empty and "diamonds" in creators.columns and "Creator" in battle_graduation.columns:
+                if battle_creator_column and not creators.empty and "diamonds" in creators.columns:
                     live_creator_keys = creators[battle_creator_column].fillna("").astype(str).str.strip().str.lstrip("@").str.casefold()
                     live_creator_diamonds = pd.to_numeric(creators["diamonds"], errors="coerce")
                     live_diamond_map = pd.Series(live_creator_diamonds.values, index=live_creator_keys).groupby(level=0).max().to_dict()
+                if live_diamond_map and "Creator" in battle_graduation.columns:
                     graduation_creator_keys = battle_graduation["Creator"].fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold()
                     fresh_goal_current = pd.to_numeric(graduation_creator_keys.map(live_diamond_map), errors="coerce")
                     battle_current = fresh_goal_current.where(fresh_goal_current.notna(), battle_current).astype("int64")
@@ -2452,10 +2453,9 @@ def main():
                 graduation_reachable = battle_active["_priority"].eq("Needs help") & ((battle_active["_remaining"] <= 40_000) | (battle_active["_pace_gap"] <= battle_active["_daily_actual"].mul(0.35).clip(lower=1_000)))
                 battle_active.loc[graduation_reachable, "_action"] = "Push today — reachable"
 
-                # Extra Reward is a distinct Business Essentials cohort. Its source rows
-                # already contain each creator's exact current diamonds and maintenance
-                # target (for example, "25,903 / 200,000"). Prefer those values so a
-                # stale or differently named Maintenance Rate row cannot replace them.
+                # Extra Reward is a distinct Business Essentials cohort. Use its
+                # individual tier-maintenance target, but use the latest Goal Management
+                # diamond total as the current value whenever that creator is present.
                 reward_active = battle_extra_reward.copy()
                 if not reward_active.empty and "Creator" in reward_active.columns:
                     reward_active["_creator_key"] = reward_active["Creator"].fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold()
@@ -2480,10 +2480,11 @@ def main():
                     reward_progress = reward_active.apply(extra_reward_progress, axis=1)
                     reward_active["_source_current"] = reward_progress.map(lambda values: values[0])
                     reward_active["_source_target"] = reward_progress.map(lambda values: values[1])
+                    reward_active["_goal_current"] = pd.to_numeric(reward_active["_creator_key"].map(live_diamond_map), errors="coerce")
                     reward_active["_fallback_current"] = pd.to_numeric(reward_active["_creator_key"].map(maintenance_current_map), errors="coerce")
                     reward_active["_fallback_target"] = pd.to_numeric(reward_active["_creator_key"].map(maintenance_target_map), errors="coerce")
                     reward_active["_current"] = pd.to_numeric(
-                        reward_active["_source_current"].fillna(reward_active["_fallback_current"]), errors="coerce"
+                        reward_active["_goal_current"].fillna(reward_active["_source_current"]).fillna(reward_active["_fallback_current"]), errors="coerce"
                     ).fillna(0).astype("int64")
                     reward_active["_target"] = pd.to_numeric(
                         reward_active["_source_target"].fillna(reward_active["_fallback_target"]), errors="coerce"
@@ -2670,7 +2671,7 @@ def main():
 
                 with reward_focus_tab:
                     st.markdown("### Creator Graduation — Creators with Extra Reward")
-                    st.caption(f"{len(reward_active):,} creator(s) in the Extra Reward cohort. Each creator is paced against the individual tier-maintenance progress reported by Business Essentials.")
+                    st.caption(f"{len(reward_active):,} creator(s) in the Extra Reward cohort. Current diamonds come from the latest Goal Management read; each individual maintenance target comes from Business Essentials.")
                     if reward_active.empty:
                         st.info("No Creators with Extra Reward records are available for this manager.")
                     else:
