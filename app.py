@@ -2474,7 +2474,12 @@ def main():
                             value = "" if pd.isna(raw_value) else str(raw_value)
                             match = re.search(r"([\d,]+)\s*/\s*([\d,]+)", value)
                             if match:
-                                return int(match.group(1).replace(",", "")), int(match.group(2).replace(",", ""))
+                                current_value = int(match.group(1).replace(",", ""))
+                                target_value = int(match.group(2).replace(",", ""))
+                                # Ignore unrelated fractions and dates such as 4/31 or
+                                # 2/30. Tier-maintenance diamond goals are six figures.
+                                if target_value >= 100_000:
+                                    return current_value, target_value
                         return None, None
 
                     reward_progress = reward_active.apply(extra_reward_progress, axis=1)
