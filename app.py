@@ -3696,20 +3696,32 @@ def main():
                             WITH results AS (
                                 SELECT p.creator_id, p.username,
                                        MAX(CASE WHEN s.phase = 'start' THEN s.diamonds END) AS start_diamonds,
-                                       MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END) AS end_diamonds
+                                       MAX(CASE WHEN s.phase = 'end' THEN s.diamonds END) AS end_diamonds,
+                                       MAX(m.diamonds) AS manual_diamonds
                                 FROM community_event_participants p
                                 JOIN community_events e ON e.event_id = p.event_id
                                 LEFT JOIN community_event_snapshots s
                                   ON s.event_id = p.event_id AND s.creator_id = p.creator_id
+                                LEFT JOIN community_event_manual_results m
+                                  ON m.event_id = p.event_id
                                 WHERE e.event_name LIKE '[BATTLE]%'
                                 GROUP BY p.event_id, p.creator_id, p.username
+                            ), totals AS (
+                                SELECT creator_id, username,
+                                       COALESCE(
+                                           manual_diamonds,
+                                           CASE WHEN start_diamonds IS NOT NULL AND end_diamonds IS NOT NULL
+                                                THEN GREATEST(end_diamonds - start_diamonds, 0)
+                                           END
+                                       ) AS battle_diamonds
+                                FROM results
                             )
                             SELECT username AS "Creator",
-                                   COUNT(*) FILTER (WHERE start_diamonds IS NOT NULL AND end_diamonds IS NOT NULL) AS "Battles Recorded",
-                                   ROUND(AVG(GREATEST(end_diamonds - start_diamonds, 0)) FILTER (WHERE start_diamonds IS NOT NULL AND end_diamonds IS NOT NULL)) AS "Average Battle Diamonds"
-                            FROM results
+                                   COUNT(*) FILTER (WHERE battle_diamonds IS NOT NULL) AS "Battles Recorded",
+                                   ROUND(AVG(battle_diamonds) FILTER (WHERE battle_diamonds IS NOT NULL)) AS "Average Battle Diamonds"
+                            FROM totals
                             GROUP BY username
-                            HAVING COUNT(*) FILTER (WHERE start_diamonds IS NOT NULL AND end_diamonds IS NOT NULL) > 0
+                            HAVING COUNT(*) FILTER (WHERE battle_diamonds IS NOT NULL) > 0
                             ORDER BY "Average Battle Diamonds" DESC NULLS LAST
                         """),
                         connection,
