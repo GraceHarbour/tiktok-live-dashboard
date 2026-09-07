@@ -3636,6 +3636,20 @@ def main():
             month_end = month_start + pd.offsets.MonthEnd(0)
             first_grid_day = month_start - pd.Timedelta(days=month_start.weekday())
             last_grid_day = month_end + pd.Timedelta(days=(6 - month_end.weekday()))
+            calendar_today = pd.Timestamp.now(tz="America/New_York").tz_localize(None).normalize()
+            current_week_start = calendar_today - pd.Timedelta(days=calendar_today.weekday())
+            calendar_is_current_month = calendar_month == current_month_key
+            show_earlier_calendar_weeks = st.checkbox(
+                "Show earlier weeks",
+                value=False,
+                key=f"battle_calendar_show_earlier_{calendar_month}",
+                help="Turn this on to review battles from earlier weeks in the selected month.",
+            )
+            display_first_grid_day = (
+                current_week_start
+                if calendar_is_current_month and not show_earlier_calendar_weeks
+                else first_grid_day
+            )
             month_battles = calendar_frame[calendar_frame["_month"].eq(calendar_month)].copy()
             try:
                 month_event_ids = month_battles["event_id"].astype(str).tolist()
@@ -3661,7 +3675,7 @@ def main():
                 popup_results = pd.DataFrame(columns=["event_id", "username", "start_diamonds", "end_diamonds"])
             popup_results["event_id"] = popup_results["event_id"].astype(str)
             calendar_cells = []
-            for calendar_day in pd.date_range(first_grid_day, last_grid_day, freq="D"):
+            for calendar_day in pd.date_range(display_first_grid_day, last_grid_day, freq="D"):
                 day_rows = month_battles[month_battles["_start_et"].dt.date.eq(calendar_day.date())]
                 is_selected_month = calendar_day.month == month_start.month
                 entries = []
@@ -3699,7 +3713,8 @@ def main():
                         f'<b>{html.escape(battle_time_et)} ET / {html.escape(battle_time_ct)} CT</b><br>{html.escape(battle_name)}'
                         f'<span class="battle-cal-open">View results</span></button>'
                     )
-                day_class = "battle-cal-day" + ("" if is_selected_month else " outside-month") + (" has-battle" if entries else "")
+                is_today = calendar_day.normalize() == calendar_today
+                day_class = "battle-cal-day" + ("" if is_selected_month else " outside-month") + (" has-battle" if entries else "") + (" today" if is_today else "")
                 calendar_cells.append(f'<div class="{day_class}"><div class="battle-cal-number">{calendar_day.day}</div>{"".join(entries)}</div>')
             weekday_headers = "".join(f'<div class="battle-cal-weekday">{day}</div>' for day in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
             st.components.v1.html(
@@ -3710,6 +3725,7 @@ def main():
                 .battle-cal-day{{min-height:122px;padding:10px;border-radius:12px;background:#102744;border:1px solid #28537c;color:white}}
                 .battle-cal-day.outside-month{{opacity:.34}}
                 .battle-cal-day.has-battle{{border:2px solid #48a9ff;background:linear-gradient(145deg,#10345c,#201f4a)}}
+                .battle-cal-day.today{{outline:3px solid #ffe36a;outline-offset:2px}}
                 .battle-cal-number{{font-size:1.05rem;font-weight:900;color:#d8ecff;margin-bottom:7px}}
                 .battle-cal-event{{display:block;width:100%;border:0;text-align:left;font-size:.82rem;line-height:1.3;background:#075da3;color:white;border-radius:9px;padding:7px;margin-top:6px;box-shadow:0 3px 10px rgba(0,0,0,.2);cursor:pointer;transition:transform .12s ease,background .12s ease}}
                 .battle-cal-event:hover{{background:#0874c7;transform:translateY(-1px)}}
