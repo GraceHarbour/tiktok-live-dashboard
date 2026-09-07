@@ -2828,7 +2828,8 @@ def main():
                                     (
                                         column for column in prior_frame.columns
                                         if str(column).strip().casefold() in {
-                                            "creator", "creator name", "creator_name", "username", "user name"
+                                            "creator", "creator name", "creator_name", "username", "user name",
+                                            "creator's username", "creator’s username"
                                         }
                                     ),
                                     None,
