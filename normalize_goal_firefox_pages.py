@@ -19,29 +19,11 @@ for page in pages:
     for item in parts[:page_size]:
         if len(item) < 14 or 'Email' not in item or 'Group' not in item:
             raise RuntimeError(f'Unexpected Creator row: {item!r}')
+        if not item[1].isdigit():
+            raise RuntimeError(f'Creator row has no numeric Creator ID: {item!r}')
         email_at, group_at = item.index('Email'), item.index('Group')
         avatar_indexes = page.get('creator_avatars', {})
-        avatar_url = str(
-            avatar_indexes.get('by_id', {}).get(item[1], '')
-            or avatar_indexes.get('by_username', {}).get(item[0], '')
-        ).strip()
-        creator_nodes = [
-            node for node in page.get('layout', [])
-            if node.get('text') == item[0] and 300 <= float(node.get('x', 0)) <= 520
-        ]
-        if not avatar_url and creator_nodes:
-            creator_y = float(creator_nodes[0].get('y', 0))
-            avatar_candidates = [
-                image for image in page.get('images', [])
-                if 250 <= float(image.get('x', 0)) <= 520
-                and abs(float(image.get('y', 0)) - creator_y) <= 45
-                and image.get('src')
-            ]
-            if avatar_candidates:
-                avatar_url = min(
-                    avatar_candidates,
-                    key=lambda image: abs(float(image.get('y', 0)) - creator_y),
-                )['src']
+        avatar_url = str(avatar_indexes.get('by_id', {}).get(item[1], '')).strip()
         if email_at < 2 or group_at != email_at + 2 or len(item) < group_at + 9:
             raise RuntimeError(f'Unexpected Creator fields: {item!r}')
         tail = item[group_at + 2:]
@@ -71,7 +53,7 @@ for page in pages:
             raise RuntimeError(f'Unexpected Creator status fields: {item!r}')
         rows.append({
             'creator': item[0],
-            'creator_id': item[1] if item[1].isdigit() else item[0].casefold(),
+            'creator_id': item[1],
             'avatar_url': avatar_url,
             'manager': item[2] if email_at > 2 else 'Unassigned',
             'manager_role': ' '.join(item[3:email_at]) if email_at > 3 else '',

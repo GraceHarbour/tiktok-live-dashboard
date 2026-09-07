@@ -106,10 +106,7 @@ def visible_creator_avatars(bidi: Bidi, context: str) -> dict[str, dict[str, str
         "by_id": {
             str(item["creator_id"]).strip(): str(item["src"]).strip()
             for item in entries if str(item.get("creator_id", "")).strip().isdigit()
-        },
-        "by_username": {
-            str(item["creator"]).strip(): str(item["src"]).strip() for item in entries
-        },
+        }
     }
 
 
