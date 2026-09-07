@@ -2418,8 +2418,10 @@ def main():
                 battle_sections = battle_business.get("Section", pd.Series("", index=battle_business.index)).fillna("").astype(str)
                 battle_graduation = battle_business[battle_sections.str.contains("Creator Graduation", case=False, na=False) & battle_sections.str.contains("Evaluated", case=False, na=False)].copy()
                 battle_reached = battle_business[battle_sections.str.contains("Reached graduation", case=False, na=False)].copy()
+                battle_extra_reward = battle_business[battle_sections.str.contains("Extra Reward", case=False, na=False)].copy()
                 battle_progress = battle_graduation.get("Graduation progress", pd.Series("", index=battle_graduation.index)).fillna("").astype(str)
                 battle_current = pd.to_numeric(battle_progress.str.replace(",", "", regex=False).str.extract(r"(\d+)\s*/")[0], errors="coerce").fillna(0).astype("int64")
+                live_diamond_map = {}
                 if battle_creator_column and not creators.empty and "diamonds" in creators.columns and "Creator" in battle_graduation.columns:
                     live_creator_keys = creators[battle_creator_column].fillna("").astype(str).str.strip().str.lstrip("@").str.casefold()
                     live_creator_diamonds = pd.to_numeric(creators["diamonds"], errors="coerce")
@@ -2444,6 +2446,40 @@ def main():
                 battle_active.loc[battle_active["_priority"].eq("Achieved"), "_action"] = "Goal secured"
                 graduation_reachable = battle_active["_priority"].eq("Needs help") & ((battle_active["_remaining"] <= 40_000) | (battle_active["_pace_gap"] <= battle_active["_daily_actual"].mul(0.35).clip(lower=1_000)))
                 battle_active.loc[graduation_reachable, "_action"] = "Push today — reachable"
+
+                # Extra Reward is a distinct Business Essentials cohort, but its pacing is
+                # measured against the same 200K Creator Graduation requirement.
+                reward_active = battle_extra_reward.copy()
+                if not reward_active.empty and "Creator" in reward_active.columns:
+                    reward_active["_creator_key"] = reward_active["Creator"].fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold()
+                    reward_active = reward_active[reward_active["_creator_key"].ne("")].drop_duplicates("_creator_key", keep="last").copy()
+                    reward_progress = reward_active.get("Graduation progress", pd.Series("", index=reward_active.index)).fillna("").astype(str)
+                    reward_current = pd.to_numeric(
+                        reward_progress.str.replace(",", "", regex=False).str.extract(r"(\d+)\s*/")[0],
+                        errors="coerce",
+                    )
+                    evaluated_current_map = pd.Series(
+                        battle_current.values,
+                        index=battle_graduation.get("Creator", pd.Series("", index=battle_graduation.index)).fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold(),
+                    ).groupby(level=0).max().to_dict()
+                    reward_current = pd.to_numeric(reward_active["_creator_key"].map(live_diamond_map), errors="coerce").fillna(
+                        pd.to_numeric(reward_active["_creator_key"].map(evaluated_current_map), errors="coerce")
+                    ).fillna(reward_current).fillna(0).astype("int64")
+                    reward_active["_current"] = reward_current
+                    reward_active["_projected"] = (reward_active["_current"] / battle_elapsed_days * battle_total_days).round().astype("int64") if battle_pacing_ready else 0
+                    reward_active["_remaining"] = (200_000 - reward_active["_current"]).clip(lower=0)
+                    reward_active["_daily_needed"] = (reward_active["_remaining"] / battle_days_remaining).apply(lambda value: int(value + 0.999999))
+                    reward_active["_daily_actual"] = reward_active["_current"] / battle_elapsed_days if battle_pacing_ready else 0
+                    reward_active["_pace_gap"] = (reward_active["_daily_needed"] - reward_active["_daily_actual"]).clip(lower=0).round().astype("int64")
+                    reward_active["_priority"] = "Needs help" if battle_pacing_ready else "Pending"
+                    if battle_pacing_ready:
+                        reward_active.loc[reward_active["_projected"].ge(200_000), "_priority"] = "On pace"
+                    reward_active.loc[reward_active["_current"].ge(200_000) | reward_progress.str.contains("met target", case=False, na=False), "_priority"] = "Achieved"
+                    reward_active["_action"] = "Increase LIVE time and diamonds" if battle_pacing_ready else "Await first completed 8:00 PM read"
+                    reward_active.loc[reward_active["_priority"].eq("On pace"), "_action"] = "Keep current pace"
+                    reward_active.loc[reward_active["_priority"].eq("Achieved"), "_action"] = "Goal secured"
+                    reward_reachable = reward_active["_priority"].eq("Needs help") & ((reward_active["_remaining"] <= 40_000) | (reward_active["_pace_gap"] <= reward_active["_daily_actual"].mul(0.35).clip(lower=1_000)))
+                    reward_active.loc[reward_reachable, "_action"] = "Push today — reachable"
 
                 battle_reached_count = int(battle_reached.get("Reached graduation", pd.Series(dtype="object")).astype(str).str.casefold().eq("yes").sum())
                 battle_evaluated_base = max(165, len(battle_graduation)) if creator_focus_manager == "All managers" else len(battle_graduation)
@@ -2553,8 +2589,12 @@ def main():
                         )
 
 
-                battle_view = st.radio("Focus list", ["Maintenance", "Graduation"], horizontal=True, key="battle_focus_view")
-                if battle_view == "Maintenance":
+                maintenance_focus_tab, graduation_focus_tab, reward_focus_tab = st.tabs([
+                    "Maintenance",
+                    "Graduation",
+                    "Creators with Extra Reward",
+                ])
+                with maintenance_focus_tab:
                     st.markdown("### Maintenance Pacing — 50% Target")
                     if maintenance_battle.empty:
                         st.info("No maintenance pacing records are available for this manager.")
@@ -2580,7 +2620,7 @@ def main():
                             ["_order", "_remaining", "_pace_gap"], ascending=[True, True, True]
                         ).drop(columns=["_order"])
                         render_battle_creator_cards(maintenance_battle, "Maintenance")
-                else:
+                with graduation_focus_tab:
                     st.markdown("### Graduation Focus List")
                     st.caption(f"{battle_reached_count:,} graduated toward a {battle_graduation_target:,} creator target. {graduation_help:,} active creator(s) currently project below 200K.")
                     if battle_active.empty:
@@ -2602,6 +2642,29 @@ def main():
                         graduation_order = pd.Categorical(graduation_display["Priority"], ["Pending", "Needs help", "On pace", "Achieved"], ordered=True)
                         graduation_display = graduation_display.assign(_order=graduation_order, _gap=battle_active["_pace_gap"].values).sort_values(["_order", "_gap"], ascending=[True, False]).drop(columns=["_order", "_gap"])
                         render_battle_creator_cards(graduation_display, "Graduation")
+
+                with reward_focus_tab:
+                    st.markdown("### Creator Graduation — Creators with Extra Reward")
+                    st.caption(f"{len(reward_active):,} creator(s) in the Extra Reward cohort. Pacing uses the same live Goal Management diamond reads and 200K graduation target.")
+                    if reward_active.empty:
+                        st.info("No Creators with Extra Reward records are available for this manager.")
+                    else:
+                        reward_display = pd.DataFrame({
+                            "Priority": reward_active["_priority"],
+                            "Creator": reward_active.get("Creator", pd.Series("", index=reward_active.index)),
+                            "Manager": reward_active.get("Manager", pd.Series("", index=reward_active.index)),
+                            "Manager action": reward_active["_action"],
+                            "Current / goal": reward_active["_current"].map(lambda value: f"{int(value):,} / 200,000"),
+                            "Projected finish": reward_active["_projected"].map(lambda value: f"{int(value):,}"),
+                            "Still needed": reward_active["_remaining"].map(lambda value: f"{int(value):,}"),
+                            "Daily pace needed": reward_active["_daily_needed"].map(lambda value: f"{int(value):,}"),
+                            "Daily pace gap": reward_active["_pace_gap"].map(lambda value: f"{int(value):,}"),
+                            "Valid LIVE days": reward_active.get("Valid go LIVE days", pd.Series("", index=reward_active.index)),
+                            "Valid LIVE duration": reward_active.get("Valid LIVE duration", pd.Series("", index=reward_active.index)),
+                        })
+                        reward_order = pd.Categorical(reward_display["Priority"], ["Pending", "Needs help", "On pace", "Achieved"], ordered=True)
+                        reward_display = reward_display.assign(_order=reward_order, _gap=reward_active["_pace_gap"].values).sort_values(["_order", "_gap"], ascending=[True, False]).drop(columns=["_order", "_gap"])
+                        render_battle_creator_cards(reward_display, "Graduation")
 
 
 
