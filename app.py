@@ -27,6 +27,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import yaml
 from pathlib import Path
 from dotenv import load_dotenv
@@ -1449,6 +1450,12 @@ def main():
         args=("main_dashboard_tabs", "tab"),
     )
     active_main_tab = st.session_state.get("main_dashboard_tabs", default_main_tab)
+
+    # Soft-rerun the active Streamlit session on the same cadence as the source
+    # collectors. Widget and tab state stay in the session, so users see new reads
+    # without manually reloading the browser or spawning accumulating timers.
+    st_autorefresh(interval=8 * 60 * 1000, limit=None, key="dashboard_data_auto_refresh")
+    st.sidebar.caption("Data refreshes automatically every 8 minutes.")
 
 
 
