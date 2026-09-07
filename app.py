@@ -1862,7 +1862,7 @@ def main():
                         "Picture": frame.get("avatar_url", pd.Series("", index=frame.index)).fillna("").astype(str).where(lambda value: value.str.strip().ne(""), creator_names.str.strip().str.casefold().map(avatar_map).fillna("")),
                         "Creator": creator_names,
                         "Diamonds": frame.get("diamonds_display", numeric_series(frame, "diamonds").astype("int64")),
-                        "Valid go LIVE days": frame.get("valid_live_days_display", numeric_series(frame, "valid_live_days").astype("int64")),
+                        "Valid go LIVE days": numeric_series(frame, "valid_live_days").astype("int64"),
                         "Valid LIVE duration": frame.get("valid_live_duration_display", numeric_series(frame, "valid_live_hours").map(lambda value: f"{value:g}h")),
                         "Tier": frame.get("tier_status", pd.Series("", index=frame.index)),
                         "Rank-up incentive progress": frame.get("rank_up_progress", pd.Series("", index=frame.index)),
