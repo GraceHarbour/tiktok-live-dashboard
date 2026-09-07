@@ -2361,6 +2361,8 @@ def main():
                 )
 
                 maintenance_battle_rows = []
+                maintenance_current_map = {}
+                maintenance_target_map = {}
                 if not maintenance_data.empty:
                     for _, source_row in maintenance_data.iterrows():
                         raw = re.sub(r"\s+", " ", str(source_row.get("raw_row", "")).replace(chr(20), " ").replace("\n", " ")).strip()
@@ -2370,6 +2372,9 @@ def main():
                         current_value = int(progress_match.group(1).replace(",", ""))
                         target_value = int(progress_match.group(2).replace(",", ""))
                         creator_name = str(source_row.get("creator", "")).strip()
+                        creator_key = creator_name.lstrip("@").casefold()
+                        maintenance_current_map[creator_key] = current_value
+                        maintenance_target_map[creator_key] = target_value
                         manager_name = creator_manager_map.get(creator_name.lstrip("@").casefold(), "Unassigned")
                         if creator_focus_manager != "All managers" and manager_name != creator_focus_manager:
                             continue
@@ -2447,37 +2452,29 @@ def main():
                 graduation_reachable = battle_active["_priority"].eq("Needs help") & ((battle_active["_remaining"] <= 40_000) | (battle_active["_pace_gap"] <= battle_active["_daily_actual"].mul(0.35).clip(lower=1_000)))
                 battle_active.loc[graduation_reachable, "_action"] = "Push today — reachable"
 
-                # Extra Reward is a distinct Business Essentials cohort, but its pacing is
-                # measured against the same 200K Creator Graduation requirement.
+                # Extra Reward is a distinct Business Essentials cohort. Each creator must
+                # pace against their own tier-maintenance target from Maintenance Rate.
                 reward_active = battle_extra_reward.copy()
                 if not reward_active.empty and "Creator" in reward_active.columns:
                     reward_active["_creator_key"] = reward_active["Creator"].fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold()
                     reward_active = reward_active[reward_active["_creator_key"].ne("")].drop_duplicates("_creator_key", keep="last").copy()
-                    reward_progress = reward_active.get("Graduation progress", pd.Series("", index=reward_active.index)).fillna("").astype(str)
-                    reward_current = pd.to_numeric(
-                        reward_progress.str.replace(",", "", regex=False).str.extract(r"(\d+)\s*/")[0],
-                        errors="coerce",
-                    )
-                    evaluated_current_map = pd.Series(
-                        battle_current.values,
-                        index=battle_graduation.get("Creator", pd.Series("", index=battle_graduation.index)).fillna("").astype(str).str.split(" — ", n=1).str[0].str.strip().str.lstrip("@").str.casefold(),
-                    ).groupby(level=0).max().to_dict()
-                    reward_current = pd.to_numeric(reward_active["_creator_key"].map(live_diamond_map), errors="coerce").fillna(
-                        pd.to_numeric(reward_active["_creator_key"].map(evaluated_current_map), errors="coerce")
-                    ).fillna(reward_current).fillna(0).astype("int64")
-                    reward_active["_current"] = reward_current
+                    reward_active["_current"] = pd.to_numeric(reward_active["_creator_key"].map(maintenance_current_map), errors="coerce").fillna(0).astype("int64")
+                    reward_active["_target"] = pd.to_numeric(reward_active["_creator_key"].map(maintenance_target_map), errors="coerce").fillna(0).astype("int64")
+                    reward_active["_target_found"] = reward_active["_target"].gt(0)
                     reward_active["_projected"] = (reward_active["_current"] / battle_elapsed_days * battle_total_days).round().astype("int64") if battle_pacing_ready else 0
-                    reward_active["_remaining"] = (200_000 - reward_active["_current"]).clip(lower=0)
+                    reward_active["_remaining"] = (reward_active["_target"] - reward_active["_current"]).clip(lower=0)
                     reward_active["_daily_needed"] = (reward_active["_remaining"] / battle_days_remaining).apply(lambda value: int(value + 0.999999))
                     reward_active["_daily_actual"] = reward_active["_current"] / battle_elapsed_days if battle_pacing_ready else 0
                     reward_active["_pace_gap"] = (reward_active["_daily_needed"] - reward_active["_daily_actual"]).clip(lower=0).round().astype("int64")
                     reward_active["_priority"] = "Needs help" if battle_pacing_ready else "Pending"
                     if battle_pacing_ready:
-                        reward_active.loc[reward_active["_projected"].ge(200_000), "_priority"] = "On pace"
-                    reward_active.loc[reward_active["_current"].ge(200_000) | reward_progress.str.contains("met target", case=False, na=False), "_priority"] = "Achieved"
+                        reward_active.loc[reward_active["_target_found"] & reward_active["_projected"].ge(reward_active["_target"]), "_priority"] = "On pace"
+                    reward_active.loc[reward_active["_target_found"] & reward_active["_current"].ge(reward_active["_target"]), "_priority"] = "Achieved"
+                    reward_active.loc[~reward_active["_target_found"], "_priority"] = "Pending"
                     reward_active["_action"] = "Increase LIVE time and diamonds" if battle_pacing_ready else "Await first completed 8:00 PM read"
                     reward_active.loc[reward_active["_priority"].eq("On pace"), "_action"] = "Keep current pace"
                     reward_active.loc[reward_active["_priority"].eq("Achieved"), "_action"] = "Goal secured"
+                    reward_active.loc[~reward_active["_target_found"], "_action"] = "Await Maintenance Rate match"
                     reward_reachable = reward_active["_priority"].eq("Needs help") & ((reward_active["_remaining"] <= 40_000) | (reward_active["_pace_gap"] <= reward_active["_daily_actual"].mul(0.35).clip(lower=1_000)))
                     reward_active.loc[reward_reachable, "_action"] = "Push today — reachable"
 
@@ -2645,7 +2642,7 @@ def main():
 
                 with reward_focus_tab:
                     st.markdown("### Creator Graduation — Creators with Extra Reward")
-                    st.caption(f"{len(reward_active):,} creator(s) in the Extra Reward cohort. Pacing uses the same live Goal Management diamond reads and 200K graduation target.")
+                    st.caption(f"{len(reward_active):,} creator(s) in the Extra Reward cohort. Each creator is paced against their individual tier-maintenance diamond target from Maintenance Rate.")
                     if reward_active.empty:
                         st.info("No Creators with Extra Reward records are available for this manager.")
                     else:
@@ -2654,7 +2651,10 @@ def main():
                             "Creator": reward_active.get("Creator", pd.Series("", index=reward_active.index)),
                             "Manager": reward_active.get("Manager", pd.Series("", index=reward_active.index)),
                             "Manager action": reward_active["_action"],
-                            "Current / goal": reward_active["_current"].map(lambda value: f"{int(value):,} / 200,000"),
+                            "Current / goal": [
+                                f"{int(current):,} / {int(target):,}" if bool(found) else "Awaiting Maintenance Rate match"
+                                for current, target, found in zip(reward_active["_current"], reward_active["_target"], reward_active["_target_found"])
+                            ],
                             "Projected finish": reward_active["_projected"].map(lambda value: f"{int(value):,}"),
                             "Still needed": reward_active["_remaining"].map(lambda value: f"{int(value):,}"),
                             "Daily pace needed": reward_active["_daily_needed"].map(lambda value: f"{int(value):,}"),
