@@ -2773,7 +2773,58 @@ def main():
                         results["Current diamonds"] = pd.to_numeric(results["Current diamonds"], errors="coerce")
                         results["Ending diamonds"] = pd.to_numeric(results["Ending diamonds"], errors="coerce")
                         results["Ending diamonds"] = results["Ending diamonds"].fillna(results["Current diamonds"])
-                        results["Total diamonds earned"] = (results["Ending diamonds"] - results["Starting diamonds"]).clip(lower=0)
+                        raw_event_earned = results["Ending diamonds"] - results["Starting diamonds"]
+                        rollover_mask = (
+                            results["Starting diamonds"].notna()
+                            & results["Ending diamonds"].notna()
+                            & raw_event_earned.lt(0)
+                        )
+                        if rollover_mask.any():
+                            shared_prior = load_shared_prior_month()
+                            if shared_prior and shared_prior.get("rows"):
+                                prior_frame = pd.DataFrame(shared_prior["rows"])
+                                prior_creator_column = next(
+                                    (
+                                        column for column in prior_frame.columns
+                                        if str(column).strip().casefold() in {
+                                            "creator", "creator name", "creator_name", "username", "user name"
+                                        }
+                                    ),
+                                    None,
+                                )
+                                prior_diamond_column = next(
+                                    (
+                                        column for column in prior_frame.columns
+                                        if str(column).strip().casefold() in {
+                                            "diamonds", "diamond", "total diamonds", "current diamonds"
+                                        }
+                                    ),
+                                    None,
+                                )
+                                if prior_creator_column and prior_diamond_column:
+                                    prior_creator_keys = (
+                                        prior_frame[prior_creator_column].fillna("").astype(str)
+                                        .str.strip().str.lstrip("@").str.casefold()
+                                    )
+                                    prior_diamonds = pd.to_numeric(
+                                        prior_frame[prior_diamond_column].astype(str).str.replace(",", "", regex=False),
+                                        errors="coerce",
+                                    )
+                                    prior_diamond_map = pd.Series(
+                                        prior_diamonds.values, index=prior_creator_keys
+                                    ).groupby(level=0).max().to_dict()
+                                    result_creator_keys = (
+                                        results["username"].fillna("").astype(str)
+                                        .str.strip().str.lstrip("@").str.casefold()
+                                    )
+                                    prior_month_end = pd.to_numeric(
+                                        result_creator_keys.map(prior_diamond_map), errors="coerce"
+                                    )
+                                    rollover_earned = (prior_month_end - results["Starting diamonds"]).clip(lower=0)
+                                    raw_event_earned = raw_event_earned.where(
+                                        ~rollover_mask | rollover_earned.isna(), rollover_earned
+                                    )
+                        results["Total diamonds earned"] = raw_event_earned.clip(lower=0)
                         results_display = results.rename(columns={"username": "Creator", "manager": "Manager"})
                         results_display = results_display[["Creator", "Manager", "Starting diamonds", "Ending diamonds", "Total diamonds earned"]].rename(columns={"Ending diamonds": "Current / ending diamonds"}).sort_values("Total diamonds earned", ascending=False)
                         st.markdown("### Live Event Results")
